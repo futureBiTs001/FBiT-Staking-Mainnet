@@ -87,13 +87,17 @@ export default function StakePanel() {
       const referrer = selectedNetwork === 'solana' ? solanaReferrer : polygonReferrer;
       const result = await contract.stake(stakeAmount, referrer ?? undefined);
       txHash = result.txHash;
-      if (result.stakedAt) stakedAt = result.stakedAt;
+      // For Solana, result.stakedAt is the monotonic stakeId (0, 1, 2…), not a timestamp.
+      // Always keep the locally captured timestamp for stakedAt/unlockAt display.
+      const stakeEntryId = selectedNetwork === 'solana'
+        ? (result.stakedAt ?? existingStakes.length)
+        : existingStakes.length;
       const storageKey = selectedNetwork === 'solana' ? 'fbit-referrer-solana' : 'fbit-referrer-polygon';
       try { localStorage.removeItem(storageKey); } catch {}
       contract.syncPlatformStats().catch(() => {});
 
       const newStake: StakeEntry = {
-        id: existingStakes.length,
+        id: stakeEntryId,
         amount: stakeAmount,
         lockPeriodIndex: 0,
         stakedAt,

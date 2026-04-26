@@ -761,8 +761,8 @@ export async function solanaGetUserAccount(ownerAddress: string): Promise<UserAc
       totalReferralRewards: fromLamports(acc.totalReferralRewards),
       referrer:             acc.referrer ? acc.referrer.toBase58() : null,
       referralCount:        acc.referralCount.toNumber(),
-      teamSize:             0,
-      teamTotalStaked:      0,
+      teamSize:             acc.teamSize    ? acc.teamSize.toNumber()          : 0,
+      teamTotalStaked:      acc.teamTotalStaked ? fromLamports(acc.teamTotalStaked) : 0,
       isBlocked:            acc.isBlocked,
       registeredAt:         acc.registeredAt.toNumber(),
     };
