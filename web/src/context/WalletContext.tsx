@@ -90,8 +90,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       try {
         const sol  = localStorage.getItem(SOL_KEY);
         const poly = localStorage.getItem(POLY_KEY);
-        if (sol)  setSolanaReferrerState(sol);
-        if (poly) setPolygonReferrerState(poly);
+        if (sol  && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(sol))  setSolanaReferrerState(sol);
+        if (poly && /^0x[0-9a-fA-F]{40}$/.test(poly))            setPolygonReferrerState(poly);
       } catch {}
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

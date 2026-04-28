@@ -226,6 +226,10 @@ export default function Dashboard() {
   const handleUnstake = useCallback(async (stakeId: number | string) => {
     const stake = stakes.find(s => s.id === stakeId);
     if (!stake) return;
+    if (!checkRateLimit('unstake', { maxCalls: 3, windowMs: 60_000 })) {
+      toast.error('Too many unstake attempts. Please wait a minute.');
+      return;
+    }
     const key = `${stakeId}-unstake`;
     setActionLoading(key, true);
     try {
