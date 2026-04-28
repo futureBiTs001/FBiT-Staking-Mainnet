@@ -224,10 +224,6 @@ export function useSolanaStaking() {
         releasableEmission = Math.max(0, due - totalEmissionReleased);
       }
 
-      const remainingYears = annualEmission > 0 && totalReserve > totalEmissionReleased
-        ? Math.floor((totalReserve - totalEmissionReleased) / annualEmission)
-        : 0;
-
       return {
         totalStaked,
         totalUsers:            account.totalUsers?.toNumber?.() ?? 0,
@@ -246,10 +242,6 @@ export function useSolanaStaking() {
         emissionStartTime,
         totalEmissionReleased,
         releasableEmission,
-        totalYearlyBurned:     fromLamports(account.totalYearlyBurned),
-        lastYearBurnTime:      account.lastYearBurnTime ? Number(account.lastYearBurnTime) : 0,
-        remainingYears,
-        maxPendingRewards:     fromLamports(account.maxPendingRewards),
       };
     } catch { return null; }
   }, [getProgram]);

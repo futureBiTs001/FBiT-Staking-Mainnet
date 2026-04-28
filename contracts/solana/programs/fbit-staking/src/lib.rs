@@ -8,12 +8,14 @@ pub const MAX_REFERRAL_LEVELS: usize = 10;
 pub const REFERRAL_PERCENTAGES: [u64; 10] = [25, 50, 125, 150, 200, 325, 350, 425, 550, 800];
 pub const SECONDS_PER_DAY: i64 = 86400;
 pub const CLAIM_INTERVAL: i64 = 43200;           // 12 hours
-pub const LOCK_PERIODS: [u64; 7] = [30, 90, 180, 365, 730, 1825, 3650];
-pub const DEFAULT_APY: [u64; 7] = [800, 1200, 1800, 2500, 3500, 5000, 7500];
+pub const LOCK_PERIODS: [u64; 1] = [30];
+pub const DEFAULT_APY: [u64; 1] = [6_000]; // 60% — PoS minimum
 pub const PLATFORM_FEE_BPS:  u64 = 100;    // 1%
 pub const BURN_BPS:          u64 = 1000;   // 10% burn on every claim/compound
 pub const RENOUNCE_FEE_BPS:  u64 = 2500;  // 25% of gross reward to feeRecipient after renouncement
 pub const MAX_APY_BPS:       u64 = 50_000; // 500% max APY (safety ceiling)
+pub const MIN_FUND_LAMPORTS: u64 = 1_000_000;                    // 1 FBiT  (6 decimals)
+pub const MAX_FUND_LAMPORTS: u64 = 800_000_000 * 1_000_000;     // 800 M FBiT
 
 // Default team target tier thresholds (6 decimals = multiply by 10^6)
 // Tier 1: 50K tokens → 2%  …  Tier 10: 1B tokens → 10%
@@ -32,6 +34,20 @@ pub const DEFAULT_TEAM_MIN_STAKED: [u64; 10] = [
 pub const DEFAULT_TEAM_BONUS_BPS: [u64; 10] = [200, 300, 400, 500, 600, 700, 750, 850, 900, 1000];
 
 // ===== HELPER =====
+
+/// PoS dynamic APY in BPS: annual_emission / total_staked * 10_000, clamped 6000–50000 (60%–500%).
+/// Falls back to `fallback_apy` when emission or total_staked is 0.
+fn get_effective_apy_bps(platform: &Platform, fallback_apy: u64) -> u64 {
+    if platform.annual_emission > 0 && platform.total_staked > 0 {
+        let apy = (platform.annual_emission as u128)
+            .saturating_mul(10_000)
+            / (platform.total_staked as u128);
+        (apy.max(6_000).min(50_000)) as u64
+    } else {
+        // Fallback is also clamped to PoS range (60%–500%)
+        fallback_apy.max(6_000).min(50_000)
+    }
+}
 
 /// Returns the bonus BPS for a user based on their stored team_total_staked.
 fn get_team_bonus_bps(platform: &Platform, user_account: &UserAccount) -> u64 {
@@ -80,12 +96,112 @@ pub mod fbit_staking {
         p.is_renounced         = false;
         p.fee_recipient        = Pubkey::default();
         p.total_fees_collected = 0;
+        // Auto-emission reserve
+        p.total_reserve           = 0;
+        p.total_emission_released = 0;
+        p.emission_start_time     = 0;
+        // Settable emission & burn rate
+        p.annual_emission = 0;
+        p.burn_bps        = BURN_BPS; // default 10%
         Ok(())
     }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // AUTO-EMISSION RESERVE
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Admin: deposit tokens into the long-term reserve vault.
+    /// Starts the emission clock on first deposit.
+    pub fn deposit_reserve(ctx: Context<DepositReserve>, amount: u64) -> Result<()> {
+        require!(!ctx.accounts.platform.is_paused, StakingError::PlatformPaused);
+        require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
+        require!(amount >= MIN_FUND_LAMPORTS, StakingError::BelowMinDeposit);
+        require!(amount <= MAX_FUND_LAMPORTS, StakingError::AboveMaxDeposit);
+
+        token::transfer(CpiContext::new(ctx.accounts.token_program.to_account_info(), Transfer {
+            from:      ctx.accounts.funder_token_account.to_account_info(),
+            to:        ctx.accounts.reserve_vault.to_account_info(),
+            authority: ctx.accounts.authority.to_account_info(),
+        }), amount)?;
+
+        // Start emission clock on first deposit
+        if ctx.accounts.platform.emission_start_time == 0 {
+            ctx.accounts.platform.emission_start_time = Clock::get()?.unix_timestamp;
+        }
+
+        ctx.accounts.platform.total_reserve =
+            ctx.accounts.platform.total_reserve.checked_add(amount).unwrap();
+
+        emit!(ReserveDeposited {
+            authority:     ctx.accounts.authority.key(),
+            amount,
+            total_reserve: ctx.accounts.platform.total_reserve,
+        });
+        Ok(())
+    }
+
+    /// Permissionless: release accumulated emission from reserve into reward pool.
+    /// Anyone can call — the math determines how much is available.
+    pub fn release_emission(ctx: Context<ReleaseEmission>) -> Result<()> {
+        require!(!ctx.accounts.platform.is_paused, StakingError::PlatformPaused);
+
+        let annual = ctx.accounts.platform.annual_emission;
+        require!(annual > 0, StakingError::AnnualEmissionNotSet);
+        require!(ctx.accounts.platform.emission_start_time > 0, StakingError::ReserveNotFunded);
+        require!(ctx.accounts.platform.total_reserve > 0, StakingError::ReserveNotFunded);
+
+        let now       = Clock::get()?.unix_timestamp;
+        let elapsed   = (now - ctx.accounts.platform.emission_start_time).max(0) as u64;
+        let secs_year = 365u64 * 86_400;
+
+        // Total that should have been released so far
+        let total_releasable = annual.checked_mul(elapsed).unwrap().checked_div(secs_year).unwrap();
+        let already_released = ctx.accounts.platform.total_emission_released;
+
+        require!(total_releasable > already_released, StakingError::NoEmissionAvailable);
+
+        let available     = total_releasable.checked_sub(already_released).unwrap();
+        let release_amount = available.min(ctx.accounts.platform.total_reserve);
+        require!(release_amount > 0, StakingError::NoEmissionAvailable);
+
+        let bump   = ctx.accounts.platform.bump;
+        let seeds  = &[b"platform".as_ref(), &[bump]];
+        let signer = &[&seeds[..]];
+
+        token::transfer(CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            Transfer {
+                from:      ctx.accounts.reserve_vault.to_account_info(),
+                to:        ctx.accounts.reward_vault.to_account_info(),
+                authority: ctx.accounts.platform.to_account_info(),
+            },
+            signer,
+        ), release_amount)?;
+
+        ctx.accounts.platform.total_reserve =
+            ctx.accounts.platform.total_reserve.checked_sub(release_amount).unwrap();
+        ctx.accounts.platform.total_emission_released =
+            ctx.accounts.platform.total_emission_released.checked_add(release_amount).unwrap();
+        ctx.accounts.platform.reward_pool_balance =
+            ctx.accounts.platform.reward_pool_balance.checked_add(release_amount).unwrap();
+
+        emit!(EmissionReleased {
+            amount:         release_amount,
+            total_released: ctx.accounts.platform.total_emission_released,
+            remaining:      ctx.accounts.platform.total_reserve,
+        });
+        Ok(())
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // POOL FUNDING
+    // ─────────────────────────────────────────────────────────────────────────────
 
     pub fn fund_reward_pool(ctx: Context<FundRewardPool>, amount: u64) -> Result<()> {
         require!(!ctx.accounts.platform.is_paused, StakingError::PlatformPaused);
         require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
+        require!(amount >= MIN_FUND_LAMPORTS, StakingError::BelowMinDeposit);
+        require!(amount <= MAX_FUND_LAMPORTS, StakingError::AboveMaxDeposit);
 
         token::transfer(CpiContext::new(ctx.accounts.token_program.to_account_info(), Transfer {
             from:      ctx.accounts.funder_token_account.to_account_info(),
@@ -99,6 +215,40 @@ pub mod fbit_staking {
         emit!(RewardPoolFunded {
             authority: ctx.accounts.authority.key(), amount,
             total_pool: ctx.accounts.platform.reward_pool_balance,
+        });
+        Ok(())
+    }
+
+    /// Admin: withdraw tokens from the reward vault back to admin's token account.
+    /// Used for emergency recovery or pre-launch corrections.
+    /// Not allowed after ownership is renounced.
+    pub fn refund_reward_pool(ctx: Context<RefundRewardPool>, amount: u64) -> Result<()> {
+        require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
+        require!(!ctx.accounts.platform.is_renounced, StakingError::AlreadyRenounced);
+        require!(amount > 0, StakingError::InvalidAmount);
+        require!(ctx.accounts.platform.reward_pool_balance >= amount, StakingError::InsufficientRewardPool);
+
+        let bump   = ctx.accounts.platform.bump;
+        let seeds  = &[b"platform".as_ref(), &[bump]];
+        let signer = &[&seeds[..]];
+
+        token::transfer(CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            Transfer {
+                from:      ctx.accounts.reward_vault.to_account_info(),
+                to:        ctx.accounts.authority_token_account.to_account_info(),
+                authority: ctx.accounts.platform.to_account_info(),
+            },
+            signer,
+        ), amount)?;
+
+        ctx.accounts.platform.reward_pool_balance =
+            ctx.accounts.platform.reward_pool_balance.checked_sub(amount).unwrap();
+
+        emit!(RewardPoolRefunded {
+            authority:  ctx.accounts.authority.key(),
+            amount,
+            remaining:  ctx.accounts.platform.reward_pool_balance,
         });
         Ok(())
     }
@@ -152,12 +302,13 @@ pub mod fbit_staking {
         require!(!ctx.accounts.platform.is_paused, StakingError::PlatformPaused);
         require!(!ctx.accounts.user_account.is_blocked, StakingError::UserBlocked);
         require!(amount > 0, StakingError::InvalidAmount);
-        require!((lock_period_index as usize) < 7, StakingError::InvalidLockPeriod);
+        require!((lock_period_index as usize) < 1, StakingError::InvalidLockPeriod);
 
         let now        = Clock::get()?.unix_timestamp;
         let lock_days  = LOCK_PERIODS[lock_period_index as usize];
         let unlock_at  = now + (lock_days as i64 * SECONDS_PER_DAY);
-        let apy        = ctx.accounts.platform.base_apy[lock_period_index as usize];
+        // PoS: store current dynamic APY for display (actual reward uses live APY at claim time)
+        let apy = get_effective_apy_bps(&ctx.accounts.platform, ctx.accounts.platform.base_apy[lock_period_index as usize]);
         let referrer   = ctx.accounts.user_account.referrer;
         let ref_rate   = ctx.accounts.platform.referral_reward_rate;
 
@@ -298,8 +449,10 @@ pub mod fbit_staking {
         require!(elapsed >= CLAIM_INTERVAL, StakingError::ClaimTooEarly);
 
         let intervals    = elapsed as u64 / CLAIM_INTERVAL as u64;
+        // PoS dynamic APY: emission / total_staked, clamped 60%–500%
+        let effective_apy = get_effective_apy_bps(&ctx.accounts.platform, ctx.accounts.stake_entry.apy);
         let gross_reward = ctx.accounts.stake_entry.amount
-            .checked_mul(ctx.accounts.stake_entry.apy).unwrap()
+            .checked_mul(effective_apy).unwrap()
             .checked_mul(intervals).unwrap()
             .checked_div(730 * 10_000).unwrap();
 
@@ -314,8 +467,8 @@ pub mod fbit_staking {
         let fee         = if ctx.accounts.platform.is_renounced { 0 }
                           else { total_gross.checked_mul(PLATFORM_FEE_BPS).unwrap().checked_div(10_000).unwrap() };
         let after_fee   = total_gross.checked_sub(fee).unwrap();
-        let burn_amount = after_fee.checked_mul(BURN_BPS).unwrap().checked_div(10_000).unwrap(); // 10% burned
-        let user_reward = after_fee.checked_sub(burn_amount).unwrap(); // 90% to user
+        let burn_amount = after_fee.checked_mul(ctx.accounts.platform.burn_bps).unwrap().checked_div(10_000).unwrap();
+        let user_reward = after_fee.checked_sub(burn_amount).unwrap();
 
         // Passive renounce fee: 25% of total_gross, drawn additionally from the pool
         let renounce_fee = if ctx.accounts.platform.is_renounced {
@@ -398,8 +551,10 @@ pub mod fbit_staking {
         require!(elapsed >= CLAIM_INTERVAL, StakingError::ClaimTooEarly);
 
         let intervals    = elapsed as u64 / CLAIM_INTERVAL as u64;
+        // PoS dynamic APY: emission / total_staked, clamped 60%–500%
+        let effective_apy = get_effective_apy_bps(&ctx.accounts.platform, ctx.accounts.stake_entry.apy);
         let gross_reward = ctx.accounts.stake_entry.amount
-            .checked_mul(ctx.accounts.stake_entry.apy).unwrap()
+            .checked_mul(effective_apy).unwrap()
             .checked_mul(intervals).unwrap()
             .checked_div(730 * 10_000).unwrap();
 
@@ -414,8 +569,8 @@ pub mod fbit_staking {
         let fee             = if ctx.accounts.platform.is_renounced { 0 }
                               else { total_gross.checked_mul(PLATFORM_FEE_BPS).unwrap().checked_div(10_000).unwrap() };
         let after_fee       = total_gross.checked_sub(fee).unwrap();
-        let burn_amount     = after_fee.checked_mul(BURN_BPS).unwrap().checked_div(10_000).unwrap(); // 10% burned
-        let compound_amount = after_fee.checked_sub(burn_amount).unwrap(); // 90% compounded into stake
+        let burn_amount     = after_fee.checked_mul(ctx.accounts.platform.burn_bps).unwrap().checked_div(10_000).unwrap();
+        let compound_amount = after_fee.checked_sub(burn_amount).unwrap();
 
         // Passive renounce fee: 25% of total_gross, drawn additionally from the pool
         let renounce_fee = if ctx.accounts.platform.is_renounced {
@@ -544,6 +699,22 @@ pub mod fbit_staking {
     // ADMIN
     // ─────────────────────────────────────────────────────────────────────────────
 
+    pub fn set_annual_emission(ctx: Context<AdminAction>, annual_emission: u64) -> Result<()> {
+        require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
+        require!(annual_emission > 0, StakingError::InvalidAmount);
+        ctx.accounts.platform.annual_emission = annual_emission;
+        emit!(AnnualEmissionUpdated { annual_emission });
+        Ok(())
+    }
+
+    pub fn set_burn_bps(ctx: Context<AdminAction>, burn_bps: u64) -> Result<()> {
+        require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
+        require!(burn_bps <= 5000, StakingError::BurnBpsTooHigh);
+        ctx.accounts.platform.burn_bps = burn_bps;
+        emit!(BurnBpsUpdated { burn_bps });
+        Ok(())
+    }
+
     pub fn set_reward_rate(ctx: Context<AdminAction>, new_rate: u64) -> Result<()> {
         require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
         ctx.accounts.platform.reward_rate = new_rate;
@@ -581,14 +752,14 @@ pub mod fbit_staking {
 
     pub fn set_lock_period_apy(ctx: Context<AdminAction>, index: u8, apy: u64) -> Result<()> {
         require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
-        require!((index as usize) < 7, StakingError::InvalidLockPeriod);
+        require!((index as usize) < 1, StakingError::InvalidLockPeriod);
         require!(apy <= MAX_APY_BPS, StakingError::APYTooHigh);
         ctx.accounts.platform.base_apy[index as usize] = apy;
         emit!(LockPeriodAPYUpdated { index, apy });
         Ok(())
     }
 
-    pub fn set_batch_apy(ctx: Context<AdminAction>, apy_values: [u64; 7]) -> Result<()> {
+    pub fn set_batch_apy(ctx: Context<AdminAction>, apy_values: [u64; 1]) -> Result<()> {
         require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
         for apy in apy_values.iter() {
             require!(*apy <= MAX_APY_BPS, StakingError::APYTooHigh);
@@ -648,7 +819,7 @@ pub mod fbit_staking {
 
         require!(now >= next_halving, StakingError::HalvingNotDue);
 
-        for i in 0..7 {
+        for i in 0..1 {
             let halved = ctx.accounts.platform.base_apy[i] / 2;
             ctx.accounts.platform.base_apy[i] = if halved == 0 { 1 } else { halved };
         }
@@ -691,7 +862,7 @@ pub struct Platform {
     pub total_users:          u64,
     pub reward_pool_balance:  u64,
     pub is_paused:            bool,
-    pub base_apy:             [u64; 7],
+    pub base_apy:             [u64; 1],
     // Team Target Bonus (10 tiers)
     pub team_tier_min_staked: [u64; 10],
     pub team_tier_bonus_bps:  [u64; 10],
@@ -705,12 +876,17 @@ pub struct Platform {
     pub is_renounced:         bool,
     pub fee_recipient:        Pubkey,
     pub total_fees_collected: u64,
+    // Auto-emission reserve system
+    pub total_reserve:           u64,
+    pub total_emission_released: u64,
+    pub emission_start_time:     i64,
+    // Settable emission & burn rate (runtime-configurable)
+    pub annual_emission: u64,  // lamports per year released from reserve
+    pub burn_bps:        u64,  // burn % on claim/compound (default 1000 = 10%)
 }
-// space: 8 + 32+32+32 + 8+8+8+8+8 + 1 + (7*8) + (10*8) + (10*8) + 1 + 8 + 8 + 8
-//      = 8 + 96 + 40 + 1 + 56 + 80 + 80 + 1 + 24 = 386
-// + renouncement: 1 (bool) + 32 (Pubkey) + 8 (u64) = 41
-// Total = 427, use 500 for safety padding
-pub const PLATFORM_SPACE: usize = 500;
+// space: 427 (existing) + 7 new fields * 8 bytes = 427 + 56 = 483
+// Use 600 for future-proof safety padding
+pub const PLATFORM_SPACE: usize = 600;
 
 #[account]
 pub struct UserAccount {
@@ -774,6 +950,53 @@ pub struct FundRewardPool<'info> {
         constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
     pub reward_vault:         Account<'info, TokenAccount>,
     pub token_program:        Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct RefundRewardPool<'info> {
+    #[account(mut, seeds = [b"platform"], bump = platform.bump)]
+    pub platform:                  Account<'info, Platform>,
+    pub authority:                 Signer<'info>,
+    #[account(mut,
+        constraint = authority_token_account.owner == authority.key() @ StakingError::InvalidUserAccount,
+        constraint = authority_token_account.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
+    pub authority_token_account:   Account<'info, TokenAccount>,
+    #[account(mut,
+        constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
+        constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
+    pub reward_vault:              Account<'info, TokenAccount>,
+    pub token_program:             Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct DepositReserve<'info> {
+    #[account(mut, seeds = [b"platform"], bump = platform.bump)]
+    pub platform:             Account<'info, Platform>,
+    #[account(mut)]
+    pub authority:            Signer<'info>,
+    #[account(mut,
+        constraint = funder_token_account.mint == platform.reward_token_mint @ StakingError::InvalidMint)]
+    pub funder_token_account: Account<'info, TokenAccount>,
+    #[account(mut,
+        constraint = reserve_vault.owner == platform.key() @ StakingError::InvalidVault,
+        constraint = reserve_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
+    pub reserve_vault:        Account<'info, TokenAccount>,
+    pub token_program:        Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct ReleaseEmission<'info> {
+    #[account(mut, seeds = [b"platform"], bump = platform.bump)]
+    pub platform:     Account<'info, Platform>,
+    #[account(mut,
+        constraint = reserve_vault.owner == platform.key() @ StakingError::InvalidVault,
+        constraint = reserve_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
+    pub reserve_vault: Account<'info, TokenAccount>,
+    #[account(mut,
+        constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
+        constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
+    pub reward_vault:  Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
@@ -956,6 +1179,11 @@ pub struct AdminUserAction<'info> {
 // ===== EVENTS =====
 
 #[event] pub struct RewardPoolFunded       { pub authority: Pubkey, pub amount: u64, pub total_pool: u64 }
+#[event] pub struct RewardPoolRefunded     { pub authority: Pubkey, pub amount: u64, pub remaining: u64 }
+#[event] pub struct ReserveDeposited       { pub authority: Pubkey, pub amount: u64, pub total_reserve: u64 }
+#[event] pub struct EmissionReleased       { pub amount: u64, pub total_released: u64, pub remaining: u64 }
+#[event] pub struct AnnualEmissionUpdated  { pub annual_emission: u64 }
+#[event] pub struct BurnBpsUpdated         { pub burn_bps: u64 }
 #[event] pub struct UserRegistered         { pub user: Pubkey, pub referrer: Option<Pubkey>, pub timestamp: i64 }
 #[event] pub struct TokensStaked           { pub user: Pubkey, pub amount: u64, pub fee: u64, pub lock_period: u64, pub unlock_at: i64, pub apy: u64 }
 #[event] pub struct RewardsClaimed         { pub user: Pubkey, pub amount: u64, pub fee: u64, pub timestamp: i64 }
@@ -1004,4 +1232,10 @@ pub enum StakingError {
     #[msg("Halving is not due yet — must wait 1 year")]   HalvingNotDue,
     #[msg("Ownership has already been renounced")]        AlreadyRenounced,
     #[msg("Fee recipient token account does not match")]  InvalidFeeRecipient,
+    #[msg("Deposit amount below minimum (1 FBiT)")]       BelowMinDeposit,
+    #[msg("Deposit amount above maximum (800 M FBiT)")]   AboveMaxDeposit,
+    #[msg("Reserve vault not funded yet")]                ReserveNotFunded,
+    #[msg("No emission available to release yet")]        NoEmissionAvailable,
+    #[msg("Annual emission not configured")]              AnnualEmissionNotSet,
+    #[msg("Burn BPS exceeds maximum (5000 = 50%)")]       BurnBpsTooHigh,
 }

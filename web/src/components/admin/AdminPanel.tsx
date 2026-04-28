@@ -18,7 +18,7 @@ export default function AdminPanel() {
 
   const [fundAmount, setFundAmount]         = useState('');
   const [reserveAmount, setReserveAmount]   = useState('');
-  const [yearBurnAmount, setYearBurnAmount] = useState('');
+  const [refundAmount, setRefundAmount]     = useState('');
   const [rewardRate, setRewardRate]         = useState('');
   const [referralRate, setReferralRate] = useState('');
   const [userAddress, setUserAddress]   = useState('');
@@ -35,6 +35,14 @@ export default function AdminPanel() {
   const [tierIndex,        setTierIndex]        = useState('0');
   const [tierMinStaked,    setTierMinStaked]    = useState('');
   const [tierBonusBps,     setTierBonusBps]     = useState('');
+
+  // Base fallback APY (Solana only — used when emission = 0)
+  const [baseFallbackApyBps, setBaseFallbackApyBps] = useState('');
+
+  // Update User Team Stats state (Solana only)
+  const [teamStatsAddress,      setTeamStatsAddress]      = useState('');
+  const [teamStatsSize,         setTeamStatsSize]         = useState('');
+  const [teamStatsTotalStaked,  setTeamStatsTotalStaked]  = useState('');
 
   const walletData = getWalletData();
 
@@ -77,9 +85,20 @@ export default function AdminPanel() {
     }
   };
 
+  const RESERVE_MIN = 1;
+  const RESERVE_MAX = 800_000_000;
+
   const handleDepositReserve = () => {
     const n = parseFloat(reserveAmount);
     if (!n || n <= 0) return;
+    if (n < RESERVE_MIN) {
+      toast.error('Minimum deposit is 1 FBiT');
+      return;
+    }
+    if (n > RESERVE_MAX) {
+      toast.error('Maximum deposit is 800,000,000 FBiT (800M)');
+      return;
+    }
     run('reserve', () => contract.depositReserve(n), `Deposited ${formatNumber(n)} FBiT into auto-emission reserve`);
   };
 
@@ -87,17 +106,17 @@ export default function AdminPanel() {
     run('release', () => contract.releaseEmission(), 'Released available emission into reward pool');
   };
 
-  const handleBurnUnusedPool = () => {
-    const n = parseFloat(yearBurnAmount);
-    if (!n || n <= 0) return;
-    run('yearBurn', () => contract.burnUnusedPool(n),
-      `Year-end burn: ${formatNumber(n)} FBiT burned — emission schedule shortened`);
-  };
-
   const handleFund = () => {
     const n = parseFloat(fundAmount);
     if (!n || n <= 0) return;
     run('fund', () => contract.fundRewardPool(n), `Funded reward pool with ${formatNumber(n)} FBiT`);
+  };
+
+  const handleRefundRewardPool = () => {
+    const n = parseFloat(refundAmount);
+    if (!n || n <= 0) { toast.error('Enter a valid refund amount'); return; }
+    if (n > platformStats.rewardPoolBalance) { toast.error('Amount exceeds reward pool balance'); return; }
+    run('refundPool', () => contract.refundRewardPool(n), `Refunded ${formatNumber(n)} FBiT from reward pool to wallet`);
   };
 
   const handleSetRewardRate = () => {
@@ -188,6 +207,29 @@ export default function AdminPanel() {
     const emission = parseFloat(annualEmissionValue);
     if (isNaN(emission) || emission <= 0) return;
     run('annualEmission', () => contract.setAnnualEmission(emission), `Annual emission updated to ${emission.toLocaleString()} FBiT/year`);
+  };
+
+  const handleTriggerHalving = () =>
+    run('halving', () => contract.triggerHalving(), 'Annual halving triggered — base APY halved');
+
+  const handleSetBaseFallbackApy = () => {
+    const bps = parseInt(baseFallbackApyBps, 10);
+    if (isNaN(bps) || bps < 6000 || bps > 50000) { toast.error('Base APY BPS must be 6000–50000 (60%–500%)'); return; }
+    run('baseFallbackApy', () => contract.setBaseFallbackApy(bps), `Base fallback APY set to ${bps / 100}%`);
+  };
+
+  const handleUpdateUserTeamStats = () => {
+    const addr = sanitizeText(teamStatsAddress);
+    const size  = parseInt(teamStatsSize, 10);
+    const staked = parseFloat(teamStatsTotalStaked);
+    if (!isValidWalletAddress(addr)) { toast.error('Invalid wallet address'); return; }
+    if (isNaN(size) || size < 0) { toast.error('Invalid team size'); return; }
+    if (isNaN(staked) || staked < 0) { toast.error('Invalid team total staked'); return; }
+    run(
+      'updateTeamStats',
+      () => contract.updateUserTeamStats(addr, size, staked),
+      `Team stats updated for ${addr.slice(0, 8)}… → size: ${size}, staked: ${staked.toLocaleString()} FBiT`
+    );
   };
 
   if (!address) {
@@ -411,12 +453,18 @@ export default function AdminPanel() {
             </div>
 
             {/* Reserve Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {[
                 { label: 'Reserve',           value: `${formatNumber(platformStats.totalReserve ?? 0)} FBiT`,           color: 'text-brand-400' },
                 { label: 'Released Total',    value: `${formatNumber(platformStats.totalEmissionReleased ?? 0)} FBiT`,  color: 'text-accent-cyan' },
                 { label: 'Releasable Now',    value: `${formatNumber(platformStats.releasableEmission ?? 0)} FBiT`,     color: 'text-accent-amber' },
                 { label: 'Reward Pool',       value: `${formatNumber(platformStats.rewardPoolBalance)} FBiT`,           color: 'text-accent-purple' },
+                ...(selectedNetwork === 'polygon' && platformStats.remainingYears !== undefined ? [
+                  { label: 'Remaining Years', value: `${platformStats.remainingYears} yrs`,                            color: 'text-brand-400' },
+                ] : []),
+                ...(selectedNetwork === 'polygon' && platformStats.maxPendingRewards !== undefined ? [
+                  { label: 'Max Pending',     value: `${formatNumber(platformStats.maxPendingRewards)} FBiT`,           color: 'text-accent-rose' },
+                ] : []),
               ].map(({ label, value, color }) => (
                 <div key={label} className="p-3 rounded-xl bg-surface-800/40 border border-white/5 text-center">
                   <p className="text-text-muted text-[10px] font-display uppercase tracking-wider mb-1">{label}</p>
@@ -443,21 +491,34 @@ export default function AdminPanel() {
             {/* Deposit Reserve */}
             <div>
               <label className="text-sm text-text-secondary font-display mb-1 block">
-                Deposit Amount (FBiT) — e.g. 800,000,000 for full supply
+                Deposit Amount (FBiT) — Min: 1 · Max: 800,000,000
               </label>
               <input
                 type="number"
                 value={reserveAmount}
                 onChange={(e) => setReserveAmount(e.target.value)}
                 placeholder="e.g. 800000000"
+                min={1}
+                max={800_000_000}
                 className="input-field font-mono"
               />
+              {(() => {
+                const n = parseFloat(reserveAmount);
+                if (reserveAmount && n > 0 && n < RESERVE_MIN) return <p className="text-accent-rose text-xs mt-1">Minimum deposit is 1 FBiT</p>;
+                if (reserveAmount && n > RESERVE_MAX) return <p className="text-accent-rose text-xs mt-1">Maximum deposit is 800,000,000 FBiT (800M)</p>;
+                return null;
+              })()}
             </div>
             <AdminButton
               label={isRenounced ? 'Deposit Disabled (Ownership Renounced)' : 'Deposit Full Reserve (One-Time)'}
               loadingLabel="Depositing…"
               onClick={handleDepositReserve}
-              disabled={isRenounced || !reserveAmount || parseFloat(reserveAmount) <= 0}
+              disabled={
+                isRenounced ||
+                !reserveAmount ||
+                parseFloat(reserveAmount) < RESERVE_MIN ||
+                parseFloat(reserveAmount) > RESERVE_MAX
+              }
               loading={busy('reserve')}
               variant="primary"
             />
@@ -487,113 +548,6 @@ export default function AdminPanel() {
             </div>
           </div>
 
-          {/* ── Year-End Burn ── */}
-          <div className="glass-card space-y-4 border border-accent-rose/20">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <h3 className="font-display font-semibold text-lg">Year-End Burn</h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-display font-semibold bg-brand-500/10 text-brand-400 border border-brand-500/20">
-                  ● AUTOMATIC
-                </span>
-              </div>
-              <p className="text-text-muted text-xs leading-relaxed">
-                <span className="text-brand-400 font-semibold">Fully automated — no admin action required.</span>{' '}
-                The first user claim or compound of each new year automatically burns all leftover pool tokens
-                from the previous year, then releases fresh emission.
-                Each burn <span className="text-accent-rose">permanently reduces the emission duration</span>.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                { label: 'Remaining Years',     value: String(platformStats.remainingYears ?? 800),             color: 'text-brand-400' },
-                { label: 'Next Burn Allowed',   value: platformStats.lastYearBurnTime
-                    ? new Date((platformStats.lastYearBurnTime + 365 * 86400) * 1000).toLocaleDateString()
-                    : 'After first deposit',                                                                      color: 'text-accent-amber' },
-                { label: 'Total Yearly Burned', value: `${formatNumber(platformStats.totalYearlyBurned ?? 0)}`, color: 'text-accent-rose' },
-                { label: 'Burnable Surplus',    value: `${formatNumber(Math.max(0, platformStats.rewardPoolBalance - (platformStats.maxPendingRewards ?? 0)))}`, color: 'text-accent-purple' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="p-3 rounded-xl bg-surface-800/40 border border-white/5 text-center">
-                  <p className="text-text-muted text-[10px] font-display uppercase tracking-wider mb-1">{label}</p>
-                  <p className={`font-mono font-semibold text-sm ${color}`}>{value}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* User fund protection breakdown */}
-            <div className="p-3 rounded-xl bg-green-500/5 border border-green-500/15 text-xs space-y-1">
-              <p className="text-green-400 font-semibold font-display">User Fund Protection</p>
-              <div className="flex justify-between text-text-muted">
-                <span>Pool balance</span>
-                <span className="font-mono text-text-secondary">{formatNumber(platformStats.rewardPoolBalance)} FBiT</span>
-              </div>
-              <div className="flex justify-between text-text-muted">
-                <span>Protected (owed to users)</span>
-                <span className="font-mono text-green-400">− {formatNumber(platformStats.maxPendingRewards ?? 0)} FBiT</span>
-              </div>
-              <div className="flex justify-between border-t border-white/10 pt-1 font-semibold">
-                <span className="text-accent-rose">Burnable surplus</span>
-                <span className="font-mono text-accent-rose">{formatNumber(Math.max(0, platformStats.rewardPoolBalance - (platformStats.maxPendingRewards ?? 0)))} FBiT</span>
-              </div>
-              <p className="text-text-muted pt-0.5">The year-end auto-burn will never touch the protected amount — user rewards are always safe.</p>
-            </div>
-
-            <div className="p-3 rounded-xl bg-brand-500/5 border border-brand-500/10 text-xs text-text-muted space-y-1">
-              <p className="text-brand-400 font-semibold">How automation works:</p>
-              <p>• Year 1 emission released → users claim rewards throughout the year</p>
-              <p>• First claim/compound of Year 2 → contract auto-burns surplus pool only → releases Year 2 emission</p>
-              <p>• Unclaimed user rewards are protected and carried forward — never burned</p>
-              <p>• Duration shortens automatically — no admin needed, ever</p>
-            </div>
-
-            {/* Emergency manual burn — collapse by default */}
-            <details>
-              <summary className="text-xs text-text-muted cursor-pointer select-none font-display">
-                Emergency manual burn (advanced)
-              </summary>
-              <div className="mt-3 space-y-3">
-                <p className="text-text-muted text-xs">
-                  Use only to manually trigger a surplus burn before any user interacts in the new year.
-                  The contract enforces user-fund protection — you cannot burn below the protected floor.
-                </p>
-                <div>
-                  <label className="text-sm text-text-secondary font-display mb-1 block">
-                    Amount — burnable surplus: <span className="text-accent-rose font-mono">{formatNumber(Math.max(0, platformStats.rewardPoolBalance - (platformStats.maxPendingRewards ?? 0)))} FBiT</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      value={yearBurnAmount}
-                      onChange={(e) => setYearBurnAmount(e.target.value)}
-                      placeholder="e.g. 50000"
-                      className="input-field font-mono flex-1"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setYearBurnAmount(Math.max(0, platformStats.rewardPoolBalance - (platformStats.maxPendingRewards ?? 0)).toFixed(0))}
-                      className="px-3 py-2 rounded-lg text-xs font-display bg-accent-rose/10 text-accent-rose border border-accent-rose/20 hover:bg-accent-rose/20 transition-colors"
-                    >
-                      MAX
-                    </button>
-                  </div>
-                </div>
-                <AdminButton
-                  label={`Emergency Burn ${yearBurnAmount ? formatNumber(parseFloat(yearBurnAmount) || 0) : '0'} FBiT`}
-                  loadingLabel="Burning…"
-                  onClick={handleBurnUnusedPool}
-                  disabled={
-                    isRenounced ||
-                    !yearBurnAmount ||
-                    parseFloat(yearBurnAmount) <= 0 ||
-                    parseFloat(yearBurnAmount) > Math.max(0, platformStats.rewardPoolBalance - (platformStats.maxPendingRewards ?? 0))
-                  }
-                  loading={busy('yearBurn')}
-                  variant="rose"
-                />
-              </div>
-            </details>
-          </div>
-
           {/* ── Manual Pool Top-Up (fallback) ── */}
           <details className="glass-card space-y-4">
             <summary className="font-display font-semibold text-sm text-text-secondary cursor-pointer select-none">
@@ -621,6 +575,80 @@ export default function AdminPanel() {
               variant="cyan"
             />
           </details>
+
+          {/* ── Refund Pool Reward ── */}
+          {selectedNetwork === 'solana' && (
+            <div className="glass-card space-y-4 border border-accent-rose/20">
+              <div>
+                <h3 className="font-display font-semibold text-lg mb-1">Refund Pool Reward</h3>
+                <p className="text-text-muted text-xs leading-relaxed">
+                  Withdraw tokens from the reward pool back to your admin wallet.
+                  Only available on <span className="text-brand-400 font-semibold">Solana</span>.
+                  Cannot be used after ownership is renounced.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-surface-800/40 border border-white/5 text-center">
+                  <p className="text-text-muted text-[10px] font-display uppercase tracking-wider mb-1">Reward Pool Balance</p>
+                  <p className="font-mono font-semibold text-sm text-accent-cyan">{formatNumber(platformStats.rewardPoolBalance)} FBiT</p>
+                </div>
+                <div className="p-3 rounded-xl bg-surface-800/40 border border-white/5 text-center">
+                  <p className="text-text-muted text-[10px] font-display uppercase tracking-wider mb-1">After Refund</p>
+                  <p className="font-mono font-semibold text-sm text-accent-amber">
+                    {refundAmount && parseFloat(refundAmount) > 0
+                      ? formatNumber(Math.max(0, platformStats.rewardPoolBalance - parseFloat(refundAmount)))
+                      : formatNumber(platformStats.rewardPoolBalance)}{' '}FBiT
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm text-text-secondary font-display mb-1 block">
+                  Refund Amount (FBiT) — Max: {formatNumber(platformStats.rewardPoolBalance)}
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={refundAmount}
+                    onChange={(e) => setRefundAmount(e.target.value)}
+                    placeholder="e.g. 50000"
+                    min={1}
+                    className="input-field font-mono flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setRefundAmount(platformStats.rewardPoolBalance.toFixed(0))}
+                    className="px-3 py-2 rounded-lg text-xs font-display bg-accent-rose/10 text-accent-rose border border-accent-rose/20 hover:bg-accent-rose/20 transition-colors"
+                  >
+                    MAX
+                  </button>
+                </div>
+                {refundAmount && parseFloat(refundAmount) > platformStats.rewardPoolBalance && (
+                  <p className="text-accent-rose text-xs mt-1">Amount exceeds reward pool balance</p>
+                )}
+              </div>
+
+              <div className="p-3 rounded-xl bg-accent-rose/5 border border-accent-rose/10 text-xs text-text-muted">
+                <p className="text-accent-rose font-semibold mb-1">⚠ Warning</p>
+                <p>Withdrawing from the reward pool reduces the funds available for user rewards. Ensure enough balance remains to cover pending user claims.</p>
+              </div>
+
+              <AdminButton
+                label={isRenounced ? 'Refund Disabled (Ownership Renounced)' : `Refund ${refundAmount ? formatNumber(parseFloat(refundAmount) || 0) : '0'} FBiT to Wallet`}
+                loadingLabel="Refunding…"
+                onClick={handleRefundRewardPool}
+                disabled={
+                  isRenounced ||
+                  !refundAmount ||
+                  parseFloat(refundAmount) <= 0 ||
+                  parseFloat(refundAmount) > platformStats.rewardPoolBalance
+                }
+                loading={busy('refundPool')}
+                variant="rose"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -745,6 +773,40 @@ export default function AdminPanel() {
               variant="purple"
             />
           </div>
+          {/* Base Fallback APY — Solana only, used when emission = 0 */}
+          {selectedNetwork === 'solana' && (
+            <div className="glass-card space-y-4">
+              <h3 className="font-display font-semibold text-lg">Base Fallback APY (Solana)</h3>
+              <p className="text-text-muted text-xs -mt-2">
+                Fallback APY used <em>only when annual emission is not configured</em>.
+                Once emission is set, PoS APY (emission ÷ totalStaked) overrides this automatically.
+                Range: <span className="text-brand-400">60% – 500%</span> (6000–50000 BPS).
+              </p>
+              <div className="p-3 rounded-xl bg-brand-500/5 border border-brand-500/20 text-xs text-text-muted">
+                Current base APY: <span className="text-accent-cyan font-mono">{Math.round((platformStats.effectiveAPY ?? 6000) / 100)}%</span> (effective — may be overridden by PoS emission)
+              </div>
+              <div>
+                <label className="text-sm text-text-secondary font-display mb-1 block">New Base APY (BPS — 6000 = 60%, 50000 = 500%)</label>
+                <input
+                  type="number"
+                  min="6000"
+                  max="50000"
+                  value={baseFallbackApyBps}
+                  onChange={(e) => setBaseFallbackApyBps(e.target.value)}
+                  placeholder="e.g. 6000 = 60%"
+                  className="input-field font-mono"
+                />
+              </div>
+              <AdminButton
+                label="Set Base Fallback APY"
+                loadingLabel="Setting…"
+                onClick={handleSetBaseFallbackApy}
+                disabled={isRenounced || baseFallbackApyBps === '' || parseInt(baseFallbackApyBps) < 6000 || parseInt(baseFallbackApyBps) > 50000}
+                loading={busy('baseFallbackApy')}
+                variant="cyan"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -897,36 +959,97 @@ export default function AdminPanel() {
 
       {/* ── User Management ── */}
       {activeSection === 'users' && (
-        <div className="glass-card space-y-4">
-          <h3 className="font-display font-semibold text-lg">User Management</h3>
-          <div>
-            <label className="text-sm text-text-secondary font-display mb-1 block">Wallet Address</label>
-            <input
-              type="text"
-              value={userAddress}
-              onChange={(e) => setUserAddress(e.target.value)}
-              placeholder="Enter full wallet address…"
-              className="input-field font-mono text-sm"
-            />
+        <div className="space-y-4">
+          {/* Block / Unblock */}
+          <div className="glass-card space-y-4">
+            <h3 className="font-display font-semibold text-lg">Block / Unblock User</h3>
+            <div>
+              <label className="text-sm text-text-secondary font-display mb-1 block">Wallet Address</label>
+              <input
+                type="text"
+                value={userAddress}
+                onChange={(e) => setUserAddress(e.target.value)}
+                placeholder="Enter full wallet address…"
+                className="input-field font-mono text-sm"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <AdminButton
+                label="Block User"
+                loadingLabel="Blocking…"
+                onClick={handleBlock}
+                disabled={isRenounced || !userAddress.trim()}
+                loading={busy('block')}
+                variant="rose"
+              />
+              <AdminButton
+                label="Unblock User"
+                loadingLabel="Unblocking…"
+                onClick={handleUnblock}
+                disabled={isRenounced || !userAddress.trim()}
+                loading={busy('unblock')}
+                variant="primary"
+              />
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <AdminButton
-              label="Block User"
-              loadingLabel="Blocking…"
-              onClick={handleBlock}
-              disabled={isRenounced || !userAddress.trim()}
-              loading={busy('block')}
-              variant="rose"
-            />
-            <AdminButton
-              label="Unblock User"
-              loadingLabel="Unblocking…"
-              onClick={handleUnblock}
-              disabled={isRenounced || !userAddress.trim()}
-              loading={busy('unblock')}
-              variant="primary"
-            />
-          </div>
+
+          {/* Update Team Stats — Solana only */}
+          {selectedNetwork === 'solana' && (
+            <div className="glass-card space-y-4 border border-accent-cyan/20">
+              <div>
+                <h3 className="font-display font-semibold text-lg">Update User Team Stats</h3>
+                <p className="text-text-muted text-xs mt-1 leading-relaxed">
+                  Manually set a user's <span className="text-accent-cyan">teamSize</span> and <span className="text-accent-cyan">teamTotalStaked</span> on-chain.
+                  Use this after indexing stake/unstake events for accurate team bonus calculations.
+                  <span className="text-brand-400"> Solana only.</span>
+                </p>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm text-text-secondary font-display mb-1 block">User Wallet Address</label>
+                  <input
+                    type="text"
+                    value={teamStatsAddress}
+                    onChange={(e) => setTeamStatsAddress(e.target.value)}
+                    placeholder="Enter full wallet address…"
+                    className="input-field font-mono text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm text-text-secondary font-display mb-1 block">Team Size (members)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={teamStatsSize}
+                      onChange={(e) => setTeamStatsSize(e.target.value)}
+                      placeholder="e.g. 15"
+                      className="input-field font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-text-secondary font-display mb-1 block">Team Total Staked (FBiT)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={teamStatsTotalStaked}
+                      onChange={(e) => setTeamStatsTotalStaked(e.target.value)}
+                      placeholder="e.g. 250000"
+                      className="input-field font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+              <AdminButton
+                label="Update Team Stats On-Chain"
+                loadingLabel="Updating…"
+                onClick={handleUpdateUserTeamStats}
+                disabled={isRenounced || !teamStatsAddress.trim() || !teamStatsSize || !teamStatsTotalStaked}
+                loading={busy('updateTeamStats')}
+                variant="cyan"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -960,6 +1083,33 @@ export default function AdminPanel() {
               Pausing the platform prevents all staking, claiming, and unstaking operations. Use only in emergencies.
             </p>
           </div>
+
+          {/* Trigger Halving — Solana only, permissionless */}
+          {selectedNetwork === 'solana' && (
+            <div className="p-4 rounded-xl border border-accent-amber/20 bg-accent-amber/5 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <p className="font-display font-medium flex items-center gap-2">⚡ Trigger Annual Halving</p>
+                  <p className="text-text-muted text-sm mt-0.5">
+                    Halves the fallback base APY (6000 → 3000 bps on first halving). Only succeeds once per year — contract enforces the time lock. Permissionless (anyone can call).
+                  </p>
+                </div>
+                <AdminButton
+                  label="Trigger Halving"
+                  loadingLabel="Triggering…"
+                  onClick={handleTriggerHalving}
+                  disabled={false}
+                  loading={busy('halving')}
+                  variant="amber"
+                />
+              </div>
+              <div className="text-xs text-text-muted p-3 rounded-xl bg-surface-800/40 border border-white/5 space-y-1">
+                <p><span className="text-accent-amber">●</span> This only halves the base fallback APY — the live PoS APY (emission ÷ total staked) is unaffected.</p>
+                <p><span className="text-brand-400">●</span> Existing stakers keep their locked-in APY. Only new stakes after halving use the reduced base.</p>
+                <p><span className="text-accent-rose">●</span> Will revert if less than 1 year has passed since last halving or platform launch.</p>
+              </div>
+            </div>
+          )}
 
           {/* Renounce Ownership */}
           <div className={`p-4 rounded-xl border space-y-3 ${isRenounced ? 'bg-surface-800/20 border-white/5 opacity-60' : 'bg-accent-rose/5 border-accent-rose/20'}`}>

@@ -171,7 +171,7 @@ export type FbitStaking = {
         { "name": "authority", "isMut": false, "isSigner": true }
       ],
       "args": [
-        { "name": "apyValues", "type": { "array": ["u64", 7] } }
+        { "name": "apyValues", "type": { "array": ["u64", 1] } }
       ]
     },
     {
@@ -230,7 +230,7 @@ export type FbitStaking = {
           { "name": "totalUsers", "type": "u64" },
           { "name": "rewardPoolBalance", "type": "u64" },
           { "name": "isPaused", "type": "bool" },
-          { "name": "baseApy", "type": { "array": ["u64", 7] } },
+          { "name": "baseApy", "type": { "array": ["u64", 1] } },
           { "name": "teamTierMinStaked", "type": { "array": ["u64", 10] } },
           { "name": "teamTierBonusBps", "type": { "array": ["u64", 10] } },
           { "name": "totalBurned", "type": "u64" },
@@ -630,7 +630,7 @@ export const IDL: FbitStaking = {
         { "name": "authority", "isMut": false, "isSigner": true }
       ],
       "args": [
-        { "name": "apyValues", "type": { "array": ["u64", 7] } }
+        { "name": "apyValues", "type": { "array": ["u64", 1] } }
       ]
     },
     {
@@ -689,7 +689,7 @@ export const IDL: FbitStaking = {
           { "name": "totalUsers", "type": "u64" },
           { "name": "rewardPoolBalance", "type": "u64" },
           { "name": "isPaused", "type": "bool" },
-          { "name": "baseApy", "type": { "array": ["u64", 7] } },
+          { "name": "baseApy", "type": { "array": ["u64", 1] } },
           { "name": "teamTierMinStaked", "type": { "array": ["u64", 10] } },
           { "name": "teamTierBonusBps", "type": { "array": ["u64", 10] } },
           { "name": "totalBurned", "type": "u64" },

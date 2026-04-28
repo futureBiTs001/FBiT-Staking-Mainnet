@@ -27,7 +27,6 @@ import {
   polygonFundRewardPool,
   polygonDepositReserve,
   polygonReleaseEmission,
-  polygonBurnUnusedPool,
   polygonSetRewardRate,
   polygonSetReferralRewardRate,
   polygonBlockUser,
@@ -51,7 +50,6 @@ import {
   solanaFundRewardPool,
   solanaDepositReserve,
   solanaReleaseEmission,
-  solanaBurnUnusedPool,
   solanaSetRewardRate,
   solanaSetReferralRewardRate,
   solanaBlockUser,
@@ -65,6 +63,10 @@ import {
   solanaGetTokenBalance,
   solanaGetUserAccount,
   solanaGetReferralInfo,
+  solanaRefundRewardPool,
+  solanaTriggerHalving,
+  solanaUpdateUserTeamStats,
+  solanaSetBatchApy,
 } from '@/lib/contracts/solana';
 
 function isPlaceholderAddr(addr: string | undefined): boolean {
@@ -99,8 +101,6 @@ export interface ContractHook {
   depositReserve(amount: number): Promise<{ txHash: string }>;
   /** Manually trigger release of any available emission from reserve into pool. */
   releaseEmission(): Promise<{ txHash: string }>;
-  /** Burn unused pool tokens at year-end, shortening the emission schedule. */
-  burnUnusedPool(amount: number): Promise<{ txHash: string }>;
   fundRewardPool(amount: number): Promise<{ txHash: string }>;
   setRewardRate(rate: number): Promise<{ txHash: string }>;
   setReferralRewardRate(rate: number): Promise<{ txHash: string }>;
@@ -122,6 +122,14 @@ export interface ContractHook {
    * Irreversible.
    */
   renounceOwnership(): Promise<{ txHash: string }>;
+  /** Withdraw tokens from the reward pool back to admin's wallet. Solana only. */
+  refundRewardPool(amount: number): Promise<{ txHash: string }>;
+  /** Trigger annual base-APY halving. Permissionless — anyone can call once per year. Solana only. */
+  triggerHalving(): Promise<{ txHash: string }>;
+  /** Set the fallback base APY BPS (6000–50000). Only active when emission=0. Solana only. */
+  setBaseFallbackApy(apyBps: number): Promise<{ txHash: string }>;
+  /** Admin crank: set a user's team_size and team_total_staked on-chain. Solana only. */
+  updateUserTeamStats(userAddress: string, teamSize: number, teamTotalStaked: number): Promise<{ txHash: string }>;
 
 }
 
@@ -263,14 +271,6 @@ export function useContract(): ContractHook {
     [selectedNetwork]
   );
 
-  const burnUnusedPool = useCallback(
-    (amount: number) => {
-      if (selectedNetwork === 'solana') return solanaBurnUnusedPool(amount);
-      return polygonBurnUnusedPool(amount);
-    },
-    [selectedNetwork]
-  );
-
   const fundRewardPool = useCallback(
     (amount: number) => {
       if (selectedNetwork === 'solana') return solanaFundRewardPool(amount);
@@ -351,6 +351,38 @@ export function useContract(): ContractHook {
     [selectedNetwork]
   );
 
+  const refundRewardPool = useCallback(
+    (amount: number) => {
+      if (selectedNetwork === 'solana') return solanaRefundRewardPool(amount);
+      return Promise.reject(new Error('Refund reward pool is not supported on Polygon.'));
+    },
+    [selectedNetwork]
+  );
+
+  const triggerHalving = useCallback(
+    () => {
+      if (selectedNetwork === 'solana') return solanaTriggerHalving();
+      return Promise.reject(new Error('Trigger halving is not supported on Polygon.'));
+    },
+    [selectedNetwork]
+  );
+
+  const updateUserTeamStats = useCallback(
+    (userAddress: string, teamSize: number, teamTotalStaked: number) => {
+      if (selectedNetwork === 'solana') return solanaUpdateUserTeamStats(userAddress, teamSize, teamTotalStaked);
+      return Promise.reject(new Error('Update user team stats is not supported on Polygon.'));
+    },
+    [selectedNetwork]
+  );
+
+  const setBaseFallbackApy = useCallback(
+    (apyBps: number) => {
+      if (selectedNetwork === 'solana') return solanaSetBatchApy(apyBps);
+      return Promise.reject(new Error('Set base fallback APY is not supported on Polygon (use setAnnualEmission instead).'));
+    },
+    [selectedNetwork]
+  );
+
   return {
     isLive,
     isReady,
@@ -362,7 +394,6 @@ export function useContract(): ContractHook {
     syncUserData,
     depositReserve,
     releaseEmission,
-    burnUnusedPool,
     fundRewardPool,
     setRewardRate,
     setReferralRewardRate,
@@ -373,5 +404,9 @@ export function useContract(): ContractHook {
     setBurnBps,
     setTeamTargetTier,
     renounceOwnership,
+    refundRewardPool,
+    triggerHalving,
+    updateUserTeamStats,
+    setBaseFallbackApy,
   };
 }

@@ -16,6 +16,8 @@ export type NetworkConfig = {
   stakeVaultAddress?: string;
   /** Solana only: token account that holds reward tokens (authority = platform PDA) */
   rewardVaultAddress?: string;
+  /** Solana only: token account that holds the long-term emission reserve (authority = platform PDA) */
+  reserveVaultAddress?: string;
 };
 
 // ===== LOCK PERIOD (single: 30 days) =====
@@ -72,6 +74,8 @@ export interface UserAccount {
   teamTotalStaked: number; // total FBiT staked by entire team
   isBlocked: boolean;
   registeredAt: number;
+  /** On-chain team bonus BPS for this user (Polygon: from getTeamBonusBps; optional) */
+  currentTierBonusBps?: number;
 }
 
 export interface StakeEntry {
@@ -126,18 +130,14 @@ export interface PlatformStats {
   totalEmissionReleased: number;
   /** Tokens that can be released from reserve right now. */
   releasableEmission: number;
-  /** Cumulative tokens burned via year-end unused-pool burns. */
-  totalYearlyBurned: number;
-  /** Timestamp of last year-end burn. Used to show when next burn is allowed. */
-  lastYearBurnTime: number;
-  /** Estimated years of emission remaining (auto-shortens with each year-end burn). */
-  remainingYears: number;
-  /** Conservative upper-bound of rewards currently owed to all active stakers. Year-end burn never burns below this floor. */
-  maxPendingRewards: number;
   // Renouncement
   isRenounced: boolean;
   feeRecipient: string;       // address/pubkey of former admin
   totalFeesCollected: number; // cumulative passive fees paid out
+  /** Remaining full years of emission (Polygon only) */
+  remainingYears?: number;
+  /** Max possible pending rewards across all stakers right now (Polygon only) */
+  maxPendingRewards?: number;
 }
 
 // ===== ADMIN TYPES =====

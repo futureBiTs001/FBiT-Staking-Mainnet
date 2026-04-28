@@ -457,6 +457,7 @@ export default function Dashboard() {
       <TeamTargetBonusCard
         teamTotalStaked={userAccount?.teamTotalStaked ?? 0}
         teamSize={userAccount?.teamSize ?? 0}
+        onChainBonusBps={userAccount?.currentTierBonusBps}
       />
 
       {/* Daily Claim Info */}
@@ -565,7 +566,7 @@ function ActionButton({
 
 // ─── Team Target Bonus Card ────────────────────────────────────────────────────
 
-function TeamTargetBonusCard({ teamTotalStaked, teamSize }: { teamTotalStaked: number; teamSize: number }) {
+function TeamTargetBonusCard({ teamTotalStaked, teamSize, onChainBonusBps }: { teamTotalStaked: number; teamSize: number; onChainBonusBps?: number }) {
   // Find current and next tier
   const activeTierIndex = (() => {
     for (let i = TEAM_TARGET_TIERS.length - 1; i >= 0; i--) {
@@ -636,7 +637,7 @@ function TeamTargetBonusCard({ teamTotalStaked, teamSize }: { teamTotalStaked: n
         </div>
         {activeTier ? (
           <div className={`px-3 py-1.5 rounded-xl text-xs font-display font-bold border ${tierBgMap[activeTier.color]} ${tierColorMap[activeTier.color]} border-current/20`}>
-            {activeTier.label} · +{activeTier.bonusPercentage}%
+            {activeTier.label} · +{onChainBonusBps !== undefined ? (onChainBonusBps / 100).toFixed(1) : activeTier.bonusPercentage}%
           </div>
         ) : (
           <div className="px-3 py-1.5 rounded-xl text-xs font-display font-medium bg-surface-800/60 text-text-muted border border-white/5">
@@ -685,7 +686,12 @@ function TeamTargetBonusCard({ teamTotalStaked, teamSize }: { teamTotalStaked: n
         <div className="mb-4 px-3 py-2 rounded-xl bg-brand-500/5 border border-brand-500/10 flex items-center gap-2 text-xs text-text-muted">
           <span className="text-brand-400">✓</span>
           <span>
-            Your <span className="text-brand-400 font-medium">{activeTier.label} +{activeTier.bonusPercentage}%</span> team bonus is applied automatically on every reward claim — no extra step needed.
+            Your <span className="text-brand-400 font-medium">
+              {activeTier.label} +{onChainBonusBps !== undefined ? (onChainBonusBps / 100).toFixed(1) : activeTier.bonusPercentage}%
+            </span> team bonus is applied automatically on every reward claim — no extra step needed.
+            {onChainBonusBps !== undefined && (
+              <span className="text-text-muted"> (verified on-chain)</span>
+            )}
           </span>
         </div>
       )}

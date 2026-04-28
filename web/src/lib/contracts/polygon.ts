@@ -77,7 +77,9 @@ function getReadOnlyProvider(): JsonRpcProvider {
  * Tries each RPC in POLYGON_RPC_FALLBACKS until one succeeds.
  */
 export async function polygonGetTokenBalance(address: string): Promise<number> {
+  if (!address || !address.startsWith('0x')) return 0;
   const { stakeTokenAddress } = NETWORK_CONFIG.polygon;
+  if (!stakeTokenAddress || stakeTokenAddress.length < 10 || stakeTokenAddress.toUpperCase().startsWith('YOUR_')) return 0;
   for (const rpc of POLYGON_RPC_FALLBACKS) {
     try {
       const provider = new JsonRpcProvider(rpc);
@@ -148,7 +150,7 @@ export async function polygonFetchPlatformStats(): Promise<PlatformStats | null>
       NETWORK_CONFIG.polygon.contractAddress.toUpperCase().startsWith('YOUR_')) return null;
   try {
     const contract = getReadOnlyStakingContract();
-    const [totalStaked, totalUsers, rewardPoolBalance, rewardRate, referralRewardRate, paused, totalBurned, annualEmission, burnBps, effectiveAPY, isRenounced, feeRecipient, totalFeesCollected, totalReserve, emissionStartTime, totalEmissionReleased, releasableEmission, totalYearlyBurned, lastYearBurnTime, remainingYears, maxPendingRewards] =
+    const [totalStaked, totalUsers, rewardPoolBalance, rewardRate, referralRewardRate, paused, totalBurned, annualEmission, burnBps, effectiveAPY, isRenounced, feeRecipient, totalFeesCollected, totalReserve, emissionStartTime, totalEmissionReleased, releasableEmission, remainingYears, maxPendingRewards] =
       await Promise.all([
         contract.totalStaked(),
         contract.totalUsers(),
@@ -167,8 +169,6 @@ export async function polygonFetchPlatformStats(): Promise<PlatformStats | null>
         contract.emissionStartTime(),
         contract.totalEmissionReleased(),
         contract.getReleasableEmission(),
-        contract.totalYearlyBurned(),
-        contract.lastYearBurnTime(),
         contract.getRemainingYears(),
         contract.getMaxPendingRewards(),
       ]);
@@ -190,8 +190,6 @@ export async function polygonFetchPlatformStats(): Promise<PlatformStats | null>
       emissionStartTime: Number(emissionStartTime),
       totalEmissionReleased: fromWei(totalEmissionReleased),
       releasableEmission: fromWei(releasableEmission),
-      totalYearlyBurned: fromWei(totalYearlyBurned),
-      lastYearBurnTime: Number(lastYearBurnTime),
       remainingYears: Number(remainingYears),
       maxPendingRewards: fromWei(maxPendingRewards),
     };
@@ -346,7 +344,10 @@ export async function polygonGetUserStakes(address: string): Promise<StakeEntry[
 export async function polygonGetUserAccount(address: string): Promise<UserAccount | null> {
   try {
     const contract = getReadOnlyStakingContract();
-    const user = await contract.users(address);
+    const [user, teamBonusBps] = await Promise.all([
+      contract.users(address),
+      contract.getTeamBonusBps(address).catch(() => 0n),
+    ]);
     return {
       address,
       totalStaked:          fromWei(user.totalStaked),
@@ -358,6 +359,7 @@ export async function polygonGetUserAccount(address: string): Promise<UserAccoun
       teamTotalStaked:      fromWei(user.teamTotalStaked),
       isBlocked:            Boolean(user.isBlocked),
       registeredAt:         Number(user.registeredAt),
+      currentTierBonusBps:  Number(teamBonusBps),
     };
   } catch {
     return null;
@@ -463,14 +465,6 @@ export async function polygonReleaseEmission(): Promise<{ txHash: string }> {
   await assertPolygonMainnet();
   const contract = await getStakingContract();
   const tx = await contract.releaseEmission();
-  const receipt = await tx.wait();
-  return { txHash: txHash(tx, receipt) };
-}
-
-export async function polygonBurnUnusedPool(amount: number): Promise<{ txHash: string }> {
-  await assertPolygonMainnet();
-  const contract = await getStakingContract();
-  const tx = await contract.burnUnusedPool(toWei(amount));
   const receipt = await tx.wait();
   return { txHash: txHash(tx, receipt) };
 }

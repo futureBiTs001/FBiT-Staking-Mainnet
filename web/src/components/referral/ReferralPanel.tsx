@@ -57,7 +57,9 @@ export default function ReferralPanel() {
   const walletData = getWalletData();
   const referralInfo = walletData?.referralInfo;
   const userAccount = walletData?.userAccount;
-  const teamStats = walletData?.teamStats ?? { teamSize: 0, teamTotalStaked: 0 };
+  // Read team stats from userAccount (updated by syncUserData) — teamStats field is never refreshed
+  const teamTotalStaked = userAccount?.teamTotalStaked ?? 0;
+  const teamSizeVal     = userAccount?.teamSize ?? 0;
 
   // Detect new referrals and show toast
   useEffect(() => {
@@ -69,14 +71,14 @@ export default function ReferralPanel() {
     prevReferralCount.current = count;
   }, [referralInfo?.totalReferrals]);
 
-  const currentTier = getTeamTargetTier(teamStats.teamSize, teamStats.teamTotalStaked);
-  const nextTier = getNextTeamTargetTier(teamStats.teamSize, teamStats.teamTotalStaked);
+  const currentTier = getTeamTargetTier(teamSizeVal, teamTotalStaked);
+  const nextTier = getNextTeamTargetTier(teamSizeVal, teamTotalStaked);
 
   const referralLink = address ? generateReferralLink(address) : '';
   const totalReferrals  = referralInfo?.totalReferrals ?? 0;
   const totalRewards    = userAccount?.totalReferralRewards ?? referralInfo?.totalReferralRewards ?? 0;
   const activeReferrals = referralInfo?.referrals.filter(r => r.stakedAmount > 0).length ?? 0;
-  const teamSize        = teamStats.teamSize;
+  const teamSize        = teamSizeVal;
 
   const handleCopy = async () => {
     const ok = await copyToClipboard(referralLink);
@@ -276,9 +278,9 @@ export default function ReferralPanel() {
               <div className="text-right">
                 <p className="text-text-muted text-xs mb-1">Team Size · Team Staked</p>
                 <p className="font-mono text-sm">
-                  <span className="text-brand-400">{teamStats.teamSize}</span>
+                  <span className="text-brand-400">{teamSizeVal}</span>
                   <span className="text-text-muted"> members · </span>
-                  <span className="text-accent-cyan">{formatNumber(teamStats.teamTotalStaked)}</span>
+                  <span className="text-accent-cyan">{formatNumber(teamTotalStaked)}</span>
                   <span className="text-text-muted"> FBiT</span>
                 </p>
               </div>
@@ -291,7 +293,7 @@ export default function ReferralPanel() {
                 </p>
                 <div className="grid grid-cols-1 gap-3">
                   {[
-                    { label: 'Team Staked', cur: teamStats.teamTotalStaked, max: nextTier.minTeamStaked, fmt: true },
+                    { label: 'Team Staked', cur: teamTotalStaked, max: nextTier.minTeamStaked, fmt: true },
                   ].map(({ label, cur, max, fmt }) => (
                     <div key={label}>
                       <div className="flex justify-between text-xs mb-1">
