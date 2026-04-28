@@ -48,11 +48,16 @@ export function resetRateLimit(key: string): void {
 // ── Input Sanitization ─────────────────────────────────────────────────────────
 
 /**
- * Strip HTML tags and trim whitespace from a user-supplied string.
+ * Strip HTML tags, JS URL schemes, and event handlers from a user-supplied string.
  * Prevents stored-XSS if any value is ever rendered via innerHTML.
  */
 export function sanitizeText(value: string): string {
-  return value.replace(/<[^>]*>/g, '').trim();
+  return value
+    .replace(/<[^>]*>/g, '')               // strip HTML tags
+    .replace(/javascript\s*:/gi, '')       // strip js: URL schemes
+    .replace(/on\w+\s*=/gi, '')            // strip onerror=, onclick=, etc.
+    .replace(/data\s*:/gi, '')             // strip data: URLs
+    .trim();
 }
 
 // ── Address Validation ─────────────────────────────────────────────────────────
