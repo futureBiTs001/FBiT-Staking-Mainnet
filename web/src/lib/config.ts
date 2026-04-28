@@ -12,8 +12,9 @@ export const NETWORK_CONFIG: Record<string, NetworkConfig> = {
     rewardTokenAddress: process.env.NEXT_PUBLIC_SOLANA_REWARD_TOKEN_MINT ?? '',
     stakeTokenSymbol:   'FBiT',
     stakeTokenDecimals: 6,
-    stakeVaultAddress:  process.env.NEXT_PUBLIC_SOLANA_STAKE_VAULT,
-    rewardVaultAddress: process.env.NEXT_PUBLIC_SOLANA_REWARD_VAULT,
+    stakeVaultAddress:   process.env.NEXT_PUBLIC_SOLANA_STAKE_VAULT,
+    rewardVaultAddress:  process.env.NEXT_PUBLIC_SOLANA_REWARD_VAULT,
+    reserveVaultAddress: process.env.NEXT_PUBLIC_SOLANA_RESERVE_VAULT,
   },
   polygon: {
     name: 'Polygon',

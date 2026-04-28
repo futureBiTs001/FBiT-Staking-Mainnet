@@ -190,8 +190,7 @@ export function usePolygonStaking() {
         totalBurned, annualEmission, burnBps, effectiveAPY,
         isRenounced, feeRecipient, totalFeesCollected,
         totalReserve, emissionStartTime, totalEmissionReleased,
-        releasableEmission, totalYearlyBurned, lastYearBurnTime,
-        remainingYears, maxPendingRewards,
+        releasableEmission,
       ] = await Promise.all([
         contract.totalStaked(),
         contract.totalUsers(),
@@ -210,10 +209,6 @@ export function usePolygonStaking() {
         contract.emissionStartTime(),
         contract.totalEmissionReleased(),
         contract.getReleasableEmission(),
-        contract.totalYearlyBurned(),
-        contract.lastYearBurnTime(),
-        contract.getRemainingYears(),
-        contract.getMaxPendingRewards(),
       ]);
 
       return {
@@ -234,10 +229,6 @@ export function usePolygonStaking() {
         emissionStartTime:      Number(emissionStartTime),
         totalEmissionReleased:  fmt(totalEmissionReleased),
         releasableEmission:     fmt(releasableEmission),
-        totalYearlyBurned:      fmt(totalYearlyBurned),
-        lastYearBurnTime:       Number(lastYearBurnTime),
-        remainingYears:         Number(remainingYears),
-        maxPendingRewards:      fmt(maxPendingRewards),
       };
     } catch {
       return null;

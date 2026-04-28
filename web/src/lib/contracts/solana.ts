@@ -111,6 +111,23 @@ function getRewardVault(): PublicKey {
   return ata(rewardMint, platPda);
 }
 
+/**
+ * Reserve vault = separate ATA( rewardMint, platformPDA ) for the long-term emission reserve.
+ * If NEXT_PUBLIC_SOLANA_RESERVE_VAULT is set in env it takes priority.
+ * Otherwise derived automatically (uses the same mint, different seed — but since ATA is
+ * deterministic per (mint, owner), a custom vault address MUST be set in env to separate it
+ * from the reward vault. Without env var, falls back to same address as reward vault, which
+ * is acceptable only for single-vault deployments.
+ */
+function getReserveVault(): PublicKey {
+  const envAddr = NETWORK_CONFIG.solana.reserveVaultAddress;
+  if (envAddr && envAddr.length > 10 && !envAddr.toUpperCase().startsWith('YOUR_')) {
+    return new PublicKey(envAddr);
+  }
+  // Fallback: same as reward vault (single-vault mode — reserve and reward share one vault)
+  return getRewardVault();
+}
+
 /** Derive the ATA for `owner` and `mint` — works synchronously via Anchor utils */
 function ata(mint: PublicKey, owner: PublicKey): PublicKey {
   const ASSOCIATED_TOKEN_PROGRAM = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bse');
@@ -129,75 +146,51 @@ export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> 
     const program = getProgram();
     const [pda] = platformPda();
     const platform: any = await (program.account as any).platform.fetch(pda);
-    const totalStaked    = fromLamports(platform.totalStaked);
-    const annualEmission = fromLamports(platform.annualEmission);
-    const burnBps        = platform.burnBps ? Number(platform.burnBps) : 1000;
 
-    // Mirror contract clamping: 6000 (60%) – 50000 (500%)
-    let effectiveAPY = 6_000;
-    if (totalStaked > 0 && annualEmission > 0) {
-      const raw = Math.round((annualEmission / totalStaked) * 10_000);
-      effectiveAPY = Math.min(50_000, Math.max(6_000, raw));
-    }
+    const totalStaked = fromLamports(platform.totalStaked);
 
+    // Reserve / emission fields (new on-chain fields)
     const totalReserve          = platform.totalReserve          ? fromLamports(platform.totalReserve)          : 0;
     const totalEmissionReleased = platform.totalEmissionReleased ? fromLamports(platform.totalEmissionReleased) : 0;
-    const emissionStartTime     = platform.emissionStartTime     ? Number(platform.emissionStartTime)           : 0;
-    const totalYearlyBurned     = platform.totalYearlyBurned     ? fromLamports(platform.totalYearlyBurned)     : 0;
-    const lastYearBurnTime      = platform.lastYearBurnTime      ? Number(platform.lastYearBurnTime)            : 0;
+    const emissionStartTime     = platform.emissionStartTime     ? platform.emissionStartTime.toNumber()        : 0;
+    const annualEmission        = platform.annualEmission        ? fromLamports(platform.annualEmission)        : 0;
 
-    const originalDeposit = totalReserve + totalEmissionReleased;
-    const effectiveMax    = originalDeposit > totalYearlyBurned ? originalDeposit - totalYearlyBurned : 0;
+    // PoS dynamic APY: emission / totalStaked, clamped 60%–500% (6000–50000 bps).
+    // Fallback also clamped to PoS range so default is always 60%–500%.
+    const effectiveAPY = (annualEmission > 0 && totalStaked > 0)
+      ? Math.min(50_000, Math.max(6_000, Math.round(annualEmission / totalStaked * 10_000)))
+      : Math.min(50_000, Math.max(6_000, platform.baseApy ? Number(platform.baseApy[0]) : 6_000));
+    const burnBps               = platform.burnBps               ? platform.burnBps.toNumber()                  : 1000;
 
-    // Calculate releasable emission client-side (mirrors contract logic)
+    // Compute releasable emission client-side
     let releasableEmission = 0;
-    if (emissionStartTime > 0 && totalReserve > 0 && annualEmission > 0) {
-      const elapsed  = Date.now() / 1000 - emissionStartTime;
-      const totalDue = Math.min((annualEmission * elapsed) / (365 * 86400), effectiveMax);
-      releasableEmission = Math.max(0, Math.min(totalDue - totalEmissionReleased, totalReserve));
-    }
-
-    const remainingYears = annualEmission > 0 && effectiveMax > totalEmissionReleased
-      ? Math.floor((effectiveMax - totalEmissionReleased) / annualEmission)
-      : 0;
-
-    // Conservative upper-bound of rewards currently owed to all active stakers (mirrors contract)
-    const CLAIM_INTERVAL_S = 43200; // 12 hours
-    let maxPendingRewards = 0;
-    if (totalStaked > 0 && (lastYearBurnTime > 0 || emissionStartTime > 0)) {
-      const refTime = lastYearBurnTime > 0 ? lastYearBurnTime : emissionStartTime;
-      const nowSec  = Date.now() / 1000;
-      const elapsed = nowSec - refTime;
-      if (elapsed > 0) {
-        const maxIntervals = Math.min(Math.floor(elapsed / CLAIM_INTERVAL_S), 730);
-        if (maxIntervals > 0) {
-          maxPendingRewards = (totalStaked * effectiveAPY * maxIntervals) / (730 * 10000);
-        }
-      }
+    if (annualEmission > 0 && emissionStartTime > 0) {
+      const nowSecs     = Math.floor(Date.now() / 1000);
+      const elapsed     = nowSecs - emissionStartTime;
+      const secsPerYear = 365 * 86400;
+      const totalReleasable = annualEmission * (elapsed / secsPerYear);
+      releasableEmission = Math.max(0, totalReleasable - totalEmissionReleased);
+      releasableEmission = Math.min(releasableEmission, totalReserve);
     }
 
     return {
       totalStaked,
-      totalUsers: platform.totalUsers.toNumber(),
-      rewardPoolBalance: fromLamports(platform.rewardPoolBalance),
-      rewardRate: platform.rewardRate.toNumber(),
-      referralRewardRate: platform.referralRewardRate.toNumber(),
-      isPaused: platform.isPaused,
-      totalBurned: fromLamports(platform.totalBurned),
+      totalUsers:            platform.totalUsers.toNumber(),
+      rewardPoolBalance:     fromLamports(platform.rewardPoolBalance),
+      rewardRate:            platform.rewardRate.toNumber(),
+      referralRewardRate:    platform.referralRewardRate.toNumber(),
+      isPaused:              platform.isPaused,
+      totalBurned:           fromLamports(platform.totalBurned),
       annualEmission,
       burnBps,
       effectiveAPY,
-      isRenounced: Boolean(platform.isRenounced),
-      feeRecipient: platform.feeRecipient?.toString() ?? '',
-      totalFeesCollected: fromLamports(platform.totalFeesCollected),
+      isRenounced:           Boolean(platform.isRenounced),
+      feeRecipient:          platform.feeRecipient?.toString() ?? '',
+      totalFeesCollected:    fromLamports(platform.totalFeesCollected),
       totalReserve,
       emissionStartTime,
       totalEmissionReleased,
       releasableEmission,
-      totalYearlyBurned,
-      lastYearBurnTime,
-      remainingYears,
-      maxPendingRewards,
     };
   } catch {
     return null;
@@ -497,6 +490,8 @@ export async function solanaUnstake(stakeId: number): Promise<{ txHash: string }
 // ── Admin ──────────────────────────────────────────────────────────────────────
 
 export async function solanaFundRewardPool(amount: number): Promise<{ txHash: string }> {
+  if (amount < 1)           throw new Error('Minimum deposit is 1 FBiT');
+  if (amount > 800_000_000) throw new Error('Maximum deposit is 800,000,000 FBiT (800M)');
   const program  = getProgram();
   const owner    = getOwner();
   const [platPda] = platformPda();
@@ -519,42 +514,65 @@ export async function solanaFundRewardPool(amount: number): Promise<{ txHash: st
   return { txHash: tx };
 }
 
-export async function solanaDepositReserve(amount: number): Promise<{ txHash: string }> {
+export async function solanaRefundRewardPool(amount: number): Promise<{ txHash: string }> {
+  if (amount <= 0) throw new Error('Refund amount must be greater than 0');
   const program  = getProgram();
   const owner    = getOwner();
   const [platPda] = platformPda();
-  const rewardMint     = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
-  const funderTokenAcc = ata(rewardMint, owner);
-  const rewardVault    = getRewardVault();
+
+  const rewardMint          = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
+  const authorityTokenAcc   = ata(rewardMint, owner);
+  const rewardVault         = getRewardVault();
+
+  const tx = await (program.methods as any)
+    .refundRewardPool(toLamports(amount))
+    .accounts({
+      platform:              platPda,
+      authority:             owner,
+      authorityTokenAccount: authorityTokenAcc,
+      rewardVault,
+      tokenProgram:          TOKEN_PROGRAM_ID,
+    })
+    .rpc();
+
+  return { txHash: tx };
+}
+
+export async function solanaDepositReserve(amount: number): Promise<{ txHash: string }> {
+  if (amount < 1)           throw new Error('Minimum deposit is 1 FBiT');
+  if (amount > 800_000_000) throw new Error('Maximum deposit is 800,000,000 FBiT (800M)');
+  const program   = getProgram();
+  const owner     = getOwner();
+  const [platPda] = platformPda();
+  const rewardMint       = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
+  const funderTokenAcc   = ata(rewardMint, owner);
+  const reserveVault     = getReserveVault();
   const tx = await (program.methods as any)
     .depositReserve(toLamports(amount))
     .accounts({
-      platform: platPda, authority: owner,
-      funderTokenAccount: funderTokenAcc, rewardVault, tokenProgram: TOKEN_PROGRAM_ID,
+      platform:           platPda,
+      authority:          owner,
+      funderTokenAccount: funderTokenAcc,
+      reserveVault,
+      tokenProgram:       TOKEN_PROGRAM_ID,
     })
     .rpc();
   return { txHash: tx };
 }
 
 export async function solanaReleaseEmission(): Promise<{ txHash: string }> {
-  const program  = getProgram();
-  const owner    = getOwner();
+  const program   = getProgram();
   const [platPda] = platformPda();
+  const reserveVault = getReserveVault();
+  const rewardVault  = getRewardVault();
   const tx = await (program.methods as any)
     .releaseEmission()
-    .accounts({ platform: platPda, caller: owner })
-    .rpc();
-  return { txHash: tx };
-}
-
-export async function solanaBurnUnusedPool(amount: number): Promise<{ txHash: string }> {
-  const program  = getProgram();
-  const owner    = getOwner();
-  const [platPda] = platformPda();
-  const rewardVault = getRewardVault();
-  const tx = await (program.methods as any)
-    .burnUnusedPool(toLamports(amount))
-    .accounts({ platform: platPda, authority: owner, rewardVault, deadAddress: new PublicKey('1nc1nerator11111111111111111111111111111111'), tokenProgram: TOKEN_PROGRAM_ID })
+    .accounts({
+      platform:     platPda,
+      reserveVault,
+      rewardVault,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
     .rpc();
   return { txHash: tx };
 }
@@ -609,8 +627,9 @@ export async function solanaTogglePause(): Promise<{ txHash: string }> {
 }
 
 export async function solanaSetAnnualEmission(annualEmission: number): Promise<{ txHash: string }> {
-  const program  = getProgram();
-  const owner    = getOwner();
+  if (annualEmission <= 0) throw new Error('Annual emission must be greater than 0');
+  const program   = getProgram();
+  const owner     = getOwner();
   const [platPda] = platformPda();
   const tx = await (program.methods as any)
     .setAnnualEmission(toLamports(annualEmission))
@@ -620,8 +639,9 @@ export async function solanaSetAnnualEmission(annualEmission: number): Promise<{
 }
 
 export async function solanaSetBurnBps(burnBps: number): Promise<{ txHash: string }> {
-  const program  = getProgram();
-  const owner    = getOwner();
+  if (burnBps < 0 || burnBps > 5000) throw new Error('Burn BPS must be 0–5000');
+  const program   = getProgram();
+  const owner     = getOwner();
   const [platPda] = platformPda();
   const tx = await (program.methods as any)
     .setBurnBps(new BN(burnBps))
@@ -646,6 +666,23 @@ export async function solanaSetTeamTargetTier(
   const [platPda] = platformPda();
   const tx = await (program.methods as any)
     .setTeamTargetTier(index, toLamports(minTeamStaked), new BN(bonusBps))
+    .accounts({ platform: platPda, authority: owner })
+    .rpc();
+  return { txHash: tx };
+}
+
+/**
+ * Set the fallback base APY for the single lock period (index 0).
+ * Only applies when annual_emission is 0 — PoS emission overrides this.
+ * apyBps: basis points (e.g. 6000 = 60%)
+ */
+export async function solanaSetBatchApy(apyBps: number): Promise<{ txHash: string }> {
+  if (apyBps < 6_000 || apyBps > 50_000) throw new Error('Base APY must be 6000–50000 BPS (60%–500%)');
+  const program   = getProgram();
+  const owner     = getOwner();
+  const [platPda] = platformPda();
+  const tx = await (program.methods as any)
+    .setBatchApy([new BN(apyBps)])
     .accounts({ platform: platPda, authority: owner })
     .rpc();
   return { txHash: tx };
@@ -720,6 +757,7 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
 // Uses the configured URL first, then falls back to known-good public nodes.
 const SOLANA_RPC_FALLBACKS = [
   NETWORK_CONFIG.solana.rpcUrl,
+  'https://rpc.ankr.com/solana',
   'https://api.mainnet-beta.solana.com',
 ].filter(Boolean);
 
@@ -729,20 +767,43 @@ const SOLANA_RPC_FALLBACKS = [
  * Returns 0 if the wallet has no token account for this mint.
  */
 export async function solanaGetTokenBalance(ownerAddress: string): Promise<number> {
-  const owner = new PublicKey(ownerAddress);
-  const stakeMint = new PublicKey(NETWORK_CONFIG.solana.stakeTokenAddress);
+  // Guard: must be Solana base58 address, not EVM 0x format
+  if (!ownerAddress || ownerAddress.startsWith('0x')) {
+    console.warn('[FBiT Balance] Skipped: EVM or empty address', ownerAddress);
+    return 0;
+  }
+  const stakeTokenAddr = NETWORK_CONFIG.solana.stakeTokenAddress;
+  if (!stakeTokenAddr || stakeTokenAddr.length < 10 || stakeTokenAddr.toUpperCase().startsWith('YOUR_')) {
+    console.warn('[FBiT Balance] Skipped: stakeTokenAddress not configured', stakeTokenAddr);
+    return 0;
+  }
+
+  console.log('[FBiT Balance] Fetching for wallet:', ownerAddress, '| mint:', stakeTokenAddr);
+
+  let owner: PublicKey;
+  let stakeMint: PublicKey;
+  try {
+    owner     = new PublicKey(ownerAddress);
+    stakeMint = new PublicKey(stakeTokenAddr);
+  } catch (e) {
+    console.error('[FBiT Balance] Invalid PublicKey:', e);
+    return 0;
+  }
 
   for (const rpc of SOLANA_RPC_FALLBACKS) {
     try {
       const connection = new Connection(rpc, 'confirmed');
       const accounts = await connection.getParsedTokenAccountsByOwner(owner, { mint: stakeMint });
+      console.log('[FBiT Balance] RPC', rpc, '→ accounts found:', accounts.value.length);
       if (accounts.value.length === 0) return 0;
-      return accounts.value.reduce((sum, acct) => {
+      const bal = accounts.value.reduce((sum, acct) => {
         const amount: number = acct.account.data.parsed.info.tokenAmount.uiAmount ?? 0;
         return sum + amount;
       }, 0);
-    } catch {
-      // Try next RPC
+      console.log('[FBiT Balance] Result:', bal, 'FBiT');
+      return bal;
+    } catch (e) {
+      console.error('[FBiT Balance] RPC failed:', rpc, e);
     }
   }
   return 0;
@@ -773,20 +834,87 @@ export async function solanaGetUserAccount(ownerAddress: string): Promise<UserAc
 
 export async function solanaGetReferralInfo(ownerAddress: string): Promise<ReferralInfo | null> {
   try {
-    const program = getProgram();
-    const owner = new PublicKey(ownerAddress);
-    const [pda] = userPda(owner);
-    const acc = await (program.account as any).userAccount.fetch(pda);
+    const program    = getProgram();
+    const owner      = new PublicKey(ownerAddress);
+    const [pda]      = userPda(owner);
+    const acc        = await (program.account as any).userAccount.fetch(pda);
+    const totalReferrals       = acc.referralCount.toNumber();
+    const totalReferralRewards = fromLamports(acc.totalReferralRewards);
+
+    // Fetch Level-1 referrals: scan all UserAccount PDAs whose `referrer` == owner.
+    // UserAccount layout (after 8-byte discriminator, all offsets are into raw data):
+    //   owner:                  Pubkey  → data[8]–data[39]   (32 bytes)
+    //   total_staked:           u64     → data[40]–data[47]
+    //   total_rewards_earned:   u64     → data[48]–data[55]
+    //   total_referral_rewards: u64     → data[56]–data[63]
+    //   referrer:               Option<Pubkey> → data[64]–data[96]
+    //     • data[64]      = 0 (None) | 1 (Some)
+    //     • data[65]–[96] = pubkey when Some  ← memcmp target
+    //   referral_count:         u64     → data[97]–data[104]
+    //   is_blocked:             bool    → data[105]
+    //   registered_at:          i64     → data[106]–data[113]  (slice[98]–slice[105])
+    //   team_size:              u64     → data[114]–data[121]  (slice[106]–slice[113])
+    //   team_total_staked:      u64     → data[122]–data[129]  (slice[114]–slice[121])
+    const referrals: import('@/types').ReferralEntry[] = [];
+    try {
+      const connection = new Connection(NETWORK_CONFIG.solana.rpcUrl, 'confirmed');
+      const programId  = getProgramId();
+
+      const accounts = await connection.getProgramAccounts(programId, {
+        filters: [
+          { dataSize: 152 },   // USER_ACCOUNT_SPACE
+          // Match accounts where the referrer Option<Pubkey> = Some(owner):
+          // offset 65 skips the discriminator (8) + fields before referrer (56) + Option tag byte (1)
+          { memcmp: { offset: 65, bytes: owner.toBase58() } },
+        ],
+      });
+
+      for (const { account } of accounts.slice(0, 50)) {
+        try {
+          const data  = account.data;
+          const slice = data.slice(8); // strip 8-byte Anchor discriminator
+          // Parse owner pubkey (slice[0]–slice[31])
+          const refOwner = new PublicKey(slice.slice(0, 32)).toBase58();
+          // Parse total_staked (slice[32]–slice[39])
+          const staked = Number(slice.readBigUInt64LE(32)) / SCALE;
+          // Parse registered_at (slice[98]–slice[105])
+          const registeredAt = Number(slice.readBigInt64LE(98));
+          referrals.push({
+            address:      refOwner,
+            level:        1,
+            stakedAmount: staked,
+            rewardEarned: 0,
+            registeredAt,
+          });
+        } catch { /* skip malformed accounts */ }
+      }
+    } catch { /* getProgramAccounts failed — return without referral list */ }
+
     return {
-      totalReferrals:       acc.referralCount.toNumber(),
-      totalReferralRewards: fromLamports(acc.totalReferralRewards),
-      referralLink:         '',
-      referrals:            [],
-      chain:                [],
+      totalReferrals,
+      totalReferralRewards,
+      referralLink: '',
+      referrals,
+      chain:        [],
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * Permissionless: trigger the annual base-APY halving.
+ * Can only succeed once every 365 days; contract enforces the time lock.
+ */
+export async function solanaTriggerHalving(): Promise<{ txHash: string }> {
+  const program   = getProgram();
+  const owner     = getOwner();
+  const [platPda] = platformPda();
+  const tx = await (program.methods as any)
+    .triggerHalving()
+    .accounts({ platform: platPda, caller: owner })
+    .rpc();
+  return { txHash: tx };
 }
 
 /**
