@@ -1,32 +1,28 @@
 /**
- * Top-level security utilities for FBiT Staking.
+ * Multi-layer security utilities for FBiT Staking.
  *
- * - RateLimiter: prevents burst transaction spam per action key
- * - sanitizeText: strips HTML/script tags from user-supplied strings
- * - isValidEVMAddress / isValidSolanaAddress: strict format checks
- * - isValidAmount: rejects NaN, negative, Infinity, and excessive precision
+ * Layers:
+ *  1. Rate limiting     — burst-spam prevention per action key
+ *  2. Input sanitization — XSS / injection stripping
+ *  3. Address validation — strict format checks (EVM & Solana)
+ *  4. Amount validation  — NaN, negative, overflow, precision guards
+ *  5. Error sanitization — never leak internal stack traces to users
+ *  6. Limits             — hard caps on stake/reward amounts
  */
 
-// ── Rate Limiter ───────────────────────────────────────────────────────────────
+// ── 1. Rate Limiter ────────────────────────────────────────────────────────────
 
 interface RateLimiterOptions {
-  /** Max calls allowed within `windowMs` */
   maxCalls: number;
-  /** Rolling window in milliseconds */
   windowMs: number;
 }
 
 const DEFAULT_OPTIONS: RateLimiterOptions = { maxCalls: 3, windowMs: 30_000 };
-
-/** Per-key timestamp log — lives for the duration of the browser session. */
 const _callLog: Map<string, number[]> = new Map();
 
 /**
  * Returns true if the action is allowed under the rate limit.
- * Call this before any on-chain write. If it returns false, show an error toast.
- *
- * @example
- * if (!checkRateLimit('stake')) { toast.error('Too many attempts. Wait 30 s.'); return; }
+ * Call before any on-chain write. Returns false → show error toast.
  */
 export function checkRateLimit(
   key: string,
@@ -40,27 +36,27 @@ export function checkRateLimit(
   return true;
 }
 
-/** Reset the rate-limit log for a specific key (e.g. after a network switch). */
 export function resetRateLimit(key: string): void {
   _callLog.delete(key);
 }
 
-// ── Input Sanitization ─────────────────────────────────────────────────────────
+// ── 2. Input Sanitization ──────────────────────────────────────────────────────
 
 /**
- * Strip HTML tags, JS URL schemes, and event handlers from a user-supplied string.
- * Prevents stored-XSS if any value is ever rendered via innerHTML.
+ * Strip HTML tags, JS URL schemes, data: URLs, and inline event handlers.
+ * Prevents stored-XSS if any value is rendered via innerHTML.
  */
 export function sanitizeText(value: string): string {
   return value
-    .replace(/<[^>]*>/g, '')               // strip HTML tags
-    .replace(/javascript\s*:/gi, '')       // strip js: URL schemes
-    .replace(/on\w+\s*=/gi, '')            // strip onerror=, onclick=, etc.
-    .replace(/data\s*:/gi, '')             // strip data: URLs
+    .replace(/<[^>]*>/g, '')         // strip HTML tags
+    .replace(/javascript\s*:/gi, '') // strip js: URL scheme
+    .replace(/on\w+\s*=/gi, '')      // strip onerror=, onclick=, etc.
+    .replace(/data\s*:/gi, '')       // strip data: URLs
+    .replace(/vbscript\s*:/gi, '')   // strip vbscript: URL scheme
     .trim();
 }
 
-// ── Address Validation ─────────────────────────────────────────────────────────
+// ── 3. Address Validation ──────────────────────────────────────────────────────
 
 /** EVM address: 0x + 40 hex chars */
 export function isValidEVMAddress(addr: string): boolean {
@@ -77,21 +73,38 @@ export function isValidWalletAddress(addr: string): boolean {
   return isValidEVMAddress(addr) || isValidSolanaAddress(addr);
 }
 
-// ── Amount Validation ──────────────────────────────────────────────────────────
+/** Solana SPL token mint address (same format as wallet) */
+export function isValidSolanaMint(mint: string): boolean {
+  return isValidSolanaAddress(mint);
+}
+
+// ── 4. Amount Validation ───────────────────────────────────────────────────────
+
+/** Maximum single stake — 500 million FBiT */
+export const MAX_STAKE_AMOUNT = 500_000_000;
+
+/** Minimum single stake — 1 FBiT */
+export const MIN_STAKE_AMOUNT = 1;
 
 /**
- * Returns true when `amount` is a finite positive number with at most `maxDecimals` decimals.
- * Rejects: NaN, Infinity, zero, negative, and overly-precise floats.
+ * Returns true when amount is a finite positive number within allowed range
+ * and with at most maxDecimals decimal places.
  */
 export function isValidAmount(amount: number, maxDecimals = 6): boolean {
   if (!Number.isFinite(amount) || amount <= 0) return false;
+  if (amount < MIN_STAKE_AMOUNT || amount > MAX_STAKE_AMOUNT) return false;
   const str = amount.toString();
   const dot = str.indexOf('.');
   if (dot === -1) return true;
   return str.length - dot - 1 <= maxDecimals;
 }
 
-// ── BPS Validation ─────────────────────────────────────────────────────────────
+/** Validate a raw token amount (before decimals scaling) — must be positive bigint-safe integer */
+export function isValidRawAmount(raw: bigint): boolean {
+  return raw > 0n && raw <= BigInt(MAX_STAKE_AMOUNT) * 1_000_000n;
+}
+
+// ── 5. BPS Validation ─────────────────────────────────────────────────────────
 
 /** Basis points: integer 0–10000 */
 export function isValidBps(bps: number): boolean {
@@ -101,4 +114,64 @@ export function isValidBps(bps: number): boolean {
 /** Team bonus BPS: integer 1–1000 (max 10%) */
 export function isValidBonusBps(bps: number): boolean {
   return Number.isInteger(bps) && bps >= 1 && bps <= 1_000;
+}
+
+// ── 6. Error Sanitization ──────────────────────────────────────────────────────
+
+/** Patterns in error messages that should never reach the user */
+const _SENSITIVE_PATTERNS = [
+  /0x[0-9a-fA-F]{40,}/g,          // raw EVM addresses in errors
+  /private.?key/gi,
+  /secret/gi,
+  /mnemonic/gi,
+  /seed.?phrase/gi,
+  /Error: [A-Z_]{10,}/g,           // internal enum-style error codes
+  /at\s+\w+\s+\([^)]+\)/g,        // stack trace frames
+];
+
+/**
+ * Return a safe, user-facing error message.
+ * Strips stack traces, private keys, internal codes, and raw addresses.
+ */
+export function sanitizeErrorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+
+  // Passthrough known user-friendly messages (contract-configured checks etc.)
+  if (raw.includes('Contract not configured')) return raw;
+  if (raw.includes('Too many')) return raw;
+  if (raw.includes('Rate limit')) return raw;
+
+  let safe = raw;
+  for (const pattern of _SENSITIVE_PATTERNS) {
+    safe = safe.replace(pattern, '[redacted]');
+  }
+
+  // Collapse to first sentence — stack frames come after newlines
+  safe = safe.split('\n')[0].trim();
+
+  // Cap length
+  if (safe.length > 120) safe = safe.slice(0, 117) + '…';
+
+  return safe || 'An unexpected error occurred. Please try again.';
+}
+
+// ── 7. Environment Guard ───────────────────────────────────────────────────────
+
+/**
+ * Warn in the console (dev-only) if critical env vars are missing.
+ * Never throws — just logs so the app still loads.
+ */
+export function warnMissingEnv(): void {
+  if (typeof window === 'undefined') return;
+  const required = [
+    'NEXT_PUBLIC_REOWN_PROJECT_ID',
+    'NEXT_PUBLIC_SOLANA_STAKE_TOKEN_MINT',
+    'NEXT_PUBLIC_POLYGON_STAKE_TOKEN',
+  ];
+  for (const key of required) {
+    const val = process.env[key];
+    if (!val || val.startsWith('YOUR_')) {
+      console.warn(`[FBiT Security] Missing env var: ${key}`);
+    }
+  }
 }

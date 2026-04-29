@@ -6,6 +6,7 @@ import { useAppStore } from '@/lib/store';
 import { useWallet } from '@/context/WalletContext';
 import { getExplorerTxUrl } from '@/lib/config';
 import { formatNumber } from '@/lib/utils';
+import { sanitizeErrorMessage } from '@/lib/security';
 import type { TxRecord } from '@/types';
 
 // ─── Filter types ──────────────────────────────────────────────────────────────
@@ -158,7 +159,7 @@ export default function HistoryPanel() {
       setOnChainTxs(fetched);
       toast.success(`Fetched ${fetched.length} on-chain records`);
     } catch (err: any) {
-      toast.error(err?.message ?? 'Failed to fetch on-chain history');
+      toast.error(sanitizeErrorMessage(err));
     } finally {
       setIsFetchingChain(false);
     }

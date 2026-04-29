@@ -4,6 +4,9 @@ import type { ReactNode } from 'react';
 import { WalletProvider } from '@/context/WalletContext';
 import { AppKitProvider } from '@/providers/AppKitProvider';
 import ExtensionErrorSuppressor from '@/components/ExtensionErrorSuppressor';
+import { warnMissingEnv } from '@/lib/security';
+
+warnMissingEnv();
 
 export const metadata: Metadata = {
   title: 'Future Bit (FBiT) Staking Mainnet | Multi-Chain Staking & Referral Platform',

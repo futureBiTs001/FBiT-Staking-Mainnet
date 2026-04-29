@@ -7,7 +7,7 @@ import { useAppStore } from '@/lib/store';
 import { formatNumber } from '@/lib/utils';
 import { LOCK_PERIOD, StakeEntry } from '@/types';
 import { useContract } from '@/hooks/useContract';
-import { checkRateLimit } from '@/lib/security';
+import { checkRateLimit, sanitizeErrorMessage, MAX_STAKE_AMOUNT } from '@/lib/security';
 import ContractSetupNotice from '@/components/ui/ContractSetupNotice';
 import { solanaGetTokenBalance } from '@/lib/contracts/solana';
 import { polygonGetTokenBalance } from '@/lib/contracts/polygon';
@@ -72,6 +72,10 @@ export default function StakePanel() {
 
   const handleStake = async () => {
     if (!stakeAmount || stakeAmount <= 0 || stakeAmount > tokenBalance) return;
+    if (stakeAmount > MAX_STAKE_AMOUNT) {
+      toast.error(`Maximum stake is ${MAX_STAKE_AMOUNT.toLocaleString()} FBiT.`);
+      return;
+    }
     if (!checkRateLimit('stake', { maxCalls: 3, windowMs: 120_000 })) {
       toast.error('Too many stake attempts. Please wait 2 minutes.');
       return;
@@ -160,7 +164,7 @@ export default function StakePanel() {
       }
       setAmount('');
     } catch (err: any) {
-      toast.error(err?.message ?? 'Staking failed. Please try again.', { id: toastId });
+      toast.error(sanitizeErrorMessage(err), { id: toastId });
     } finally {
       setIsStaking(false);
     }
