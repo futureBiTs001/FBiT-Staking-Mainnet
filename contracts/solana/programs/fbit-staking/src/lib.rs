@@ -319,7 +319,7 @@ pub mod fbit_staking {
         let unlock_at  = now + (lock_days as i64 * SECONDS_PER_DAY);
         // PoS: store current dynamic APY for display (actual reward uses live APY at claim time)
         let apy = get_effective_apy_bps(&ctx.accounts.platform, ctx.accounts.platform.base_apy[lock_period_index as usize]);
-        let referrer   = ctx.accounts.user_account.referrer;
+        let _referrer  = ctx.accounts.user_account.referrer;
         let ref_rate   = ctx.accounts.platform.referral_reward_rate;
 
         // When renounced, authority == Pubkey::default(): skip the 1 % stake fee
