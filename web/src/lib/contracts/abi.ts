@@ -65,6 +65,9 @@ export const FBIT_STAKING_ABI = [
   `function getTeamTierInfo(address user) external view returns (uint8 tierIndex, uint256 bonusBps, uint256 teamTotalStaked)`,
   `function teamTargetTiers(uint256 index) external view returns (uint256 minTeamStaked, uint256 bonusBps)`,
   'function getReferrals(address user) external view returns (address[])',
+  'function getReferralPercentages() external pure returns (uint256[10] memory)',
+  'function MIN_STAKE_AMOUNT() external view returns (uint256)',
+  'function MAX_STAKE_PER_USER() external view returns (uint256)',
 
   // ── Events ─────────────────────────────────────────────────────────────────
   'event TokensStaked(address indexed user, uint256 indexed stakeId, uint256 amount, uint256 fee, uint256 lockPeriod, uint256 unlockAt, uint256 apy)',

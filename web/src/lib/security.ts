@@ -140,6 +140,17 @@ export function sanitizeErrorMessage(err: unknown): string {
   if (raw.includes('Contract not configured')) return raw;
   if (raw.includes('Too many')) return raw;
   if (raw.includes('Rate limit')) return raw;
+  // Solana contract error passthroughs
+  if (raw.includes('Stake amount is below minimum')) return 'Minimum stake is 1 FBiT.';
+  if (raw.includes('Stake amount exceeds maximum')) return 'Maximum stake is 500,000,000 FBiT.';
+  if (raw.includes('Invalid referral token account')) return 'Invalid referral account. Please try again.';
+  if (raw.includes('BelowMinStake')) return 'Minimum stake is 1 FBiT.';
+  if (raw.includes('AboveMaxStake')) return 'Maximum stake is 500,000,000 FBiT.';
+  if (raw.includes('InvalidReferralATA')) return 'Invalid referral account. Please try again.';
+  // Polygon contract error passthroughs
+  if (raw.includes('Stake below minimum')) return 'Minimum stake is 1 FBiT.';
+  if (raw.includes('Stake exceeds maximum')) return 'Maximum stake is 500,000,000 FBiT.';
+  if (raw.includes('pool fully reserved for pending')) return 'Cannot withdraw: reward pool is fully reserved for pending user rewards.';
 
   let safe = raw;
   for (const pattern of _SENSITIVE_PATTERNS) {
