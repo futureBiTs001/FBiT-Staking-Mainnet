@@ -753,60 +753,26 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
   }
 }
 
-// Ordered list of Solana RPC endpoints tried in sequence for balance reads.
-// Uses the configured URL first, then falls back to known-good public nodes.
-const SOLANA_RPC_FALLBACKS = [
-  NETWORK_CONFIG.solana.rpcUrl,
-  'https://rpc.ankr.com/solana',
-  'https://api.mainnet-beta.solana.com',
-].filter(Boolean);
-
 /**
  * Fetch the FBiT SPL token balance for a wallet address.
- * Tries each RPC in SOLANA_RPC_FALLBACKS until one succeeds.
+ * Routes through a Next.js API proxy (/api/solana/balance) to avoid
+ * CORS blocks that public Solana mainnet RPCs impose on browser requests.
  * Returns 0 if the wallet has no token account for this mint.
  */
 export async function solanaGetTokenBalance(ownerAddress: string): Promise<number> {
-  // Guard: must be Solana base58 address, not EVM 0x format
-  if (!ownerAddress || ownerAddress.startsWith('0x')) {
-    console.warn('[FBiT Balance] Skipped: EVM or empty address', ownerAddress);
-    return 0;
-  }
+  if (!ownerAddress || ownerAddress.startsWith('0x')) return 0;
   const stakeTokenAddr = NETWORK_CONFIG.solana.stakeTokenAddress;
-  if (!stakeTokenAddr || stakeTokenAddr.length < 10 || stakeTokenAddr.toUpperCase().startsWith('YOUR_')) {
-    console.warn('[FBiT Balance] Skipped: stakeTokenAddress not configured', stakeTokenAddr);
-    return 0;
-  }
+  if (!stakeTokenAddr || stakeTokenAddr.length < 10 || stakeTokenAddr.toUpperCase().startsWith('YOUR_')) return 0;
 
-  console.log('[FBiT Balance] Fetching for wallet:', ownerAddress, '| mint:', stakeTokenAddr);
-
-  let owner: PublicKey;
-  let stakeMint: PublicKey;
   try {
-    owner     = new PublicKey(ownerAddress);
-    stakeMint = new PublicKey(stakeTokenAddr);
-  } catch (e) {
-    console.error('[FBiT Balance] Invalid PublicKey:', e);
+    const url = `/api/solana/balance?owner=${encodeURIComponent(ownerAddress)}&mint=${encodeURIComponent(stakeTokenAddr)}`;
+    const res  = await fetch(url);
+    if (!res.ok) return 0;
+    const json = await res.json();
+    return typeof json.balance === 'number' ? json.balance : 0;
+  } catch {
     return 0;
   }
-
-  for (const rpc of SOLANA_RPC_FALLBACKS) {
-    try {
-      const connection = new Connection(rpc, 'confirmed');
-      const accounts = await connection.getParsedTokenAccountsByOwner(owner, { mint: stakeMint });
-      console.log('[FBiT Balance] RPC', rpc, '→ accounts found:', accounts.value.length);
-      if (accounts.value.length === 0) return 0;
-      const bal = accounts.value.reduce((sum, acct) => {
-        const amount: number = acct.account.data.parsed.info.tokenAmount.uiAmount ?? 0;
-        return sum + amount;
-      }, 0);
-      console.log('[FBiT Balance] Result:', bal, 'FBiT');
-      return bal;
-    } catch (e) {
-      console.error('[FBiT Balance] RPC failed:', rpc, e);
-    }
-  }
-  return 0;
 }
 
 export async function solanaGetUserAccount(ownerAddress: string): Promise<UserAccount | null> {
