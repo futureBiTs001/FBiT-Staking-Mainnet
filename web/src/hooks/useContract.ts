@@ -134,8 +134,13 @@ export interface ContractHook {
 }
 
 export function useContract(): ContractHook {
-  const { address } = useWallet();
+  const { address, solanaAddress, evmAddress } = useWallet();
   const { selectedNetwork, updatePlatformStats, loadOnChainData } = useAppStore();
+
+  // Resolve the chain-specific address for the selected network
+  const chainAddress = selectedNetwork === 'solana'
+    ? (solanaAddress ?? (address && !address.startsWith('0x') ? address : null))
+    : (evmAddress   ?? (address && address.startsWith('0x')   ? address : null));
 
   const config = NETWORK_CONFIG[selectedNetwork];
 
@@ -149,7 +154,7 @@ export function useContract(): ContractHook {
     return true;
   }, [config]);
 
-  const isReady = useMemo(() => isLive && !!address, [isLive, address]);
+  const isReady = useMemo(() => isLive && !!chainAddress, [isLive, chainAddress]);
 
   // ── Staking ────────────────────────────────────────────────────────────────
 
@@ -199,7 +204,7 @@ export function useContract(): ContractHook {
   }, [selectedNetwork, updatePlatformStats]);
 
   const syncUserData = useCallback(async () => {
-    if (!address) return;
+    if (!address || !chainAddress) return;
 
     const tokenConfigured = !isPlaceholderAddr(config.stakeTokenAddress);
 
@@ -209,14 +214,14 @@ export function useContract(): ContractHook {
       if (isLive) {
         const [stakesResult, userAccountResult, referralInfoResult] = await Promise.allSettled([
           selectedNetwork === 'solana'
-            ? solanaGetUserStakes(address)
-            : polygonGetUserStakes(address),
+            ? solanaGetUserStakes(chainAddress)
+            : polygonGetUserStakes(chainAddress),
           selectedNetwork === 'solana'
-            ? solanaGetUserAccount(address)
-            : polygonGetUserAccount(address),
+            ? solanaGetUserAccount(chainAddress)
+            : polygonGetUserAccount(chainAddress),
           selectedNetwork === 'solana'
-            ? solanaGetReferralInfo(address)
-            : polygonGetReferralInfo(address),
+            ? solanaGetReferralInfo(chainAddress)
+            : polygonGetReferralInfo(chainAddress),
         ]);
         if (stakesResult.status === 'fulfilled') update.stakes = stakesResult.value;
         if (userAccountResult.status === 'fulfilled' && userAccountResult.value) update.userAccount = userAccountResult.value;
@@ -239,8 +244,8 @@ export function useContract(): ContractHook {
       if (tokenConfigured) {
         const balanceResult = await Promise.allSettled([
           selectedNetwork === 'solana'
-            ? solanaGetTokenBalance(address)
-            : polygonGetTokenBalance(address),
+            ? solanaGetTokenBalance(chainAddress)
+            : polygonGetTokenBalance(chainAddress),
         ]);
         if (balanceResult[0].status === 'fulfilled') update.tokenBalance = balanceResult[0].value;
       }
@@ -251,7 +256,7 @@ export function useContract(): ContractHook {
     } catch (err) {
       console.warn('[useContract] syncUserData failed:', err);
     }
-  }, [address, isLive, config, selectedNetwork, loadOnChainData]);
+  }, [address, chainAddress, isLive, config, selectedNetwork, loadOnChainData]);
 
   // ── Admin ─────────────────────────────────────────────────────────────────
 
