@@ -24,7 +24,7 @@ import { polygonGetTokenBalance } from '@/lib/contracts/polygon';
 type ActionKey = string;
 
 export default function Dashboard() {
-  const { address } = useWallet();
+  const { address, solanaAddress, evmAddress } = useWallet();
   const {
     selectedNetwork,
     platformStats,
@@ -50,13 +50,18 @@ export default function Dashboard() {
   const fetchTokenBalance = useCallback(async () => {
     if (!address) return;
     try {
-      const bal = selectedNetwork === 'solana'
-        ? await solanaGetTokenBalance(address)
-        : await polygonGetTokenBalance(address);
+      let bal = 0;
+      if (selectedNetwork === 'solana') {
+        const addr = solanaAddress ?? (address.startsWith('0x') ? null : address);
+        if (addr) bal = await solanaGetTokenBalance(addr);
+      } else {
+        const addr = evmAddress ?? (address.startsWith('0x') ? address : null);
+        if (addr) bal = await polygonGetTokenBalance(addr);
+      }
       setTokenBalance(bal);
       loadOnChainData(address, { tokenBalance: bal });
     } catch {}
-  }, [address, selectedNetwork, loadOnChainData]);
+  }, [address, solanaAddress, evmAddress, selectedNetwork, loadOnChainData]);
 
   useEffect(() => {
     if (!address) { setTokenBalance(0); return; }
