@@ -59,8 +59,8 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
     /// @dev Dead address — tokens sent here are permanently removed from circulation
     address public constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
-    /// @dev Read via getReferralPercentages() — stored in code, not storage (gas-efficient).
-    uint256[10] public REFERRAL_PERCENTAGES = [25, 50, 125, 150, 200, 325, 350, 425, 550, 800];
+    uint256 public constant MIN_STAKE_AMOUNT   = 1 * 10 ** 6;             // 1 FBiT (6 decimals)
+    uint256 public constant MAX_STAKE_PER_USER = 500_000_000 * 10 ** 6;  // 500 M FBiT
 
     function getReferralPercentages() external pure returns (uint256[10] memory) {
         return [uint256(25), 50, 125, 150, 200, 325, 350, 425, 550, 800];
@@ -265,7 +265,7 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
         users[msg.sender].isRegistered = true;
         users[msg.sender].registeredAt = block.timestamp;
 
-        if (_referrer != address(0) && users[_referrer].isRegistered) {
+        if (_referrer != address(0) && users[_referrer].isRegistered && !users[_referrer].isBlocked) {
             users[msg.sender].referrer = _referrer;
             referralChain[msg.sender]  = _referrer;
             users[_referrer].referralCount++;
@@ -286,7 +286,8 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
     function stake(uint256 _amount) external nonReentrant whenNotPaused {
         require(users[msg.sender].isRegistered, "Not registered");
         require(!users[msg.sender].isBlocked,   "User is blocked");
-        require(_amount > 0,                    "Invalid amount");
+        require(_amount >= MIN_STAKE_AMOUNT,    "Stake below minimum (1 FBiT)");
+        require(_amount <= MAX_STAKE_PER_USER,  "Stake exceeds maximum (500M FBiT)");
 
         uint256 fee         = isRenounced ? 0 : (_amount * PLATFORM_FEE_BPS) / BASIS_POINTS;
         uint256 stakeAmount = _amount - fee;
@@ -654,14 +655,11 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
         uint256 amt = (_amount > bal) ? bal : _amount;
         require(amt > 0, "Nothing to withdraw");
         if (_token == address(rewardToken)) {
-            if (amt <= rewardPoolBalance) {
-                rewardPoolBalance -= amt;
-            } else {
-                uint256 fromPool    = rewardPoolBalance;
-                uint256 fromReserve = amt - fromPool;
-                rewardPoolBalance   = 0;
-                totalReserve        = fromReserve <= totalReserve ? totalReserve - fromReserve : 0;
-            }
+            uint256 maxPending = _maxPendingRewards();
+            uint256 surplus    = rewardPoolBalance > maxPending ? rewardPoolBalance - maxPending : 0;
+            if (amt > surplus) amt = surplus;
+            require(amt > 0, "Cannot withdraw: pool fully reserved for pending user rewards");
+            rewardPoolBalance -= amt;
         }
         IERC20(_token).safeTransfer(_to, amt);
     }
