@@ -6,6 +6,7 @@ import { useWallet } from '@/context/WalletContext';
 import { useAppStore } from '@/lib/store';
 import { shortenAddress } from '@/lib/utils';
 import TokenLogo from '@/components/ui/TokenLogo';
+import { sanitizeErrorMessage } from '@/lib/security';
 
 function isValidSolanaAddress(addr: string): boolean {
   return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr);
@@ -136,7 +137,7 @@ export default function Header() {
     try {
       await connect('reown');
     } catch (err: any) {
-      toast.error(err?.message ?? 'Wallet connection failed.');
+      toast.error(sanitizeErrorMessage(err));
     }
   };
 
@@ -150,7 +151,7 @@ export default function Header() {
     try {
       await connect('reown');
     } catch (err: any) {
-      toast.error(err?.message ?? 'Wallet connection failed.');
+      toast.error(sanitizeErrorMessage(err));
     }
   };
 
@@ -159,7 +160,7 @@ export default function Header() {
     try {
       await adminConnect();
     } catch (err: any) {
-      toast.error(err?.message ?? 'Admin wallet connection failed.');
+      toast.error(sanitizeErrorMessage(err));
     }
   };
 

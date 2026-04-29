@@ -15,7 +15,7 @@ import {
   getDailyReward,
 } from '@/lib/utils';
 import { getExplorerTxUrl } from '@/lib/config';
-import { checkRateLimit } from '@/lib/security';
+import { checkRateLimit, sanitizeErrorMessage } from '@/lib/security';
 import ContractSetupNotice from '@/components/ui/ContractSetupNotice';
 import { LOCK_PERIOD, TEAM_TARGET_TIERS, type PlatformStats } from '@/types';
 import { solanaGetTokenBalance } from '@/lib/contracts/solana';
@@ -155,7 +155,7 @@ export default function Dashboard() {
         toast.success(`✓ Claimed ${formatNumber(net)} FBiT · ${formatNumber(burned)} FBiT burned 🔥`);
       }
     } catch (err: any) {
-      toast.error(err?.message ?? 'Claim failed.');
+      toast.error(sanitizeErrorMessage(err));
     } finally {
       setActionLoading(key, false);
     }
@@ -217,7 +217,7 @@ export default function Dashboard() {
         toast.success(`↑ Compounded ${formatNumber(net)} FBiT · ${formatNumber(burned)} FBiT burned 🔥`);
       }
     } catch (err: any) {
-      toast.error(err?.message ?? 'Compound failed.');
+      toast.error(sanitizeErrorMessage(err));
     } finally {
       setActionLoading(key, false);
     }
@@ -253,7 +253,7 @@ export default function Dashboard() {
       });
       toast.success(`✓ Unstaked ${formatNumber(stake.amount)} FBiT — returned to wallet!`);
     } catch (err: any) {
-      toast.error(err?.message ?? 'Unstake failed.');
+      toast.error(sanitizeErrorMessage(err));
     } finally {
       setActionLoading(key, false);
     }

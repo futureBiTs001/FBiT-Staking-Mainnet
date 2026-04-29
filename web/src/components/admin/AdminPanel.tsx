@@ -8,7 +8,7 @@ import { useAppStore } from '@/lib/store';
 import { formatNumber } from '@/lib/utils';
 import { useContract } from '@/hooks/useContract';
 import { TEAM_TARGET_TIERS } from '@/types';
-import { checkRateLimit, isValidWalletAddress, isValidAmount, isValidBonusBps, sanitizeText } from '@/lib/security';
+import { checkRateLimit, isValidWalletAddress, isValidAmount, isValidBonusBps, sanitizeText, sanitizeErrorMessage } from '@/lib/security';
 import ContractSetupNotice from '@/components/ui/ContractSetupNotice';
 
 export default function AdminPanel() {
@@ -79,7 +79,7 @@ export default function AdminPanel() {
       });
       toast.success(successMsg, { id: toastId });
     } catch (err: any) {
-      toast.error(err?.message ?? 'Transaction failed.', { id: toastId });
+      toast.error(sanitizeErrorMessage(err), { id: toastId });
     } finally {
       setProcessing(null);
     }
@@ -187,7 +187,7 @@ export default function AdminPanel() {
         successCount++;
         toast.success(`Tier ${i + 1} (${t.label}) updated ✓`, { duration: 2000 });
       } catch (err: any) {
-        toast.error(`Tier ${i + 1} failed: ${err?.message ?? 'error'}`);
+        toast.error(`Tier ${i + 1} failed: ${sanitizeErrorMessage(err)}`);
         break;
       }
     }

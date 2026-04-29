@@ -7,8 +7,14 @@ import { NETWORK_CONFIG } from '@/lib/config';
 import { TransactionResult, UserAccount, StakeEntry, PlatformStats } from '@/types';
 
 const SOLANA_CONFIG = NETWORK_CONFIG.solana;
-const STAKE_TOKEN_MINT = new PublicKey(SOLANA_CONFIG.stakeTokenAddress);
-const REWARD_TOKEN_MINT = new PublicKey(SOLANA_CONFIG.rewardTokenAddress);
+
+function getSolanaMint(address: string, label: string): PublicKey {
+  if (!address || address.length < 32) throw new Error(`${label} not configured`);
+  return new PublicKey(address);
+}
+
+const getStakeTokenMint  = () => getSolanaMint(SOLANA_CONFIG.stakeTokenAddress,  'Stake token mint');
+const getRewardTokenMint = () => getSolanaMint(SOLANA_CONFIG.rewardTokenAddress, 'Reward token mint');
 
 function getProgramId(): PublicKey {
   const addr = SOLANA_CONFIG.contractAddress;
@@ -76,8 +82,8 @@ export function useSolanaStaking() {
       const [userPDA] = getUserPDA(owner);
       const now = new BN(Math.floor(Date.now() / 1000));
       const [stakeEntryPDA] = getStakeEntryPDA(owner, now);
-      const userTokenAccount = await getAssociatedTokenAddress(STAKE_TOKEN_MINT, owner);
-      const stakeVault = await getAssociatedTokenAddress(STAKE_TOKEN_MINT, platformPDA, true);
+      const userTokenAccount = await getAssociatedTokenAddress(getStakeTokenMint(), owner);
+      const stakeVault = await getAssociatedTokenAddress(getStakeTokenMint(), platformPDA, true);
       const amountBN = new BN(amount * Math.pow(10, SOLANA_CONFIG.stakeTokenDecimals));
 
       const tx = await program.methods.stake(amountBN, lockPeriodIndex).accounts({
@@ -98,8 +104,8 @@ export function useSolanaStaking() {
       const owner = program.provider.publicKey!;
       const [platformPDA] = getPlatformPDA();
       const [userPDA] = getUserPDA(owner);
-      const userTokenAccount = await getAssociatedTokenAddress(REWARD_TOKEN_MINT, owner);
-      const rewardVault = await getAssociatedTokenAddress(REWARD_TOKEN_MINT, platformPDA, true);
+      const userTokenAccount = await getAssociatedTokenAddress(getRewardTokenMint(), owner);
+      const rewardVault = await getAssociatedTokenAddress(getRewardTokenMint(), platformPDA, true);
 
       const tx = await program.methods.claimRewards(new BN(0)).accounts({
         platform: platformPDA, userAccount: userPDA, stakeEntry: new PublicKey(stakeEntryAddress),
@@ -136,8 +142,8 @@ export function useSolanaStaking() {
       const owner = program.provider.publicKey!;
       const [platformPDA] = getPlatformPDA();
       const [userPDA] = getUserPDA(owner);
-      const userTokenAccount = await getAssociatedTokenAddress(STAKE_TOKEN_MINT, owner);
-      const stakeVault = await getAssociatedTokenAddress(STAKE_TOKEN_MINT, platformPDA, true);
+      const userTokenAccount = await getAssociatedTokenAddress(getStakeTokenMint(), owner);
+      const stakeVault = await getAssociatedTokenAddress(getStakeTokenMint(), platformPDA, true);
 
       const tx = await program.methods.unstake().accounts({
         platform: platformPDA, userAccount: userPDA,
@@ -249,7 +255,7 @@ export function useSolanaStaking() {
   const getTokenBalance = useCallback(async (address: string): Promise<number> => {
     try {
       const connection = getConnection();
-      const tokenAccount = await getAssociatedTokenAddress(STAKE_TOKEN_MINT, new PublicKey(address));
+      const tokenAccount = await getAssociatedTokenAddress(getStakeTokenMint(), new PublicKey(address));
       const balance = await connection.getTokenAccountBalance(tokenAccount);
       return parseFloat(balance.value.uiAmountString || '0');
     } catch { return 0; }
@@ -260,8 +266,8 @@ export function useSolanaStaking() {
       const program = getProgram();
       const authority = program.provider.publicKey!;
       const [platformPDA] = getPlatformPDA();
-      const funderTokenAccount = await getAssociatedTokenAddress(REWARD_TOKEN_MINT, authority);
-      const rewardVault = await getAssociatedTokenAddress(REWARD_TOKEN_MINT, platformPDA, true);
+      const funderTokenAccount = await getAssociatedTokenAddress(getRewardTokenMint(), authority);
+      const rewardVault = await getAssociatedTokenAddress(getRewardTokenMint(), platformPDA, true);
       const amountBN = new BN(amount * Math.pow(10, SOLANA_CONFIG.stakeTokenDecimals));
 
       const tx = await program.methods.fundRewardPool(amountBN).accounts({
