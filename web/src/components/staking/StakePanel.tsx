@@ -7,7 +7,7 @@ import { useAppStore } from '@/lib/store';
 import { formatNumber } from '@/lib/utils';
 import { LOCK_PERIOD, StakeEntry } from '@/types';
 import { useContract } from '@/hooks/useContract';
-import { checkRateLimit, sanitizeErrorMessage, MAX_STAKE_AMOUNT } from '@/lib/security';
+import { checkRateLimit, sanitizeErrorMessage, MAX_STAKE_AMOUNT, MIN_STAKE_AMOUNT } from '@/lib/security';
 import ContractSetupNotice from '@/components/ui/ContractSetupNotice';
 import { solanaGetTokenBalance } from '@/lib/contracts/solana';
 import { polygonGetTokenBalance } from '@/lib/contracts/polygon';
@@ -72,6 +72,10 @@ export default function StakePanel() {
 
   const handleStake = async () => {
     if (!stakeAmount || stakeAmount <= 0 || stakeAmount > tokenBalance) return;
+    if (stakeAmount < MIN_STAKE_AMOUNT) {
+      toast.error(`Minimum stake is ${MIN_STAKE_AMOUNT.toLocaleString()} FBiT.`);
+      return;
+    }
     if (stakeAmount > MAX_STAKE_AMOUNT) {
       toast.error(`Maximum stake is ${MAX_STAKE_AMOUNT.toLocaleString()} FBiT.`);
       return;
@@ -251,7 +255,17 @@ export default function StakePanel() {
                 </button>
               </div>
             </div>
-            {stakeAmount > tokenBalance && stakeAmount > 0 && (
+            <p className="text-text-muted text-[11px] mt-1">
+              Min: <span className="text-text-secondary">{MIN_STAKE_AMOUNT.toLocaleString()} FBiT</span>
+              {' · '}Max: <span className="text-text-secondary">{MAX_STAKE_AMOUNT.toLocaleString()} FBiT</span>
+            </p>
+            {stakeAmount > 0 && stakeAmount < MIN_STAKE_AMOUNT && (
+              <p className="text-accent-rose text-xs mt-1">Minimum stake is {MIN_STAKE_AMOUNT.toLocaleString()} FBiT</p>
+            )}
+            {stakeAmount > MAX_STAKE_AMOUNT && (
+              <p className="text-accent-rose text-xs mt-1">Maximum stake is {MAX_STAKE_AMOUNT.toLocaleString()} FBiT</p>
+            )}
+            {stakeAmount > tokenBalance && stakeAmount > 0 && stakeAmount <= MAX_STAKE_AMOUNT && (
               <p className="text-accent-rose text-xs mt-1">Insufficient balance</p>
             )}
           </div>
@@ -266,13 +280,14 @@ export default function StakePanel() {
               <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-0.5">Current APY</p>
               <p className="font-display font-bold text-brand-400 text-lg">{effectiveAPY}%</p>
               <p className="text-[10px] text-text-muted">PoS · 60%–500%</p>
+              <p className="text-[10px] text-accent-amber">Locked at stake time</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Reward Estimation */}
-      {stakeAmount > 0 && stakeAmount <= tokenBalance && (
+      {stakeAmount >= MIN_STAKE_AMOUNT && stakeAmount <= tokenBalance && stakeAmount <= MAX_STAKE_AMOUNT && (
         <div className="glass-card animate-slide-up">
           <h4 className="font-display font-semibold text-sm text-text-secondary uppercase tracking-wider mb-3">
             Estimated Rewards
@@ -314,9 +329,9 @@ export default function StakePanel() {
       <button
         type="button"
         onClick={handleStake}
-        disabled={isStaking || stakeAmount <= 0 || stakeAmount > tokenBalance}
+        disabled={isStaking || stakeAmount <= 0 || stakeAmount < MIN_STAKE_AMOUNT || stakeAmount > MAX_STAKE_AMOUNT || stakeAmount > tokenBalance}
         className={`w-full py-4 rounded-xl font-display font-bold text-lg transition-all duration-300 ${
-          isStaking || stakeAmount <= 0 || stakeAmount > tokenBalance
+          isStaking || stakeAmount <= 0 || stakeAmount < MIN_STAKE_AMOUNT || stakeAmount > MAX_STAKE_AMOUNT || stakeAmount > tokenBalance
             ? 'bg-surface-700 text-text-muted cursor-not-allowed'
             : 'btn-primary'
         }`}
@@ -331,6 +346,10 @@ export default function StakePanel() {
           </span>
         ) : stakeAmount > tokenBalance ? (
           'Insufficient Balance'
+        ) : stakeAmount > MAX_STAKE_AMOUNT ? (
+          'Exceeds Maximum (500M FBiT)'
+        ) : stakeAmount > 0 && stakeAmount < MIN_STAKE_AMOUNT ? (
+          `Minimum Stake is ${MIN_STAKE_AMOUNT} FBiT`
         ) : stakeAmount <= 0 ? (
           'Enter an Amount'
         ) : (
