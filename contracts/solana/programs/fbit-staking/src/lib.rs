@@ -14,8 +14,10 @@ pub const PLATFORM_FEE_BPS:  u64 = 100;    // 1%
 pub const BURN_BPS:          u64 = 1000;   // 10% burn on every claim/compound
 pub const RENOUNCE_FEE_BPS:  u64 = 2500;  // 25% of gross reward to feeRecipient after renouncement
 pub const MAX_APY_BPS:       u64 = 50_000; // 500% max APY (safety ceiling)
-pub const MIN_FUND_LAMPORTS: u64 = 1_000_000;                    // 1 FBiT  (6 decimals)
-pub const MAX_FUND_LAMPORTS: u64 = 800_000_000 * 1_000_000;     // 800 M FBiT
+pub const MIN_FUND_LAMPORTS:  u64 = 1_000_000;                    // 1 FBiT  (6 decimals)
+pub const MAX_FUND_LAMPORTS:  u64 = 800_000_000 * 1_000_000;     // 800 M FBiT
+pub const MIN_STAKE_LAMPORTS: u64 = 1_000_000;                    // 1 FBiT minimum per stake
+pub const MAX_STAKE_LAMPORTS: u64 = 500_000_000 * 1_000_000;     // 500 M FBiT maximum per stake
 
 // Default team target tier thresholds (6 decimals = multiply by 10^6)
 // Tier 1: 50K tokens → 2%  …  Tier 10: 1B tokens → 10%
@@ -154,8 +156,15 @@ pub mod fbit_staking {
         let elapsed   = (now - ctx.accounts.platform.emission_start_time).max(0) as u64;
         let secs_year = 365u64 * 86_400;
 
-        // Total that should have been released so far
-        let total_releasable = annual.checked_mul(elapsed).unwrap().checked_div(secs_year).unwrap();
+        // Total that should have been released so far — use u128 to prevent overflow.
+        // annual (up to 8e14) * elapsed (up to ~1e10) = ~8e24 which exceeds u64::MAX (1.8e19).
+        let total_releasable: u64 = {
+            let t = (annual as u128)
+                .saturating_mul(elapsed as u128)
+                .checked_div(secs_year as u128)
+                .unwrap_or(u128::MAX);
+            t.min(ctx.accounts.platform.total_reserve as u128) as u64
+        };
         let already_released = ctx.accounts.platform.total_emission_released;
 
         require!(total_releasable > already_released, StakingError::NoEmissionAvailable);
@@ -301,7 +310,8 @@ pub mod fbit_staking {
     pub fn stake<'info>(ctx: Context<'_, '_, '_, 'info, Stake<'info>>, amount: u64, lock_period_index: u8) -> Result<()> {
         require!(!ctx.accounts.platform.is_paused, StakingError::PlatformPaused);
         require!(!ctx.accounts.user_account.is_blocked, StakingError::UserBlocked);
-        require!(amount > 0, StakingError::InvalidAmount);
+        require!(amount >= MIN_STAKE_LAMPORTS, StakingError::BelowMinStake);
+        require!(amount <= MAX_STAKE_LAMPORTS, StakingError::AboveMaxStake);
         require!((lock_period_index as usize) < 1, StakingError::InvalidLockPeriod);
 
         let now        = Clock::get()?.unix_timestamp;
@@ -357,15 +367,16 @@ pub mod fbit_staking {
         // remaining_accounts layout: pairs of [UserAccount PDA (mut), reward ATA (mut)]
         // pair index 0 = Level 1 (direct referrer), index 1 = Level 2, …, index 9 = Level 10.
         if !ctx.remaining_accounts.is_empty() && ref_rate > 0 {
-            let remaining        = ctx.remaining_accounts;
-            let mut cur_referrer = ctx.accounts.user_account.referrer;
-            let bump             = ctx.accounts.platform.bump;
-            let seeds            = &[b"platform".as_ref(), &[bump]];
-            let signer           = &[&seeds[..]];
-            // Pre-extract these so they share the same 'info lifetime as remaining_accounts.
-            let reward_vault_ai  = ctx.accounts.reward_vault.to_account_info();
-            let token_program_ai = ctx.accounts.token_program.to_account_info();
-            let platform_ai      = ctx.accounts.platform.to_account_info();
+            let remaining           = ctx.remaining_accounts;
+            let mut cur_referrer    = ctx.accounts.user_account.referrer;
+            let bump                = ctx.accounts.platform.bump;
+            let seeds               = &[b"platform".as_ref(), &[bump]];
+            let signer              = &[&seeds[..]];
+            let reward_vault_ai     = ctx.accounts.reward_vault.to_account_info();
+            let token_program_ai    = ctx.accounts.token_program.to_account_info();
+            let platform_ai         = ctx.accounts.platform.to_account_info();
+            // Pre-read reward mint for ATA verification (C1)
+            let reward_mint_key     = ctx.accounts.reward_vault.mint;
 
             for level in 0..MAX_REFERRAL_LEVELS {
                 let pair_start = level * 2;
@@ -374,6 +385,9 @@ pub mod fbit_staking {
 
                 let ref_user_ai   = &remaining[pair_start];
                 let ref_reward_ai = &remaining[pair_start + 1];
+
+                // [H1] Verify UserAccount is owned by this program — prevents crafted accounts
+                if ref_user_ai.owner != ctx.program_id { break; }
 
                 // Deserialize referrer's UserAccount to read owner/blocked/next-referrer.
                 let (user_owner, is_blocked, next_ref): (Pubkey, bool, Option<Pubkey>) = {
@@ -396,6 +410,20 @@ pub mod fbit_staking {
 
                 if is_blocked || ref_reward == 0 || ctx.accounts.platform.reward_pool_balance < ref_reward {
                     continue;
+                }
+
+                // [C1] Verify ref_reward_ai is a valid SPL token account owned by expected_key
+                // with the correct reward mint — prevents reward redirection attacks.
+                {
+                    require!(ref_reward_ai.owner == &token::ID, StakingError::InvalidReferralATA);
+                    let ata_data = ref_reward_ai.try_borrow_data()
+                        .map_err(|_| error!(StakingError::InvalidReferralATA))?;
+                    require!(ata_data.len() >= 64, StakingError::InvalidReferralATA);
+                    // SPL TokenAccount layout: [mint: 32 bytes][owner: 32 bytes][...]
+                    let ata_mint: [u8; 32]  = ata_data[0..32].try_into().map_err(|_| error!(StakingError::InvalidReferralATA))?;
+                    let ata_owner: [u8; 32] = ata_data[32..64].try_into().map_err(|_| error!(StakingError::InvalidReferralATA))?;
+                    require!(Pubkey::from(ata_mint)  == reward_mint_key,  StakingError::InvalidReferralATA);
+                    require!(Pubkey::from(ata_owner) == expected_key,     StakingError::InvalidReferralATA);
                 }
 
                 // Transfer reward_vault → referrer's reward ATA
@@ -449,8 +477,13 @@ pub mod fbit_staking {
         require!(elapsed >= CLAIM_INTERVAL, StakingError::ClaimTooEarly);
 
         let intervals    = elapsed as u64 / CLAIM_INTERVAL as u64;
-        // PoS dynamic APY: emission / total_staked, clamped 60%–500%
-        let effective_apy = get_effective_apy_bps(&ctx.accounts.platform, ctx.accounts.stake_entry.apy);
+        // [C3] Use APY locked at stake time — consistent with Polygon contract behavior.
+        // Falls back to live PoS APY only for legacy stakes where apy field is 0.
+        let effective_apy = if ctx.accounts.stake_entry.apy > 0 {
+            ctx.accounts.stake_entry.apy
+        } else {
+            get_effective_apy_bps(&ctx.accounts.platform, DEFAULT_APY[0])
+        };
         let gross_reward = ctx.accounts.stake_entry.amount
             .checked_mul(effective_apy).unwrap()
             .checked_mul(intervals).unwrap()
@@ -551,8 +584,12 @@ pub mod fbit_staking {
         require!(elapsed >= CLAIM_INTERVAL, StakingError::ClaimTooEarly);
 
         let intervals    = elapsed as u64 / CLAIM_INTERVAL as u64;
-        // PoS dynamic APY: emission / total_staked, clamped 60%–500%
-        let effective_apy = get_effective_apy_bps(&ctx.accounts.platform, ctx.accounts.stake_entry.apy);
+        // [C3] Use APY locked at stake time — consistent with Polygon contract behavior.
+        let effective_apy = if ctx.accounts.stake_entry.apy > 0 {
+            ctx.accounts.stake_entry.apy
+        } else {
+            get_effective_apy_bps(&ctx.accounts.platform, DEFAULT_APY[0])
+        };
         let gross_reward = ctx.accounts.stake_entry.amount
             .checked_mul(effective_apy).unwrap()
             .checked_mul(intervals).unwrap()
@@ -1238,4 +1275,7 @@ pub enum StakingError {
     #[msg("No emission available to release yet")]        NoEmissionAvailable,
     #[msg("Annual emission not configured")]              AnnualEmissionNotSet,
     #[msg("Burn BPS exceeds maximum (5000 = 50%)")]       BurnBpsTooHigh,
+    #[msg("Stake amount is below minimum (1 FBiT)")]      BelowMinStake,
+    #[msg("Stake amount exceeds maximum (500M FBiT)")]    AboveMaxStake,
+    #[msg("Invalid referral token account")]               InvalidReferralATA,
 }
