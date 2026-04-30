@@ -244,15 +244,21 @@ export default function Header() {
 
           {/* Right side */}
           <div className="flex items-center gap-3">
-            {/* Network Selector */}
-            <div className="flex items-center bg-surface-800 rounded-xl border border-white/5 overflow-hidden">
+            {/* Network Selector — locked to connected wallet's chain */}
+            <div
+              className="flex items-center bg-surface-800 rounded-xl border border-white/5 overflow-hidden"
+              title={address ? 'Disconnect wallet to switch networks' : undefined}
+            >
               <button
                 type="button"
                 onClick={() => handleNetworkSwitch('solana')}
+                disabled={!!address}
                 className={`px-3 py-1.5 text-xs font-display font-medium transition-all ${
                   selectedNetwork === 'solana'
                     ? 'bg-accent-purple/20 text-accent-purple'
-                    : 'text-text-muted hover:text-text-secondary'
+                    : address
+                      ? 'text-text-muted opacity-30 cursor-not-allowed'
+                      : 'text-text-muted hover:text-text-secondary'
                 }`}
               >
                 SOL
@@ -261,10 +267,13 @@ export default function Header() {
               <button
                 type="button"
                 onClick={() => handleNetworkSwitch('polygon')}
+                disabled={!!address}
                 className={`px-3 py-1.5 text-xs font-display font-medium transition-all ${
                   selectedNetwork === 'polygon'
                     ? 'bg-accent-purple/20 text-[#8247E5]'
-                    : 'text-text-muted hover:text-text-secondary'
+                    : address
+                      ? 'text-text-muted opacity-30 cursor-not-allowed'
+                      : 'text-text-muted hover:text-text-secondary'
                 }`}
               >
                 POLY
