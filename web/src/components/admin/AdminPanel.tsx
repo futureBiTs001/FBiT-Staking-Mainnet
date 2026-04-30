@@ -203,9 +203,20 @@ export default function AdminPanel() {
     run('burnBps', () => contract.setBurnBps(bps), `Burn rate updated to ${(bps / 100).toFixed(2)}%`);
   };
 
+  const EMISSION_MIN = 10_000;
+  const EMISSION_MAX = 1_000_000;
+
   const handleSetAnnualEmission = () => {
     const emission = parseFloat(annualEmissionValue);
     if (isNaN(emission) || emission <= 0) return;
+    if (emission < EMISSION_MIN) {
+      toast.error(`Minimum annual emission is ${EMISSION_MIN.toLocaleString()} FBiT`);
+      return;
+    }
+    if (emission > EMISSION_MAX) {
+      toast.error(`Maximum annual emission is ${EMISSION_MAX.toLocaleString()} FBiT (1.00M)`);
+      return;
+    }
     run('annualEmission', () => contract.setAnnualEmission(emission), `Annual emission updated to ${emission.toLocaleString()} FBiT/year`);
   };
 
@@ -755,20 +766,37 @@ export default function AdminPanel() {
               <p>APY range: <span className="text-brand-400 font-semibold">60% – 500%</span></p>
             </div>
             <div>
-              <label className="text-sm text-text-secondary font-display mb-1 block">New Annual Emission (FBiT tokens/year)</label>
+              <label className="text-sm text-text-secondary font-display mb-1 block">
+                New Annual Emission (FBiT/year) — Min: 10,000 · Max: 1,000,000
+              </label>
               <input
                 type="number"
                 value={annualEmissionValue}
                 onChange={(e) => setAnnualEmissionValue(e.target.value)}
-                placeholder="e.g. 1000000 for 800M over 800 years"
+                placeholder="e.g. 1000000"
+                min={10_000}
+                max={1_000_000}
                 className="input-field font-mono"
               />
+              {(() => {
+                const n = parseFloat(annualEmissionValue);
+                if (annualEmissionValue && n > 0 && n < EMISSION_MIN)
+                  return <p className="text-accent-rose text-xs mt-1">Minimum is 10,000 FBiT/year</p>;
+                if (annualEmissionValue && n > EMISSION_MAX)
+                  return <p className="text-accent-rose text-xs mt-1">Maximum is 1,000,000 FBiT/year (1.00M)</p>;
+                return null;
+              })()}
             </div>
             <AdminButton
               label="Update Annual Emission"
               loadingLabel="Updating…"
               onClick={handleSetAnnualEmission}
-              disabled={isRenounced || !annualEmissionValue || parseFloat(annualEmissionValue) <= 0}
+              disabled={
+                isRenounced ||
+                !annualEmissionValue ||
+                parseFloat(annualEmissionValue) < EMISSION_MIN ||
+                parseFloat(annualEmissionValue) > EMISSION_MAX
+              }
               loading={busy('annualEmission')}
               variant="purple"
             />
