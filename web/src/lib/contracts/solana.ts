@@ -755,8 +755,9 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
 
 /**
  * Fetch the FBiT SPL token balance for a wallet address.
- * Routes through a Next.js API proxy (/api/solana/balance) to avoid
- * CORS blocks that public Solana mainnet RPCs impose on browser requests.
+ * On localhost, proxies through /dev-rpc/solana (Next.js rewrite) to bypass
+ * the 403 that public Solana RPCs return for browser requests from localhost.
+ * On production domains the RPC is called directly.
  * Returns 0 if the wallet has no token account for this mint.
  */
 export async function solanaGetTokenBalance(ownerAddress: string): Promise<number> {
@@ -764,15 +765,38 @@ export async function solanaGetTokenBalance(ownerAddress: string): Promise<numbe
   const stakeTokenAddr = NETWORK_CONFIG.solana.stakeTokenAddress;
   if (!stakeTokenAddr || stakeTokenAddr.length < 10 || stakeTokenAddr.toUpperCase().startsWith('YOUR_')) return 0;
 
+  let owner: PublicKey;
+  let stakeMint: PublicKey;
   try {
-    const url = `/api/solana/balance?owner=${encodeURIComponent(ownerAddress)}&mint=${encodeURIComponent(stakeTokenAddr)}`;
-    const res  = await fetch(url);
-    if (!res.ok) return 0;
-    const json = await res.json();
-    return typeof json.balance === 'number' ? json.balance : 0;
+    owner     = new PublicKey(ownerAddress);
+    stakeMint = new PublicKey(stakeTokenAddr);
   } catch {
     return 0;
   }
+
+  // Evaluated at call-time (not module load) so window.location is available in browser
+  const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+  const endpoints = isLocalhost
+    ? ['/dev-rpc/solana']
+    : [
+        NETWORK_CONFIG.solana.rpcUrl,
+        'https://rpc.ankr.com/solana',
+        'https://api.mainnet-beta.solana.com',
+      ].filter(Boolean);
+
+  for (const rpc of endpoints) {
+    try {
+      const connection = new Connection(rpc, 'confirmed');
+      const accounts = await connection.getParsedTokenAccountsByOwner(owner, { mint: stakeMint });
+      if (accounts.value.length === 0) return 0;
+      return accounts.value.reduce((sum, acct) => {
+        return sum + (acct.account.data.parsed.info.tokenAmount.uiAmount ?? 0);
+      }, 0);
+    } catch {
+      // try next endpoint
+    }
+  }
+  return 0;
 }
 
 export async function solanaGetUserAccount(ownerAddress: string): Promise<UserAccount | null> {
