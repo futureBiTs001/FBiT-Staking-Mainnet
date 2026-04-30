@@ -26,7 +26,7 @@ function ProgressBar({ pct, className }: { pct: number; className: string }) {
 const POLL_INTERVAL_MS = 30_000; // 30 seconds
 
 export default function ReferralPanel() {
-  const { address } = useWallet();
+  const { address, solanaAddress, evmAddress } = useWallet();
   const { getWalletData, selectedNetwork } = useAppStore();
   const contract = useContract();
   const [copied, setCopied] = useState(false);
@@ -74,7 +74,11 @@ export default function ReferralPanel() {
   const currentTier = getTeamTargetTier(teamSizeVal, teamTotalStaked);
   const nextTier = getNextTeamTargetTier(teamSizeVal, teamTotalStaked);
 
-  const referralLink = address ? generateReferralLink(address) : '';
+  // Use chain-specific address so the referral link is valid for the active network
+  const chainAddress = selectedNetwork === 'solana'
+    ? (solanaAddress ?? (address && !address.startsWith('0x') ? address : null))
+    : (evmAddress   ?? (address && address.startsWith('0x')   ? address : null));
+  const referralLink = chainAddress ? generateReferralLink(chainAddress) : '';
   const totalReferrals  = referralInfo?.totalReferrals ?? 0;
   const totalRewards    = userAccount?.totalReferralRewards ?? referralInfo?.totalReferralRewards ?? 0;
   const activeReferrals = referralInfo?.referrals.filter(r => r.stakedAmount > 0).length ?? 0;

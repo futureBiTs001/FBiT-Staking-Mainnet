@@ -135,7 +135,7 @@ function ActivityRow({ tx, network }: { tx: TxRecord; network: string }) {
 
 // ─── Main component ────────────────────────────────────────────────────────────
 export default function HistoryPanel() {
-  const { address } = useWallet();
+  const { address, solanaAddress, evmAddress } = useWallet();
   const { getWalletData, selectedNetwork, platformStats } = useAppStore();
   const walletData = getWalletData();
   const localTxs: TxRecord[] = walletData?.transactions ?? [];
@@ -149,13 +149,18 @@ export default function HistoryPanel() {
     if (!address) return;
     setIsFetchingChain(true);
     try {
+      // Resolve chain-specific addresses — avoids passing a Solana base58 address
+      // to ethers (Polygon) or a 0x EVM address to @solana/web3.js.
+      const solAddr  = solanaAddress ?? (address && !address.startsWith('0x') ? address : null);
+      const polyAddr = evmAddress   ?? (address && address.startsWith('0x')   ? address : null);
+
       const [polygonMod, solanaMod] = await Promise.allSettled([
-        import('@/lib/contracts/polygon').then(m => m.polygonGetOnChainHistory(address)),
-        import('@/lib/contracts/solana').then(m => m.solanaGetOnChainHistory(address)),
+        polyAddr ? import('@/lib/contracts/polygon').then(m => m.polygonGetOnChainHistory(polyAddr)) : Promise.resolve([]),
+        solAddr  ? import('@/lib/contracts/solana').then(m => m.solanaGetOnChainHistory(solAddr))    : Promise.resolve([]),
       ]);
-      const polyRecs  = polygonMod.status === 'fulfilled' ? polygonMod.value : [];
-      const solRecs   = solanaMod.status === 'fulfilled'  ? solanaMod.value  : [];
-      const fetched   = [...polyRecs, ...solRecs];
+      const polyRecs = polygonMod.status === 'fulfilled' ? polygonMod.value : [];
+      const solRecs  = solanaMod.status  === 'fulfilled' ? solanaMod.value  : [];
+      const fetched  = [...polyRecs, ...solRecs];
       setOnChainTxs(fetched);
       toast.success(`Fetched ${fetched.length} on-chain records`);
     } catch (err: any) {
@@ -163,7 +168,7 @@ export default function HistoryPanel() {
     } finally {
       setIsFetchingChain(false);
     }
-  }, [address]);
+  }, [address, solanaAddress, evmAddress]);
 
   // Merge local + on-chain, deduplicate by txHash
   const transactions: TxRecord[] = useMemo(() => {
