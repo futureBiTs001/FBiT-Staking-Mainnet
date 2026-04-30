@@ -12,6 +12,8 @@ interface WalletContextType {
   adminConnect: () => Promise<void>;
   disconnect: () => void;
   address: string | null;
+  solanaAddress: string | null;
+  evmAddress: string | null;
   isConnecting: boolean;
   walletType: WalletType | null;
   solanaReferrer: string | null;
@@ -25,6 +27,8 @@ const WalletContext = createContext<WalletContextType>({
   adminConnect: async () => {},
   disconnect: () => {},
   address: null,
+  solanaAddress: null,
+  evmAddress: null,
   isConnecting: false,
   walletType: null,
   solanaReferrer: null,
@@ -57,8 +61,10 @@ function isAdminAddress(addr: string): boolean {
 export { isAdminAddress };
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const { setWallet, setIsAdmin, setActiveTab } = useAppStore();
+  const { setWallet, setIsAdmin, setActiveTab, setSelectedNetwork } = useAppStore();
   const [address, setAddress]           = useState<string | null>(null);
+  const [solanaAddress, setSolanaAddress] = useState<string | null>(null);
+  const [evmAddress, setEvmAddress]       = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [walletType, setWalletType]     = useState<WalletType | null>(null);
   const [solanaReferrer, setSolanaReferrerState] = useState<string | null>(null);
@@ -121,8 +127,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setWalletType('reown');
         setIsAdmin(isAdminAddress(account.address));
         setIsConnecting(false);
+
+        // Detect chain from CAIP format (e.g. "eip155:137:0x..." or "solana:...:base58")
+        // and auto-switch selectedNetwork so the correct dashboard opens immediately.
+        const caip = (account as any).caipAddress ?? '';
+        if (caip.startsWith('eip155:')) {
+          setEvmAddress(account.address);
+          setSelectedNetwork('polygon');
+        } else if (caip.startsWith('solana:')) {
+          setSolanaAddress(account.address);
+          setSelectedNetwork('solana');
+        } else {
+          // Fallback: detect by address format
+          if (account.address.startsWith('0x')) {
+            setEvmAddress(account.address);
+            setSelectedNetwork('polygon');
+          } else {
+            setSolanaAddress(account.address);
+            setSelectedNetwork('solana');
+          }
+        }
       } else if (!account.isConnected && walletTypeRef.current === 'reown') {
         setAddress(null);
+        setSolanaAddress(null);
+        setEvmAddress(null);
         setWallet(null);
         setWalletType(null);
         setIsAdmin(false);
@@ -158,6 +186,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const disconnect = useCallback(() => {
     appKitModal?.disconnect();
     setAddress(null);
+    setSolanaAddress(null);
+    setEvmAddress(null);
     setWallet(null);
     setWalletType(null);
     setIsAdmin(false);
@@ -177,7 +207,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   return (
     <WalletContext.Provider value={{
       connect, adminConnect, disconnect,
-      address, isConnecting, walletType,
+      address, solanaAddress, evmAddress, isConnecting, walletType,
       solanaReferrer, polygonReferrer,
       setSolanaReferrer: saveSolanaReferrer,
       setPolygonReferrer: savePolygonReferrer,
