@@ -10,19 +10,6 @@ const nextConfig = {
   trailingSlash: true,
   images: { unoptimized: true },
 
-  // Dev-only proxy: routes /dev-rpc/solana → Solana mainnet RPC server-side
-  // (public Solana RPCs block browser requests with Origin: localhost).
-  // In production (static export) this rewrite is ignored; the deployed domain
-  // is not blocked by Solana RPCs.
-  async rewrites() {
-    return [
-      {
-        source: '/dev-rpc/solana',
-        destination: 'https://api.mainnet-beta.solana.com',
-      },
-    ];
-  },
-
   turbopack: {
     root: __dirname,
   },

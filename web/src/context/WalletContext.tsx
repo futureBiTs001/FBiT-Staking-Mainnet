@@ -195,11 +195,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [setWallet, setIsAdmin, setActiveTab]);
 
   const saveSolanaReferrer = useCallback((addr: string) => {
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr)) return; // must be base58 Solana
     setSolanaReferrerState(addr);
     try { localStorage.setItem('fbit-referrer-solana', addr); } catch {}
   }, []);
 
   const savePolygonReferrer = useCallback((addr: string) => {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) return; // must be EVM 0x address
     setPolygonReferrerState(addr);
     try { localStorage.setItem('fbit-referrer-polygon', addr); } catch {}
   }, []);

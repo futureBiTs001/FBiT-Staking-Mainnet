@@ -10,7 +10,7 @@ warnMissingEnv();
 
 export const metadata: Metadata = {
   title: 'Future Bit (FBiT) Staking Mainnet | Multi-Chain Staking & Referral Platform',
-  description: 'Stake FBiT tokens across Solana and Polygon networks. Earn rewards with 60%–500% PoS APY and build your referral network with 10-level commissions.',
+  description: 'Stake FBiT tokens across Solana and Polygon networks. Earn rewards with 60%–250% PoS APY and build your referral network with 10-level commissions.',
   keywords: 'FBiT, staking, DeFi, Solana, Polygon, referral, crypto, yield farming',
 };
 

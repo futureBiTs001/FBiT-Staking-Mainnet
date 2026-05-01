@@ -67,7 +67,7 @@ export default function Home() {
               <span>·</span>
               <span>10-Level Referrals</span>
               <span>·</span>
-              <span>Up to 500% APY</span>
+              <span>Up to 250% APY</span>
             </div>
           </div>
         </div>
