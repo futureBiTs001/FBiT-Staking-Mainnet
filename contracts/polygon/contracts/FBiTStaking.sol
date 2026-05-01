@@ -24,7 +24,7 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
  *
  * PoS APY
  *  • effectiveAPY = clamp(ANNUAL_EMISSION × BASIS_POINTS / totalStaked, MIN_APY_BPS, MAX_APY_BPS)
- *  • MIN_APY_BPS =  6 000 (60 %)    MAX_APY_BPS = 50 000 (500 %)
+ *  • MIN_APY_BPS =  6 000 (60 %)    MAX_APY_BPS = 25 000 (250 %)
  *  • ANNUAL_EMISSION is the total FBiT tokens the pool distributes per year.
  *    As more users stake, each one's share shrinks — APY falls automatically.
  *    As users unstake, APY rises automatically. No manual intervention needed.
@@ -49,8 +49,8 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
     uint256 public constant PLATFORM_FEE_BPS    = 100;     // 1 %
     /// @notice APY floor: 60 % in basis points
     uint256 public constant MIN_APY_BPS         = 6_000;
-    /// @notice APY ceiling: 500 % in basis points
-    uint256 public constant MAX_APY_BPS         = 50_000;
+    /// @notice APY ceiling: 250 % in basis points
+    uint256 public constant MAX_APY_BPS         = 25_000;
     /// @notice Maximum allowed burn percentage: 50 %
     uint256 public constant MAX_BURN_BPS        = 5000;
     /// @dev 25 % of gross reward sent to feeRecipient after ownership renouncement
@@ -612,7 +612,7 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
      * @notice Update the annual emission that governs PoS APY.
      *         Higher emission → higher APY at the same total staked.
      *         Lower emission  → lower APY.
-     *         APY is always clamped between MIN_APY_BPS (60%) and MAX_APY_BPS (500%).
+     *         APY is always clamped between MIN_APY_BPS (60%) and MAX_APY_BPS (250%).
      */
     /**
      * @notice Update the burn percentage applied on every claim / compound.
@@ -696,7 +696,7 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
      * @notice Returns the current effective APY in basis points.
      *         Formula: clamp(ANNUAL_EMISSION × BASIS_POINTS / totalStaked,
      *                        MIN_APY_BPS, MAX_APY_BPS)
-     *         When nobody is staking yet, returns MAX_APY_BPS (500 %).
+     *         When nobody is staking yet, returns MAX_APY_BPS (250 %).
      */
     function getEffectiveAPY() public view returns (uint256) {
         if (totalStaked == 0) return MAX_APY_BPS;
