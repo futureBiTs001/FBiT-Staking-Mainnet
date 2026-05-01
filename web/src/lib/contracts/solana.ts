@@ -14,7 +14,7 @@
 
 import { Connection, PublicKey, SystemProgram } from '@solana/web3.js';
 import { AnchorProvider, Program, BN } from '@coral-xyz/anchor';
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { IDL } from './idl';
 import { NETWORK_CONFIG } from '@/lib/config';
 import type { PlatformStats, StakeEntry, UserAccount, ReferralInfo } from '@/types';
@@ -130,11 +130,9 @@ function getReserveVault(): PublicKey {
 
 /** Derive the ATA for `owner` and `mint` — works synchronously via Anchor utils */
 function ata(mint: PublicKey, owner: PublicKey): PublicKey {
-  const ASSOCIATED_TOKEN_PROGRAM = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bse');
-  const SPL_TOKEN_PROGRAM = TOKEN_PROGRAM_ID;
   const [address] = PublicKey.findProgramAddressSync(
-    [owner.toBuffer(), SPL_TOKEN_PROGRAM.toBuffer(), mint.toBuffer()],
-    ASSOCIATED_TOKEN_PROGRAM
+    [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM_ID,
   );
   return address;
 }
@@ -154,12 +152,15 @@ export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> 
     const totalEmissionReleased = platform.totalEmissionReleased ? fromLamports(platform.totalEmissionReleased) : 0;
     const emissionStartTime     = platform.emissionStartTime     ? platform.emissionStartTime.toNumber()        : 0;
     const annualEmission        = platform.annualEmission        ? fromLamports(platform.annualEmission)        : 0;
+    // Halving epoch tracking
+    const halvingEpoch          = platform.halvingEpoch          ? Number(platform.halvingEpoch)                : 0;
+    const halvingStartTime      = platform.halvingStartTime      ? Number(platform.halvingStartTime)            : (emissionStartTime || 0);
 
-    // PoS dynamic APY: emission / totalStaked, clamped 60%–500% (6000–50000 bps).
-    // Fallback also clamped to PoS range so default is always 60%–500%.
+    // PoS dynamic APY: emission / totalStaked, clamped 60%–250% (6000–25000 bps).
+    // Fallback also clamped to PoS range so default is always 60%–250%.
     const effectiveAPY = (annualEmission > 0 && totalStaked > 0)
-      ? Math.min(50_000, Math.max(6_000, Math.round(annualEmission / totalStaked * 10_000)))
-      : Math.min(50_000, Math.max(6_000, platform.baseApy ? Number(platform.baseApy[0]) : 6_000));
+      ? Math.min(25_000, Math.max(6_000, Math.round(annualEmission / totalStaked * 10_000)))
+      : Math.min(25_000, Math.max(6_000, platform.baseApy ? Number(platform.baseApy[0]) : 6_000));
     const burnBps               = platform.burnBps               ? platform.burnBps.toNumber()                  : 1000;
 
     // Compute releasable emission client-side
@@ -191,6 +192,8 @@ export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> 
       emissionStartTime,
       totalEmissionReleased,
       releasableEmission,
+      halvingEpoch,
+      halvingStartTime,
     };
   } catch {
     return null;
@@ -677,7 +680,7 @@ export async function solanaSetTeamTargetTier(
  * apyBps: basis points (e.g. 6000 = 60%)
  */
 export async function solanaSetBatchApy(apyBps: number): Promise<{ txHash: string }> {
-  if (apyBps < 6_000 || apyBps > 50_000) throw new Error('Base APY must be 6000–50000 BPS (60%–500%)');
+  if (apyBps < 6_000 || apyBps > 25_000) throw new Error('Base APY must be 6000–25000 BPS (60%–250%)');
   const program   = getProgram();
   const owner     = getOwner();
   const [platPda] = platformPda();
@@ -753,11 +756,25 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
   }
 }
 
+// Raw JSON-RPC helper — bypasses @solana/web3.js Connection to avoid URL
+// manipulation issues with the Next.js dev proxy (trailingSlash redirect).
+async function rpcCall(endpoint: string, method: string, params: unknown[]): Promise<any> {
+  const res = await fetch(endpoint, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+  });
+  if (!res.ok) throw new Error(`RPC ${res.status}`);
+  const json = await res.json();
+  if (json.error) throw new Error(json.error.message ?? 'RPC error');
+  return json.result;
+}
+
 /**
  * Fetch the FBiT SPL token balance for a wallet address.
- * On localhost, proxies through /dev-rpc/solana (Next.js rewrite) to bypass
- * the 403 that public Solana RPCs return for browser requests from localhost.
- * On production domains the RPC is called directly.
+ * On localhost: proxies through /dev-rpc/solana/ (Next.js rewrite) — avoids
+ * the 403 that Solana public RPCs return for browser requests from localhost.
+ * On production: calls the configured RPC directly (production domains not blocked).
  * Returns 0 if the wallet has no token account for this mint.
  */
 export async function solanaGetTokenBalance(ownerAddress: string): Promise<number> {
@@ -765,33 +782,30 @@ export async function solanaGetTokenBalance(ownerAddress: string): Promise<numbe
   const stakeTokenAddr = NETWORK_CONFIG.solana.stakeTokenAddress;
   if (!stakeTokenAddr || stakeTokenAddr.length < 10 || stakeTokenAddr.toUpperCase().startsWith('YOUR_')) return 0;
 
-  let owner: PublicKey;
-  let stakeMint: PublicKey;
-  try {
-    owner     = new PublicKey(ownerAddress);
-    stakeMint = new PublicKey(stakeTokenAddr);
-  } catch {
-    return 0;
-  }
+  let ownerPk: PublicKey, mintPk: PublicKey;
+  try { ownerPk = new PublicKey(ownerAddress); mintPk = new PublicKey(stakeTokenAddr); } catch { return 0; }
 
-  // Evaluated at call-time (not module load) so window.location is available in browser
-  const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-  const endpoints = isLocalhost
-    ? ['/dev-rpc/solana']
-    : [
-        NETWORK_CONFIG.solana.rpcUrl,
-        'https://rpc.ankr.com/solana',
-        'https://api.mainnet-beta.solana.com',
-      ].filter(Boolean);
+  // Derive Associated Token Account address deterministically — no RPC needed
+  const [ataAddress] = PublicKey.findProgramAddressSync(
+    [ownerPk.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mintPk.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+  );
+
+  const endpoints = [
+    'https://solana-rpc.publicnode.com',
+    NETWORK_CONFIG.solana.rpcUrl,
+    'https://api.mainnet-beta.solana.com',
+  ].filter((u, i, a) => u && a.indexOf(u) === i);
 
   for (const rpc of endpoints) {
     try {
-      const connection = new Connection(rpc, 'confirmed');
-      const accounts = await connection.getParsedTokenAccountsByOwner(owner, { mint: stakeMint });
-      if (accounts.value.length === 0) return 0;
-      return accounts.value.reduce((sum, acct) => {
-        return sum + (acct.account.data.parsed.info.tokenAmount.uiAmount ?? 0);
-      }, 0);
+      const result = await rpcCall(rpc, 'getAccountInfo', [
+        ataAddress.toString(),
+        { encoding: 'jsonParsed' },
+      ]);
+      // null value means ATA doesn't exist yet → 0 balance
+      if (!result?.value) return 0;
+      return result.value.data?.parsed?.info?.tokenAmount?.uiAmount ?? 0;
     } catch {
       // try next endpoint
     }
@@ -862,9 +876,9 @@ export async function solanaGetReferralInfo(ownerAddress: string): Promise<Refer
       for (const { account } of accounts.slice(0, 50)) {
         try {
           const data  = account.data;
-          const slice = data.slice(8); // strip 8-byte Anchor discriminator
+          const slice = Buffer.from(data).subarray(8); // strip 8-byte Anchor discriminator
           // Parse owner pubkey (slice[0]–slice[31])
-          const refOwner = new PublicKey(slice.slice(0, 32)).toBase58();
+          const refOwner = new PublicKey(Uint8Array.from(slice.subarray(0, 32))).toBase58();
           // Parse total_staked (slice[32]–slice[39])
           const staked = Number(slice.readBigUInt64LE(32)) / SCALE;
           // Parse registered_at (slice[98]–slice[105])
@@ -981,7 +995,6 @@ export async function solanaGetOnChainHistory(address: string): Promise<import('
           const preBalances  = tx.meta?.preTokenBalances  ?? [];
           const postBalances = tx.meta?.postTokenBalances ?? [];
           const stakeMint = NETWORK_CONFIG.solana.stakeTokenAddress;
-          const userAta = ata(new PublicKey(stakeMint), owner).toBase58();
 
           const pre  = preBalances.find(b  => b.mint === stakeMint && b.owner === address);
           const post = postBalances.find(b => b.mint === stakeMint && b.owner === address);

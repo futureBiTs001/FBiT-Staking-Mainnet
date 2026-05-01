@@ -225,7 +225,7 @@ export default function AdminPanel() {
 
   const handleSetBaseFallbackApy = () => {
     const bps = parseInt(baseFallbackApyBps, 10);
-    if (isNaN(bps) || bps < 6000 || bps > 50000) { toast.error('Base APY BPS must be 6000–50000 (60%–500%)'); return; }
+    if (isNaN(bps) || bps < 6000 || bps > 25000) { toast.error('Base APY BPS must be 6000–25000 (60%–250%)'); return; }
     run('baseFallbackApy', () => contract.setBaseFallbackApy(bps), `Base fallback APY set to ${bps / 100}%`);
   };
 
@@ -758,12 +758,12 @@ export default function AdminPanel() {
             <h3 className="font-display font-semibold text-lg">Annual Emission (PoS APY)</h3>
             <p className="text-text-muted text-xs -mt-2">
               Total FBiT distributed to stakers per year. APY auto-adjusts:
-              effectiveAPY = emission ÷ totalStaked, clamped between <span className="text-brand-400">60%</span> and <span className="text-brand-400">500%</span>.
+              effectiveAPY = emission ÷ totalStaked, clamped between <span className="text-brand-400">60%</span> and <span className="text-brand-400">250%</span>.
               More stakers → lower APY. Fewer stakers → higher APY.
             </p>
             <div className="p-3 rounded-xl bg-brand-500/5 border border-brand-500/20 text-xs text-text-muted space-y-1">
               <p>Current emission: <span className="text-accent-cyan font-mono">{(platformStats.annualEmission ?? 0).toLocaleString()} FBiT/year</span></p>
-              <p>APY range: <span className="text-brand-400 font-semibold">60% – 500%</span></p>
+              <p>APY range: <span className="text-brand-400 font-semibold">60% – 250%</span></p>
             </div>
             <div>
               <label className="text-sm text-text-secondary font-display mb-1 block">
@@ -808,20 +808,20 @@ export default function AdminPanel() {
               <p className="text-text-muted text-xs -mt-2">
                 Fallback APY used <em>only when annual emission is not configured</em>.
                 Once emission is set, PoS APY (emission ÷ totalStaked) overrides this automatically.
-                Range: <span className="text-brand-400">60% – 500%</span> (6000–50000 BPS).
+                Range: <span className="text-brand-400">60% – 250%</span> (6000–25000 BPS).
               </p>
               <div className="p-3 rounded-xl bg-brand-500/5 border border-brand-500/20 text-xs text-text-muted">
                 Current base APY: <span className="text-accent-cyan font-mono">{Math.round((platformStats.effectiveAPY ?? 6000) / 100)}%</span> (effective — may be overridden by PoS emission)
               </div>
               <div>
-                <label className="text-sm text-text-secondary font-display mb-1 block">New Base APY (BPS — 6000 = 60%, 50000 = 500%)</label>
+                <label className="text-sm text-text-secondary font-display mb-1 block">New Base APY (BPS — 6000 = 60%, 25000 = 250%)</label>
                 <input
                   type="number"
                   min="6000"
-                  max="50000"
+                  max="25000"
                   value={baseFallbackApyBps}
                   onChange={(e) => setBaseFallbackApyBps(e.target.value)}
-                  placeholder="e.g. 6000 = 60%"
+                  placeholder="e.g. 25000 = 250%"
                   className="input-field font-mono"
                 />
               </div>
@@ -829,7 +829,7 @@ export default function AdminPanel() {
                 label="Set Base Fallback APY"
                 loadingLabel="Setting…"
                 onClick={handleSetBaseFallbackApy}
-                disabled={isRenounced || baseFallbackApyBps === '' || parseInt(baseFallbackApyBps) < 6000 || parseInt(baseFallbackApyBps) > 50000}
+                disabled={isRenounced || baseFallbackApyBps === '' || parseInt(baseFallbackApyBps) < 6000 || parseInt(baseFallbackApyBps) > 25000}
                 loading={busy('baseFallbackApy')}
                 variant="cyan"
               />
@@ -1112,32 +1112,240 @@ export default function AdminPanel() {
             </p>
           </div>
 
-          {/* Trigger Halving — Solana only, permissionless */}
-          {selectedNetwork === 'solana' && (
-            <div className="p-4 rounded-xl border border-accent-amber/20 bg-accent-amber/5 space-y-3">
-              <div className="flex items-center justify-between flex-wrap gap-3">
+          {/* Halving Mechanism — Solana only, permissionless */}
+          {selectedNetwork === 'solana' && (() => {
+            const SECS_PER_YEAR   = 365 * 24 * 60 * 60;
+            const INITIAL_EMISSION = 1_000_000;
+            const epoch           = platformStats.halvingEpoch   ?? 0;
+            const hStart          = platformStats.halvingStartTime ?? 0;
+            const nowSecs         = Math.floor(Date.now() / 1000);
+            const nextHalvingAt   = hStart > 0 ? hStart + SECS_PER_YEAR : 0;
+            const secsUntil       = nextHalvingAt > 0 ? nextHalvingAt - nowSecs : 0;
+            const halvingDue      = secsUntil <= 0 && hStart > 0;
+
+            const daysUntil    = Math.floor(secsUntil / 86400);
+            const hoursUntil   = Math.floor((secsUntil % 86400) / 3600);
+            const minsUntil    = Math.floor((secsUntil % 3600) / 60);
+            const countdownStr = halvingDue
+              ? '⚡ Halving overdue — ready to trigger!'
+              : nextHalvingAt > 0
+                ? `${daysUntil}d ${hoursUntil}h ${minsUntil}m`
+                : 'Not started';
+
+            // Show 5 epochs in schedule table
+            const schedule = Array.from({ length: 6 }, (_, i) => ({
+              epoch: i,
+              emission: INITIAL_EMISSION / Math.pow(2, i),
+              active: i === epoch,
+            }));
+
+            return (
+              <div className="glass-card space-y-4 border border-accent-amber/20 bg-accent-amber/5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h3 className="font-display font-semibold text-lg flex items-center gap-2">
+                      ⚡ Halving Mechanism
+                      <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-accent-amber/20 text-accent-amber border border-accent-amber/30">
+                        Epoch {epoch}
+                      </span>
+                    </h3>
+                    <p className="text-text-muted text-xs mt-0.5">
+                      Annual reward halves every year — 50% cut each cycle. Permissionless (auto-triggered by platform).
+                    </p>
+                  </div>
+                </div>
+
+                {/* Countdown */}
+                <div className={`p-3 rounded-xl border text-sm flex items-center gap-3 ${halvingDue ? 'bg-accent-rose/10 border-accent-rose/30' : 'bg-surface-800/40 border-white/5'}`}>
+                  <span className="text-xl">{halvingDue ? '🔴' : '⏱'}</span>
+                  <div>
+                    <p className={`font-display font-semibold text-sm ${halvingDue ? 'text-accent-rose' : 'text-text-primary'}`}>
+                      {halvingDue ? 'Halving Overdue' : 'Next Halving In'}
+                    </p>
+                    <p className={`font-mono text-xs mt-0.5 ${halvingDue ? 'text-accent-rose' : 'text-brand-400'}`}>
+                      {countdownStr}
+                    </p>
+                  </div>
+                  {halvingDue && (
+                    <div className="ml-auto">
+                      <AdminButton
+                        label="Trigger Now"
+                        loadingLabel="Triggering…"
+                        onClick={handleTriggerHalving}
+                        disabled={false}
+                        loading={busy('halving')}
+                        variant="amber"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Emission Schedule */}
                 <div>
-                  <p className="font-display font-medium flex items-center gap-2">⚡ Trigger Annual Halving</p>
-                  <p className="text-text-muted text-sm mt-0.5">
-                    Halves the fallback base APY (6000 → 3000 bps on first halving). Only succeeds once per year — contract enforces the time lock. Permissionless (anyone can call).
+                  <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-2">Emission Schedule (50% Halving Each Year)</p>
+                  <div className="rounded-xl overflow-hidden border border-white/5">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-surface-800/60 text-text-muted">
+                          <th className="text-left px-3 py-2 font-display">Year</th>
+                          <th className="text-right px-3 py-2 font-display">Annual Emission</th>
+                          <th className="text-right px-3 py-2 font-display">Daily Release</th>
+                          <th className="text-right px-3 py-2 font-display">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {schedule.map(({ epoch: ep, emission, active }) => (
+                          <tr key={ep} className={`border-t border-white/5 ${active ? 'bg-accent-amber/5' : ''}`}>
+                            <td className="px-3 py-2 font-mono text-text-secondary">Year {ep + 1}</td>
+                            <td className="px-3 py-2 text-right font-mono">
+                              <span className={active ? 'text-accent-amber font-bold' : 'text-text-secondary'}>
+                                {emission >= 1000 ? `${(emission / 1000).toFixed(0)}K` : emission.toFixed(0)} FBiT
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono text-text-muted">
+                              {(emission / 365).toFixed(0)} FBiT
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              {active
+                                ? <span className="px-2 py-0.5 rounded-full text-[10px] bg-accent-amber/20 text-accent-amber border border-accent-amber/30">● Active</span>
+                                : ep < epoch
+                                  ? <span className="text-text-muted">✓ Done</span>
+                                  : <span className="text-text-muted/40">Pending</span>
+                              }
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="text-xs text-text-muted space-y-1 p-3 rounded-xl bg-surface-800/40 border border-white/5">
+                  <p><span className="text-accent-amber">●</span> Auto-triggered by the platform when 1 year elapses — no admin action needed.</p>
+                  <p><span className="text-brand-400">●</span> Existing stakers keep their locked-in APY. Only new stakes use the post-halving rate.</p>
+                  <p><span className="text-accent-rose">●</span> Contract enforces the 365-day time lock — early calls revert automatically.</p>
+                </div>
+
+                {/* Manual trigger (always available for non-overdue state as backup) */}
+                {!halvingDue && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-text-muted">Manual trigger (backup — contract rejects if time lock not met)</p>
+                    <AdminButton
+                      label="Force Trigger"
+                      loadingLabel="Triggering…"
+                      onClick={handleTriggerHalving}
+                      disabled={false}
+                      loading={busy('halving')}
+                      variant="amber"
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Halving Schedule — Polygon (client-side display, manual action required) */}
+          {selectedNetwork === 'polygon' && (() => {
+            const SECS_PER_YEAR    = 365 * 24 * 60 * 60;
+            const INITIAL_EMISSION = 1_000_000;
+            const hStart     = platformStats.emissionStartTime ?? 0;
+            const nowSecs    = Math.floor(Date.now() / 1000);
+            const yearsElapsed  = hStart > 0 ? Math.floor((nowSecs - hStart) / SECS_PER_YEAR) : 0;
+            const currentEpoch  = yearsElapsed;
+            const schedule = Array.from({ length: 6 }, (_, i) => ({
+              ep: i,
+              emission: INITIAL_EMISSION / Math.pow(2, i),
+              active: i === currentEpoch && hStart > 0,
+            }));
+            const suggestedEmission = INITIAL_EMISSION / Math.pow(2, currentEpoch);
+            const onChainEmission   = platformStats.annualEmission ?? 0;
+            const mismatch = hStart > 0 && Math.abs(onChainEmission - suggestedEmission) > 100;
+            return (
+              <div className="glass-card space-y-4 border border-accent-amber/20 bg-accent-amber/5">
+                <div>
+                  <h3 className="font-display font-semibold text-lg flex items-center gap-2">
+                    📅 Halving Schedule
+                    <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-accent-amber/20 text-accent-amber border border-accent-amber/30">
+                      Polygon
+                    </span>
+                  </h3>
+                  <p className="text-text-muted text-xs mt-0.5 leading-relaxed">
+                    Polygon has no on-chain halving. Use <span className="text-brand-400 font-mono">Rates → Annual Emission</span> each year to manually apply the halving schedule below.
                   </p>
                 </div>
-                <AdminButton
-                  label="Trigger Halving"
-                  loadingLabel="Triggering…"
-                  onClick={handleTriggerHalving}
-                  disabled={false}
-                  loading={busy('halving')}
-                  variant="amber"
-                />
+
+                {/* Current state */}
+                {hStart > 0 ? (
+                  <div className={`p-3 rounded-xl border text-xs ${mismatch ? 'bg-accent-rose/10 border-accent-rose/30' : 'bg-surface-800/40 border-white/5'}`}>
+                    {mismatch ? (
+                      <>
+                        <p className="font-display font-semibold text-accent-rose mb-1">⚠ Emission Mismatch</p>
+                        <p className="text-text-muted">
+                          Year {currentEpoch + 1} suggests <span className="text-accent-amber font-mono font-semibold">{suggestedEmission.toLocaleString()} FBiT/year</span>.
+                          On-chain: <span className="font-mono text-text-secondary">{onChainEmission.toLocaleString()} FBiT/year</span>.
+                          Update via <span className="text-brand-400">Rates → Annual Emission</span>.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-text-muted">
+                        Year {currentEpoch + 1} of schedule · <span className="text-accent-amber font-mono">{onChainEmission.toLocaleString()} FBiT/year</span> ✓
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-accent-amber p-3 rounded-xl bg-accent-amber/5 border border-accent-amber/20">
+                    ⚠ Emission clock not started — deposit reserve tokens to begin.
+                  </p>
+                )}
+
+                {/* Emission Schedule Table */}
+                <div>
+                  <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-2">Emission Schedule (50% Halving Each Year)</p>
+                  <div className="rounded-xl overflow-hidden border border-white/5">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-surface-800/60 text-text-muted">
+                          <th className="text-left px-3 py-2 font-display">Year</th>
+                          <th className="text-right px-3 py-2 font-display">Annual Emission</th>
+                          <th className="text-right px-3 py-2 font-display">Daily Release</th>
+                          <th className="text-right px-3 py-2 font-display">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {schedule.map(({ ep, emission, active }) => (
+                          <tr key={ep} className={`border-t border-white/5 ${active ? 'bg-accent-amber/5' : ''}`}>
+                            <td className="px-3 py-2 font-mono text-text-secondary">Year {ep + 1}</td>
+                            <td className="px-3 py-2 text-right font-mono">
+                              <span className={active ? 'text-accent-amber font-bold' : 'text-text-secondary'}>
+                                {emission >= 1000 ? `${(emission / 1000).toFixed(0)}K` : emission.toFixed(0)} FBiT
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono text-text-muted">
+                              {(emission / 365).toFixed(0)} FBiT
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              {active
+                                ? <span className="px-2 py-0.5 rounded-full text-[10px] bg-accent-amber/20 text-accent-amber border border-accent-amber/30">● Active</span>
+                                : ep < currentEpoch && hStart > 0
+                                  ? <span className="text-text-muted">✓ Done</span>
+                                  : <span className="text-text-muted/40">Pending</span>
+                              }
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="text-xs text-text-muted space-y-1 p-3 rounded-xl bg-surface-800/40 border border-white/5">
+                  <p><span className="text-accent-amber">●</span> Unlike Solana, Polygon halving is a manual admin action — call <span className="font-mono text-brand-400">setAnnualEmission</span> each year.</p>
+                  <p><span className="text-brand-400">●</span> Reserve runway: <span className="text-text-secondary font-mono">{(platformStats.remainingYears ?? 0)} years</span> remaining at current emission rate.</p>
+                  <p><span className="text-accent-cyan">●</span> Max pending rewards across all stakers: <span className="font-mono text-text-secondary">{formatNumber(platformStats.maxPendingRewards ?? 0)} FBiT</span>.</p>
+                </div>
               </div>
-              <div className="text-xs text-text-muted p-3 rounded-xl bg-surface-800/40 border border-white/5 space-y-1">
-                <p><span className="text-accent-amber">●</span> This only halves the base fallback APY — the live PoS APY (emission ÷ total staked) is unaffected.</p>
-                <p><span className="text-brand-400">●</span> Existing stakers keep their locked-in APY. Only new stakes after halving use the reduced base.</p>
-                <p><span className="text-accent-rose">●</span> Will revert if less than 1 year has passed since last halving or platform launch.</p>
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Renounce Ownership */}
           <div className={`p-4 rounded-xl border space-y-3 ${isRenounced ? 'bg-surface-800/20 border-white/5 opacity-60' : 'bg-accent-rose/5 border-accent-rose/20'}`}>

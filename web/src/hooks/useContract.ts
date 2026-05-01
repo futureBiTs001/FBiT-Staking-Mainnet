@@ -109,7 +109,7 @@ export interface ContractHook {
   togglePause(currentlyPaused: boolean): Promise<{ txHash: string }>;
   /**
    * Update the annual emission that governs PoS APY.
-   * effectiveAPY = clamp(annualEmission × 10000 / totalStaked, 6000, 50000) bps → 60%–500%
+   * effectiveAPY = clamp(annualEmission × 10000 / totalStaked, 6000, 25000) bps → 60%–250%
    */
   setAnnualEmission(annualEmission: number): Promise<{ txHash: string }>;
   /** Update burn percentage on claim/compound. burnBps: 0–5000 (0%–50%). Default 1000 = 10%. */
@@ -126,7 +126,7 @@ export interface ContractHook {
   refundRewardPool(amount: number): Promise<{ txHash: string }>;
   /** Trigger annual base-APY halving. Permissionless — anyone can call once per year. Solana only. */
   triggerHalving(): Promise<{ txHash: string }>;
-  /** Set the fallback base APY BPS (6000–50000). Only active when emission=0. Solana only. */
+  /** Set the fallback base APY BPS (6000–25000). Only active when emission=0. Solana only. */
   setBaseFallbackApy(apyBps: number): Promise<{ txHash: string }>;
   /** Admin crank: set a user's team_size and team_total_staked on-chain. Solana only. */
   updateUserTeamStats(userAddress: string, teamSize: number, teamTotalStaked: number): Promise<{ txHash: string }>;
@@ -195,13 +195,36 @@ export function useContract(): ContractHook {
 
   // ── Sync ──────────────────────────────────────────────────────────────────
 
+  const SECS_PER_YEAR = 365 * 24 * 60 * 60;
+
   const syncPlatformStats = useCallback(async () => {
     const stats =
       selectedNetwork === 'solana'
         ? await solanaFetchPlatformStats()
         : await polygonFetchPlatformStats();
-    if (stats) updatePlatformStats(stats);
-  }, [selectedNetwork, updatePlatformStats]);
+    if (!stats) return;
+
+    updatePlatformStats(stats);
+
+    // Auto-trigger halving when 1 year has elapsed (Solana, permissionless)
+    if (
+      selectedNetwork === 'solana' &&
+      chainAddress &&
+      stats.halvingStartTime &&
+      stats.halvingStartTime > 0
+    ) {
+      const nowSecs    = Math.floor(Date.now() / 1000);
+      const halvingDue = nowSecs >= stats.halvingStartTime + SECS_PER_YEAR;
+      if (halvingDue) {
+        solanaTriggerHalving()
+          .then(() => {
+            // Re-fetch stats after halving so UI reflects new epoch immediately
+            solanaFetchPlatformStats().then(fresh => { if (fresh) updatePlatformStats(fresh); });
+          })
+          .catch(() => { /* contract will revert if already triggered — safe to ignore */ });
+      }
+    }
+  }, [selectedNetwork, chainAddress, updatePlatformStats]);
 
   const syncUserData = useCallback(async () => {
     if (!address || !chainAddress) return;

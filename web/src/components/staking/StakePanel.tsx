@@ -13,26 +13,31 @@ import { solanaGetTokenBalance } from '@/lib/contracts/solana';
 import { polygonGetTokenBalance } from '@/lib/contracts/polygon';
 
 export default function StakePanel() {
-  const { address, solanaReferrer, polygonReferrer } = useWallet();
+  const { address, solanaAddress, evmAddress, solanaReferrer, polygonReferrer } = useWallet();
   const { selectedNetwork, getWalletData, addStake, addTransaction, loadOnChainData } = useAppStore();
   const contract = useContract();
 
   const [amount, setAmount] = useState('');
   const [isStaking, setIsStaking] = useState(false);
   const [tokenBalance, setTokenBalance] = useState(0);
-  const [effectiveAPY, setEffectiveAPY] = useState(60); // percent, fetched live from chain (60–500%)
+  const [effectiveAPY, setEffectiveAPY] = useState(60); // percent, fetched live from chain (60–250%)
 
-  // Direct balance fetch — bypasses the Zustand chain so balance always shows
+  // Direct balance fetch — uses chain-specific address so balance always shows correctly
   const fetchTokenBalance = useCallback(async () => {
     if (!address) return;
     try {
-      const bal = selectedNetwork === 'solana'
-        ? await solanaGetTokenBalance(address)
-        : await polygonGetTokenBalance(address);
+      let bal = 0;
+      if (selectedNetwork === 'solana') {
+        const addr = solanaAddress ?? (address.startsWith('0x') ? null : address);
+        if (addr) bal = await solanaGetTokenBalance(addr);
+      } else {
+        const addr = evmAddress ?? (address.startsWith('0x') ? address : null);
+        if (addr) bal = await polygonGetTokenBalance(addr);
+      }
       setTokenBalance(bal);
       loadOnChainData(address, { tokenBalance: bal });
     } catch {}
-  }, [address, selectedNetwork, loadOnChainData]);
+  }, [address, solanaAddress, evmAddress, selectedNetwork, loadOnChainData]);
 
   useEffect(() => {
     if (!address) { setTokenBalance(0); return; }
@@ -60,24 +65,30 @@ export default function StakePanel() {
   const existingStakes = walletData?.stakes ?? [];
   const stakeAmount = parseFloat(amount) || 0;
 
+  // Use contract-fetched limits when available (Polygon), fall back to security.ts constants
+  const platformStats = useAppStore(s => s.platformStats);
+  const effectiveMin  = platformStats.minStakeAmount  ?? MIN_STAKE_AMOUNT;
+  const effectiveMax  = platformStats.maxStakePerUser ?? MAX_STAKE_AMOUNT;
+  const lockDays      = platformStats.lockPeriodDays  ?? LOCK_PERIOD.days;
+
   const estimatedRewards = useMemo(() => {
     const apy = effectiveAPY / 100;
     const perInterval = (stakeAmount * apy) / 730;
     return {
       perInterval,
       daily: perInterval * 2,
-      total: perInterval * 2 * LOCK_PERIOD.days,
+      total: perInterval * 2 * lockDays,
     };
-  }, [stakeAmount, effectiveAPY]);
+  }, [stakeAmount, effectiveAPY, lockDays]);
 
   const handleStake = async () => {
     if (!stakeAmount || stakeAmount <= 0 || stakeAmount > tokenBalance) return;
-    if (stakeAmount < MIN_STAKE_AMOUNT) {
-      toast.error(`Minimum stake is ${MIN_STAKE_AMOUNT.toLocaleString()} FBiT.`);
+    if (stakeAmount < effectiveMin) {
+      toast.error(`Minimum stake is ${effectiveMin.toLocaleString()} FBiT.`);
       return;
     }
-    if (stakeAmount > MAX_STAKE_AMOUNT) {
-      toast.error(`Maximum stake is ${MAX_STAKE_AMOUNT.toLocaleString()} FBiT.`);
+    if (stakeAmount > effectiveMax) {
+      toast.error(`Maximum stake is ${effectiveMax.toLocaleString()} FBiT.`);
       return;
     }
     if (!checkRateLimit('stake', { maxCalls: 3, windowMs: 120_000 })) {
@@ -92,7 +103,11 @@ export default function StakePanel() {
       let stakedAt = Math.floor(Date.now() / 1000);
 
       if (!contract.isLive) throw new Error('Contract not configured. Set up your deployment addresses to execute on-chain transactions.');
-      const referrer = selectedNetwork === 'solana' ? solanaReferrer : polygonReferrer;
+      const rawReferrer = selectedNetwork === 'solana' ? solanaReferrer : polygonReferrer;
+      // Validate referrer matches the current chain format before sending
+      const isSolRef = rawReferrer && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(rawReferrer);
+      const isEvmRef = rawReferrer && /^0x[0-9a-fA-F]{40}$/.test(rawReferrer);
+      const referrer = (selectedNetwork === 'solana' ? isSolRef : isEvmRef) ? rawReferrer : undefined;
       const result = await contract.stake(stakeAmount, referrer ?? undefined);
       txHash = result.txHash;
       // For Solana, result.stakedAt is the monotonic stakeId (0, 1, 2…), not a timestamp.
@@ -109,7 +124,7 @@ export default function StakePanel() {
         amount: stakeAmount,
         lockPeriodIndex: 0,
         stakedAt,
-        unlockAt: stakedAt + LOCK_PERIOD.days * 86400,
+        unlockAt: stakedAt + lockDays * 86400,
         lastClaimAt: stakedAt,
         totalClaimed: 0,
         isActive: true,
@@ -256,16 +271,16 @@ export default function StakePanel() {
               </div>
             </div>
             <p className="text-text-muted text-[11px] mt-1">
-              Min: <span className="text-text-secondary">{MIN_STAKE_AMOUNT.toLocaleString()} FBiT</span>
-              {' · '}Max: <span className="text-text-secondary">{MAX_STAKE_AMOUNT.toLocaleString()} FBiT</span>
+              Min: <span className="text-text-secondary">{effectiveMin.toLocaleString()} FBiT</span>
+              {' · '}Max: <span className="text-text-secondary">{effectiveMax.toLocaleString()} FBiT</span>
             </p>
-            {stakeAmount > 0 && stakeAmount < MIN_STAKE_AMOUNT && (
-              <p className="text-accent-rose text-xs mt-1">Minimum stake is {MIN_STAKE_AMOUNT.toLocaleString()} FBiT</p>
+            {stakeAmount > 0 && stakeAmount < effectiveMin && (
+              <p className="text-accent-rose text-xs mt-1">Minimum stake is {effectiveMin.toLocaleString()} FBiT</p>
             )}
-            {stakeAmount > MAX_STAKE_AMOUNT && (
-              <p className="text-accent-rose text-xs mt-1">Maximum stake is {MAX_STAKE_AMOUNT.toLocaleString()} FBiT</p>
+            {stakeAmount > effectiveMax && (
+              <p className="text-accent-rose text-xs mt-1">Maximum stake is {effectiveMax.toLocaleString()} FBiT</p>
             )}
-            {stakeAmount > tokenBalance && stakeAmount > 0 && stakeAmount <= MAX_STAKE_AMOUNT && (
+            {stakeAmount > tokenBalance && stakeAmount > 0 && stakeAmount <= effectiveMax && (
               <p className="text-accent-rose text-xs mt-1">Insufficient balance</p>
             )}
           </div>
@@ -274,12 +289,12 @@ export default function StakePanel() {
           <div className="flex items-center justify-between p-4 rounded-xl bg-brand-500/5 border border-brand-500/20">
             <div>
               <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-0.5">Lock Period</p>
-              <p className="font-display font-bold text-text-primary">30 Days</p>
+              <p className="font-display font-bold text-text-primary">{lockDays} Days</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-0.5">Current APY</p>
               <p className="font-display font-bold text-brand-400 text-lg">{effectiveAPY}%</p>
-              <p className="text-[10px] text-text-muted">PoS · 60%–500%</p>
+              <p className="text-[10px] text-text-muted">PoS · 60%–250%</p>
               <p className="text-[10px] text-accent-amber">Locked at stake time</p>
             </div>
           </div>
@@ -287,7 +302,7 @@ export default function StakePanel() {
       </div>
 
       {/* Reward Estimation */}
-      {stakeAmount >= MIN_STAKE_AMOUNT && stakeAmount <= tokenBalance && stakeAmount <= MAX_STAKE_AMOUNT && (
+      {stakeAmount >= effectiveMin && stakeAmount <= tokenBalance && stakeAmount <= effectiveMax && (
         <div className="glass-card animate-slide-up">
           <h4 className="font-display font-semibold text-sm text-text-secondary uppercase tracking-wider mb-3">
             Estimated Rewards
@@ -304,17 +319,17 @@ export default function StakePanel() {
               <p className="text-text-muted text-[10px]">FBiT / day</p>
             </div>
             <div>
-              <p className="text-text-muted text-xs mb-1">Total (30 Days)</p>
+              <p className="text-text-muted text-xs mb-1">Total ({lockDays} Days)</p>
               <p className="font-mono text-brand-400 font-semibold">{formatNumber(estimatedRewards.total)}</p>
               <p className="text-text-muted text-[10px]">FBiT total</p>
             </div>
           </div>
           <div className="pt-3 border-t border-white/5 space-y-1.5">
             {[
-              ['Lock Period', LOCK_PERIOD.label],
-              ['APY', `${effectiveAPY}% (PoS, 60%–500%)`],
+              ['Lock Period', `${lockDays} Days`],
+              ['APY', `${effectiveAPY}% (PoS, 60%–250%)`],
               ['Network', selectedNetwork === 'solana' ? 'Solana' : 'Polygon'],
-              ['Unlock Date', new Date(Date.now() + LOCK_PERIOD.days * 86400000).toLocaleDateString()],
+              ['Unlock Date', new Date(Date.now() + lockDays * 86400000).toLocaleDateString()],
             ].map(([k, v]) => (
               <div key={k} className="flex items-center justify-between text-xs">
                 <span className="text-text-muted">{k}</span>
@@ -329,9 +344,9 @@ export default function StakePanel() {
       <button
         type="button"
         onClick={handleStake}
-        disabled={isStaking || stakeAmount <= 0 || stakeAmount < MIN_STAKE_AMOUNT || stakeAmount > MAX_STAKE_AMOUNT || stakeAmount > tokenBalance}
+        disabled={isStaking || stakeAmount <= 0 || stakeAmount < effectiveMin || stakeAmount > effectiveMax || stakeAmount > tokenBalance}
         className={`w-full py-4 rounded-xl font-display font-bold text-lg transition-all duration-300 ${
-          isStaking || stakeAmount <= 0 || stakeAmount < MIN_STAKE_AMOUNT || stakeAmount > MAX_STAKE_AMOUNT || stakeAmount > tokenBalance
+          isStaking || stakeAmount <= 0 || stakeAmount < effectiveMin || stakeAmount > effectiveMax || stakeAmount > tokenBalance
             ? 'bg-surface-700 text-text-muted cursor-not-allowed'
             : 'btn-primary'
         }`}
@@ -346,22 +361,22 @@ export default function StakePanel() {
           </span>
         ) : stakeAmount > tokenBalance ? (
           'Insufficient Balance'
-        ) : stakeAmount > MAX_STAKE_AMOUNT ? (
-          'Exceeds Maximum (500M FBiT)'
-        ) : stakeAmount > 0 && stakeAmount < MIN_STAKE_AMOUNT ? (
-          `Minimum Stake is ${MIN_STAKE_AMOUNT} FBiT`
+        ) : stakeAmount > effectiveMax ? (
+          `Exceeds Maximum (${formatNumber(effectiveMax)} FBiT)`
+        ) : stakeAmount > 0 && stakeAmount < effectiveMin ? (
+          `Minimum Stake is ${effectiveMin.toLocaleString()} FBiT`
         ) : stakeAmount <= 0 ? (
           'Enter an Amount'
         ) : (
-          `Stake ${formatNumber(stakeAmount)} FBiT · 30 Days`
+          `Stake ${formatNumber(stakeAmount)} FBiT · ${lockDays} Days`
         )}
       </button>
 
       {/* Info note */}
       <p className="text-center text-xs text-text-muted">
-        Tokens will be locked for <span className="text-text-secondary">30 days</span> until{' '}
+        Tokens will be locked for <span className="text-text-secondary">{lockDays} days</span> until{' '}
         <span className="text-text-secondary font-mono">
-          {new Date(Date.now() + LOCK_PERIOD.days * 86400000).toLocaleDateString()}
+          {new Date(Date.now() + lockDays * 86400000).toLocaleDateString()}
         </span>. Early withdrawal is not possible.
       </p>
     </div>

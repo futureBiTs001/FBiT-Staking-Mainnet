@@ -215,7 +215,7 @@ export function useSolanaStaking() {
       let effectiveAPY = 6_000;
       if (totalStaked > 0 && annualEmission > 0) {
         const raw = Math.round((annualEmission / totalStaked) * 10_000);
-        effectiveAPY = Math.min(50_000, Math.max(6_000, raw));
+        effectiveAPY = Math.min(25_000, Math.max(6_000, raw));
       }
 
       const totalReserve           = fromLamports(account.totalReserve);

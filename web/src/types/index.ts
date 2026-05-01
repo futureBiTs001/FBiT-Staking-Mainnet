@@ -138,6 +138,16 @@ export interface PlatformStats {
   remainingYears?: number;
   /** Max possible pending rewards across all stakers right now (Polygon only) */
   maxPendingRewards?: number;
+  /** Minimum stake amount in token units — read from contract (Polygon: MIN_STAKE_AMOUNT) */
+  minStakeAmount?: number;
+  /** Max stake per user in token units — read from contract (Polygon: MAX_STAKE_PER_USER) */
+  maxStakePerUser?: number;
+  /** Lock period in days — read from contract (Polygon: LOCK_PERIOD / 86400) */
+  lockPeriodDays?: number;
+  /** Number of halvings that have already occurred (Solana only, 0 = no halving yet) */
+  halvingEpoch?: number;
+  /** Unix timestamp when the current halving epoch started — next halving = halvingStartTime + 365 days (Solana only) */
+  halvingStartTime?: number;
 }
 
 // ===== ADMIN TYPES =====

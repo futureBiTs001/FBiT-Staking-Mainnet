@@ -150,7 +150,7 @@ export async function polygonFetchPlatformStats(): Promise<PlatformStats | null>
       NETWORK_CONFIG.polygon.contractAddress.toUpperCase().startsWith('YOUR_')) return null;
   try {
     const contract = getReadOnlyStakingContract();
-    const [totalStaked, totalUsers, rewardPoolBalance, rewardRate, referralRewardRate, paused, totalBurned, annualEmission, burnBps, effectiveAPY, isRenounced, feeRecipient, totalFeesCollected, totalReserve, emissionStartTime, totalEmissionReleased, releasableEmission, remainingYears, maxPendingRewards] =
+    const [totalStaked, totalUsers, rewardPoolBalance, rewardRate, referralRewardRate, paused, totalBurned, annualEmission, burnBps, effectiveAPY, isRenounced, feeRecipient, totalFeesCollected, totalReserve, emissionStartTime, totalEmissionReleased, releasableEmission, remainingYears, maxPendingRewards, minStakeRaw, maxStakeRaw, lockPeriodRaw] =
       await Promise.all([
         contract.totalStaked(),
         contract.totalUsers(),
@@ -171,6 +171,9 @@ export async function polygonFetchPlatformStats(): Promise<PlatformStats | null>
         contract.getReleasableEmission(),
         contract.getRemainingYears(),
         contract.getMaxPendingRewards(),
+        contract.MIN_STAKE_AMOUNT(),
+        contract.MAX_STAKE_PER_USER(),
+        contract.LOCK_PERIOD(),
       ]);
     return {
       totalStaked: fromWei(totalStaked),
@@ -182,7 +185,7 @@ export async function polygonFetchPlatformStats(): Promise<PlatformStats | null>
       totalBurned: fromWei(totalBurned),
       annualEmission: fromWei(annualEmission),
       burnBps: Number(burnBps),
-      effectiveAPY: Number(effectiveAPY),
+      effectiveAPY: Math.min(25_000, Math.max(6_000, Number(effectiveAPY))),
       isRenounced: Boolean(isRenounced),
       feeRecipient: String(feeRecipient),
       totalFeesCollected: fromWei(totalFeesCollected),
@@ -192,6 +195,9 @@ export async function polygonFetchPlatformStats(): Promise<PlatformStats | null>
       releasableEmission: fromWei(releasableEmission),
       remainingYears: Number(remainingYears),
       maxPendingRewards: fromWei(maxPendingRewards),
+      minStakeAmount: fromWei(minStakeRaw),
+      maxStakePerUser: fromWei(maxStakeRaw),
+      lockPeriodDays: Math.round(Number(lockPeriodRaw) / 86400),
     };
   } catch {
     return null;
@@ -264,7 +270,7 @@ export async function polygonGetEffectiveAPY(): Promise<number> {
   try {
     const contract = getReadOnlyStakingContract();
     const raw: bigint = await contract.getEffectiveAPY();
-    return Number(raw); // in basis points (6000 = 60%, 50000 = 500%)
+    return Math.min(25_000, Math.max(6_000, Number(raw))); // BPS: 6000=60%, 25000=250%
   } catch {
     return 6000; // fallback 60% (MIN_APY_BPS)
   }
@@ -324,7 +330,7 @@ export async function polygonGetUserStakes(address: string): Promise<StakeEntry[
   try {
     const contract = getReadOnlyStakingContract();
     const raw = await contract.getUserStakes(address);
-    return (raw as any[]).map((s, i) => ({
+    const stakes: StakeEntry[] = (raw as any[]).map((s, i) => ({
       id: i,
       amount: fromWei(s.amount),
       lockPeriodIndex: Number(s.lockPeriodIndex),
@@ -335,6 +341,22 @@ export async function polygonGetUserStakes(address: string): Promise<StakeEntry[
       isActive: Boolean(s.isActive),
       apy: Number(s.apy),
     }));
+
+    // Fetch exact pending rewards from contract for each active stake (parallel)
+    const active = stakes.filter(s => s.isActive);
+    if (active.length > 0) {
+      const pendingResults = await Promise.allSettled(
+        active.map(s => contract.getPendingReward(address, s.id))
+      );
+      active.forEach((s, i) => {
+        const r = pendingResults[i];
+        if (r.status === 'fulfilled') {
+          stakes[s.id as number].pendingReward = fromWei(r.value as bigint);
+        }
+      });
+    }
+
+    return stakes;
   } catch {
     return [];
   }

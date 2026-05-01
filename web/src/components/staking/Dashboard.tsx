@@ -94,10 +94,12 @@ export default function Dashboard() {
 
   const activeStakes = stakes.filter(s => s.isActive);
   const totalUserStaked = activeStakes.reduce((a, s) => a + s.amount, 0);
-  const totalPending = activeStakes.reduce(
-    (a, s) => a + calculatePendingReward(s.amount, s.apy, s.lastClaimAt),
-    0
-  );
+  // For Polygon: use on-chain pendingReward when available (fetched via getPendingReward).
+  // For Solana: always use client-side calculation (no view function in program).
+  const getPending = (s: typeof activeStakes[0]) =>
+    s.pendingReward !== undefined ? s.pendingReward : calculatePendingReward(s.amount, s.apy, s.lastClaimAt);
+
+  const totalPending = activeStakes.reduce((a, s) => a + getPending(s), 0);
   const totalClaimed = stakes.reduce((a, s) => a + s.totalClaimed, 0);
 
   const setActionLoading = (key: ActionKey, v: boolean) =>
@@ -272,12 +274,12 @@ export default function Dashboard() {
         </div>
         <h2 className="font-display text-2xl sm:text-3xl font-bold mb-3">Welcome to Future Bit (FBiT) Staking Mainnet</h2>
         <p className="text-text-secondary max-w-md mb-8">
-          Connect your wallet to stake FBiT tokens, earn rewards up to 500% APY, and build your referral network.
+          Connect your wallet to stake FBiT tokens, earn rewards up to 250% APY, and build your referral network.
         </p>
         <div className="flex flex-wrap justify-center gap-3">
           <div className="glass-card text-center py-3 px-6">
             <div className="text-brand-400 font-display font-bold text-lg">{Math.round((platformStats.effectiveAPY ?? 6000) / 100)}%</div>
-            <div className="text-text-muted text-xs mt-0.5">{LOCK_PERIOD.label} · PoS · 60%–500%</div>
+            <div className="text-text-muted text-xs mt-0.5">{LOCK_PERIOD.label} · PoS · 60%–250%</div>
           </div>
         </div>
       </div>
@@ -364,7 +366,7 @@ export default function Dashboard() {
           <div className="space-y-3">
             {activeStakes.map((stake) => {
               const period = getLockPeriodInfo(stake.lockPeriodIndex);
-              const pending = calculatePendingReward(stake.amount, stake.apy, stake.lastClaimAt);
+              const pending = getPending(stake);
               const daily = getDailyReward(stake.amount, stake.apy);
               const isUnlocked = Date.now() / 1000 >= stake.unlockAt;
               const claimable = canClaimRewards(stake.lastClaimAt);
@@ -460,7 +462,7 @@ export default function Dashboard() {
       </div>
 
       {/* Burn & PoS Emission */}
-      <BurnEmissionPanel stats={platformStats} />
+      <BurnEmissionPanel stats={platformStats} network={selectedNetwork} />
 
       {/* Team Target Bonus */}
       <TeamTargetBonusCard
@@ -732,9 +734,13 @@ function TeamTargetBonusCard({ teamTotalStaked, teamSize, onChainBonusBps }: { t
   );
 }
 
-function BurnEmissionPanel({ stats }: { stats: PlatformStats }) {
+function BurnEmissionPanel({ stats, network }: { stats: PlatformStats; network: string }) {
   const posApy = Math.round((stats.effectiveAPY ?? 6000) / 100);
   const feeRate = (stats.burnBps ?? 1000) / 100;
+  const hasNetworkExtra = network === 'solana' || (network === 'polygon' && stats.remainingYears !== undefined);
+  const colClass = stats.isRenounced
+    ? 'md:grid-cols-5'
+    : hasNetworkExtra ? 'md:grid-cols-5' : 'md:grid-cols-4';
 
   return (
     <div className="glass-card bg-linear-to-r from-accent-rose/5 to-accent-amber/5 border border-accent-rose/10">
@@ -744,7 +750,7 @@ function BurnEmissionPanel({ stats }: { stats: PlatformStats }) {
           {stats.isRenounced ? 'Admin Fee & PoS Emission' : 'Burn & PoS Emission'}
         </h3>
       </div>
-      <div className={`grid grid-cols-2 gap-4 ${stats.isRenounced ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
+      <div className={`grid grid-cols-2 gap-4 ${colClass}`}>
         <div>
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Total Burned</p>
           <p className="font-display font-bold text-accent-rose text-lg sm:text-xl">{formatNumber(stats.totalBurned)}</p>
@@ -765,14 +771,53 @@ function BurnEmissionPanel({ stats }: { stats: PlatformStats }) {
         <div>
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Annual Emission</p>
           <p className="font-display font-bold text-brand-400 text-lg sm:text-xl">{formatNumber(stats.annualEmission)}</p>
-          <p className="text-text-secondary text-xs mt-0.5">FBiT distributed / year</p>
+          <p className="text-text-secondary text-xs mt-0.5">
+            FBiT / year · Epoch {stats.halvingEpoch ?? 0}
+          </p>
         </div>
+        {/* Halving countdown — Solana only */}
+        {network === 'solana' && (() => {
+          const SECS_PER_YEAR = 365 * 24 * 60 * 60;
+          const hStart = stats.halvingStartTime ?? 0;
+          if (!hStart) return null;
+          const nowSecs   = Math.floor(Date.now() / 1000);
+          const secsLeft  = (hStart + SECS_PER_YEAR) - nowSecs;
+          const overdue   = secsLeft <= 0;
+          const days      = Math.max(0, Math.floor(secsLeft / 86400));
+          const label     = overdue ? '⚡ Halving Due!' : `${days}d left`;
+          return (
+            <div>
+              <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Next Halving</p>
+              <p className={`font-display font-bold text-lg sm:text-xl ${overdue ? 'text-accent-rose' : 'text-accent-amber'}`}>
+                {label}
+              </p>
+              <p className="text-text-secondary text-xs mt-0.5">
+                {overdue ? 'Emission will halve now' : `Emission → ${formatNumber((stats.annualEmission) / 2)} FBiT`}
+              </p>
+            </div>
+          );
+        })()}
+        {/* Reserve Runway — Polygon only */}
+        {network === 'polygon' && stats.remainingYears !== undefined && (
+          <div>
+            <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Reserve Runway</p>
+            <p className={`font-display font-bold text-lg sm:text-xl ${
+              (stats.remainingYears ?? 0) <= 1 ? 'text-accent-rose' :
+              (stats.remainingYears ?? 0) <= 3 ? 'text-accent-amber' : 'text-brand-400'
+            }`}>
+              {stats.remainingYears} yr{stats.remainingYears !== 1 ? 's' : ''}
+            </p>
+            <p className="text-text-secondary text-xs mt-0.5">
+              Reserve lasts at current emission
+            </p>
+          </div>
+        )}
         <div>
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Current APY</p>
           <p className="font-display font-bold text-lg sm:text-xl text-accent-cyan">
             {posApy}%
           </p>
-          <p className="text-text-secondary text-xs mt-0.5">PoS · 60%–500% range</p>
+          <p className="text-text-secondary text-xs mt-0.5">PoS · 60%–250% range</p>
         </div>
       </div>
     </div>
