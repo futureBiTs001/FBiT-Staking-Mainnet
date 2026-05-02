@@ -709,6 +709,26 @@ export async function polygonSetAnnualEmission(annualEmission: number): Promise<
   return { txHash: txHash(tx, receipt) };
 }
 
+export async function polygonBurnUnusedPool(amount: number): Promise<{ txHash: string }> {
+  await assertPolygonMainnet();
+  const contract = await getStakingContract();
+  const tx = await contract.burnUnusedPool(toWei(amount));
+  const receipt = await tx.wait();
+  return { txHash: txHash(tx, receipt) };
+}
+
+export async function polygonEmergencyWithdraw(
+  tokenAddress: string,
+  toAddress: string,
+  amount: number
+): Promise<{ txHash: string }> {
+  await assertPolygonMainnet();
+  const contract = await getStakingContract();
+  const tx = await contract.emergencyWithdraw(tokenAddress, toAddress, toWei(amount));
+  const receipt = await tx.wait();
+  return { txHash: txHash(tx, receipt) };
+}
+
 export async function polygonSetTeamTargetTier(
   index: number,
   minTeamStaked: number,

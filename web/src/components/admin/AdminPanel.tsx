@@ -39,6 +39,14 @@ export default function AdminPanel() {
   // Base fallback APY (Solana only — used when emission = 0)
   const [baseFallbackApyBps, setBaseFallbackApyBps] = useState('');
 
+  // Burn unused pool (Polygon only)
+  const [burnPoolAmount, setBurnPoolAmount] = useState('');
+
+  // Emergency withdraw (Polygon only, whenPaused)
+  const [emergencyToken,  setEmergencyToken]  = useState('');
+  const [emergencyTo,     setEmergencyTo]     = useState('');
+  const [emergencyAmount, setEmergencyAmount] = useState('');
+
   // Update User Team Stats state (Solana only)
   const [teamStatsAddress,      setTeamStatsAddress]      = useState('');
   const [teamStatsSize,         setTeamStatsSize]         = useState('');
@@ -145,6 +153,22 @@ export default function AdminPanel() {
 
   const handleTogglePause = () =>
     run('pause', () => contract.togglePause(platformStats.isPaused), platformStats.isPaused ? 'Platform resumed' : 'Platform paused');
+
+  const handleBurnUnusedPool = () => {
+    const n = parseFloat(burnPoolAmount);
+    if (!isValidAmount(n)) { toast.error('Enter a valid amount to burn.'); return; }
+    run('burnPool', () => contract.burnUnusedPool(n), `Burned ${formatNumber(n)} WFBIT from unused pool`);
+  };
+
+  const handleEmergencyWithdraw = () => {
+    const token = sanitizeText(emergencyToken);
+    const to    = sanitizeText(emergencyTo);
+    const n     = parseFloat(emergencyAmount);
+    if (!isValidWalletAddress(token)) { toast.error('Invalid token address.'); return; }
+    if (!isValidWalletAddress(to))    { toast.error('Invalid recipient address.'); return; }
+    if (!isValidAmount(n))            { toast.error('Enter a valid amount.'); return; }
+    run('emergencyWithdraw', () => contract.emergencyWithdraw(token, to, n), `Emergency withdrew ${formatNumber(n)} tokens to ${to.slice(0, 8)}…`);
+  };
 
 
   const handleRenounceOwnership = () => {
@@ -1346,6 +1370,93 @@ export default function AdminPanel() {
               </div>
             );
           })()}
+
+          {/* Burn Unused Pool — Polygon only */}
+          {selectedNetwork === 'polygon' && (
+            <div className="p-4 rounded-xl bg-surface-800/50 border border-white/5 space-y-3">
+              <div>
+                <p className="font-display font-medium">Burn Unused Pool</p>
+                <p className="text-text-muted text-sm mt-0.5">
+                  Permanently burn excess WFBIT from the reward pool. Tokens go to the dead address.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  placeholder="Amount to burn"
+                  value={burnPoolAmount}
+                  onChange={e => setBurnPoolAmount(e.target.value)}
+                  className="flex-1 bg-surface-700 border border-white/10 rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-400/50"
+                />
+                <AdminButton
+                  label="Burn"
+                  loadingLabel="Burning…"
+                  onClick={handleBurnUnusedPool}
+                  disabled={isRenounced || busy('burnPool')}
+                  loading={busy('burnPool')}
+                  variant="rose"
+                />
+              </div>
+              <p className="text-xs text-text-muted">
+                Pool balance: <span className="text-text-secondary font-mono">{formatNumber(platformStats.rewardPoolBalance)} WFBIT</span>
+              </p>
+            </div>
+          )}
+
+          {/* Emergency Withdraw — Polygon only, requires paused state */}
+          {selectedNetwork === 'polygon' && (
+            <div className={`p-4 rounded-xl border space-y-3 ${platformStats.isPaused ? 'bg-accent-amber/5 border-accent-amber/20' : 'bg-surface-800/30 border-white/5 opacity-60'}`}>
+              <div>
+                <p className="font-display font-medium flex items-center gap-2">
+                  🚨 Emergency Withdraw
+                  {!platformStats.isPaused && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-surface-700 text-text-muted border border-white/10 font-normal">
+                      Requires Paused
+                    </span>
+                  )}
+                </p>
+                <p className="text-text-muted text-sm mt-0.5">
+                  Withdraw any token from the contract. Only available when platform is paused.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="Token address (0x…)"
+                  value={emergencyToken}
+                  onChange={e => setEmergencyToken(e.target.value)}
+                  disabled={!platformStats.isPaused}
+                  className="w-full bg-surface-700 border border-white/10 rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-400/50 disabled:opacity-40"
+                />
+                <input
+                  type="text"
+                  placeholder="Recipient address (0x…)"
+                  value={emergencyTo}
+                  onChange={e => setEmergencyTo(e.target.value)}
+                  disabled={!platformStats.isPaused}
+                  className="w-full bg-surface-700 border border-white/10 rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-400/50 disabled:opacity-40"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    placeholder="Amount"
+                    value={emergencyAmount}
+                    onChange={e => setEmergencyAmount(e.target.value)}
+                    disabled={!platformStats.isPaused}
+                    className="flex-1 bg-surface-700 border border-white/10 rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-400/50 disabled:opacity-40"
+                  />
+                  <AdminButton
+                    label="Withdraw"
+                    loadingLabel="Withdrawing…"
+                    onClick={handleEmergencyWithdraw}
+                    disabled={!platformStats.isPaused || busy('emergencyWithdraw')}
+                    loading={busy('emergencyWithdraw')}
+                    variant="rose"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Renounce Ownership */}
           <div className={`p-4 rounded-xl border space-y-3 ${isRenounced ? 'bg-surface-800/20 border-white/5 opacity-60' : 'bg-accent-rose/5 border-accent-rose/20'}`}>

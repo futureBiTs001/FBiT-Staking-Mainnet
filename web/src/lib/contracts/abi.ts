@@ -24,6 +24,8 @@ export const FBIT_STAKING_ABI = [
   'function unblockUser(address user) external',
   'function pause() external',
   'function unpause() external',
+  'function burnUnusedPool(uint256 amount) external',
+  'function emergencyWithdraw(address token, address to, uint256 amount) external',
 
   // ── View ───────────────────────────────────────────────────────────────────
   'function totalStaked() external view returns (uint256)',
@@ -65,6 +67,7 @@ export const FBIT_STAKING_ABI = [
   `function getTeamTierInfo(address user) external view returns (uint8 tierIndex, uint256 bonusBps, uint256 teamTotalStaked)`,
   `function teamTargetTiers(uint256 index) external view returns (uint256 minTeamStaked, uint256 bonusBps)`,
   'function getReferrals(address user) external view returns (address[])',
+  'function getReferralChain(address user) external view returns (address[10] memory)',
   'function getReferralPercentages() external pure returns (uint256[10] memory)',
   'function MIN_STAKE_AMOUNT() external view returns (uint256)',
   'function MAX_STAKE_PER_USER() external view returns (uint256)',
@@ -87,6 +90,9 @@ export const FBIT_STAKING_ABI = [
   'event TeamTargetTierUpdated(uint8 indexed tierIndex, uint256 minTeamStaked, uint256 bonusBps)',
   'event TeamBonusApplied(address indexed user, uint256 indexed stakeId, uint256 bonusAmount)',
   'event TokensBurned(address indexed user, uint256 indexed stakeId, uint256 burnAmount, uint256 totalBurned)',
+  'event ReferralReward(address indexed staker, address indexed referrer, uint256 amount, uint8 level)',
+  'event ReferralSkipped(address indexed staker, address indexed referrer, uint8 level, uint256 needed, uint256 poolBalance)',
+  'event UnusedPoolBurned(uint256 burnAmount, uint256 totalYearlyBurned, uint256 remainingYears)',
   'event OwnershipRenounced(address indexed formerOwner, uint256 timestamp)',
   'event RenounceFeeCollected(address indexed recipient, address indexed claimant, uint256 feeAmount, uint256 totalFeesCollected)',
 ] as const;
