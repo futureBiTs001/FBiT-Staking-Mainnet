@@ -35,6 +35,8 @@ import {
   polygonSetAnnualEmission,
   polygonSetBurnBps,
   polygonSetTeamTargetTier,
+  polygonBurnUnusedPool,
+  polygonEmergencyWithdraw,
   polygonGetUserStakes,
   polygonGetTokenBalance,
   polygonGetUserAccount,
@@ -130,7 +132,10 @@ export interface ContractHook {
   setBaseFallbackApy(apyBps: number): Promise<{ txHash: string }>;
   /** Admin crank: set a user's team_size and team_total_staked on-chain. Solana only. */
   updateUserTeamStats(userAddress: string, teamSize: number, teamTotalStaked: number): Promise<{ txHash: string }>;
-
+  /** Burn excess reward pool tokens. Polygon only. */
+  burnUnusedPool(amount: number): Promise<{ txHash: string }>;
+  /** Emergency withdraw any token from contract (onlyOwner + whenPaused). Polygon only. */
+  emergencyWithdraw(tokenAddress: string, toAddress: string, amount: number): Promise<{ txHash: string }>;
 }
 
 export function useContract(): ContractHook {
@@ -411,6 +416,22 @@ export function useContract(): ContractHook {
     [selectedNetwork]
   );
 
+  const burnUnusedPool = useCallback(
+    (amount: number) => {
+      if (selectedNetwork === 'solana') return Promise.reject(new Error('Burn unused pool is not supported on Solana.'));
+      return polygonBurnUnusedPool(amount);
+    },
+    [selectedNetwork]
+  );
+
+  const emergencyWithdraw = useCallback(
+    (tokenAddress: string, toAddress: string, amount: number) => {
+      if (selectedNetwork === 'solana') return Promise.reject(new Error('Emergency withdraw is not supported on Solana.'));
+      return polygonEmergencyWithdraw(tokenAddress, toAddress, amount);
+    },
+    [selectedNetwork]
+  );
+
   return {
     isLive,
     isReady,
@@ -436,5 +457,7 @@ export function useContract(): ContractHook {
     triggerHalving,
     updateUserTeamStats,
     setBaseFallbackApy,
+    burnUnusedPool,
+    emergencyWithdraw,
   };
 }
