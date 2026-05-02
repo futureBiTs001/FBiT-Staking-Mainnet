@@ -150,8 +150,14 @@ export async function polygonFetchPlatformStats(): Promise<PlatformStats | null>
       NETWORK_CONFIG.polygon.contractAddress.toUpperCase().startsWith('YOUR_')) return null;
   try {
     const contract = getReadOnlyStakingContract();
-    const [totalStaked, totalUsers, rewardPoolBalance, rewardRate, referralRewardRate, paused, totalBurned, annualEmission, burnBps, effectiveAPY, isRenounced, feeRecipient, totalFeesCollected, totalReserve, emissionStartTime, totalEmissionReleased, releasableEmission, remainingYears, maxPendingRewards, minStakeRaw, maxStakeRaw, lockPeriodRaw] =
-      await Promise.all([
+    const [
+      totalStaked, totalUsers, rewardPoolBalance, rewardRate, referralRewardRate,
+      paused, totalBurned, annualEmission, burnBps, effectiveAPY,
+      isRenounced, feeRecipient, totalFeesCollected, totalReserve, emissionStartTime,
+      totalEmissionReleased, releasableEmission, remainingYears, maxPendingRewards,
+      minStakeRaw, maxStakeRaw, lockPeriodRaw, claimIntervalRaw,
+      totalYearlyBurnedRaw, lastYearBurnTimeRaw,
+    ] = await Promise.all([
         contract.totalStaked(),
         contract.totalUsers(),
         contract.rewardPoolBalance(),
@@ -173,7 +179,10 @@ export async function polygonFetchPlatformStats(): Promise<PlatformStats | null>
         contract.getMaxPendingRewards(),
         contract.MIN_STAKE_AMOUNT(),
         contract.MAX_STAKE_PER_USER(),
-        contract.LOCK_PERIOD(),
+        contract.LOCK_PERIOD(),        // returns 30 (days, NOT seconds)
+        contract.CLAIM_INTERVAL(),     // returns 43200 (seconds = 12h)
+        contract.totalYearlyBurned(),
+        contract.lastYearBurnTime(),
       ]);
     return {
       totalStaked: fromWei(totalStaked),
@@ -197,7 +206,10 @@ export async function polygonFetchPlatformStats(): Promise<PlatformStats | null>
       maxPendingRewards: fromWei(maxPendingRewards),
       minStakeAmount: fromWei(minStakeRaw),
       maxStakePerUser: fromWei(maxStakeRaw),
-      lockPeriodDays: Math.round(Number(lockPeriodRaw) / 86400),
+      lockPeriodDays: Number(lockPeriodRaw),       // LOCK_PERIOD is already in days (30)
+      claimIntervalSeconds: Number(claimIntervalRaw), // 43200 = 12h
+      totalYearlyBurned: fromWei(totalYearlyBurnedRaw),
+      lastYearBurnTime: Number(lastYearBurnTimeRaw),
     };
   } catch {
     return null;
@@ -580,7 +592,7 @@ export async function polygonGetOnChainHistory(address: string): Promise<import(
         records.push({
           id: `poly-stake-${ev.transactionHash}`,
           type: 'stake',
-          label: 'Staked FBiT on Polygon',
+          label: 'Staked WFBIT on Polygon',
           amount: fromWei(args.amount),
           txHash: ev.transactionHash,
           timestamp: ts,
@@ -637,7 +649,7 @@ export async function polygonGetOnChainHistory(address: string): Promise<import(
         records.push({
           id: `poly-unstake-${ev.transactionHash}`,
           type: 'unstake',
-          label: 'Unstaked FBiT on Polygon',
+          label: 'Unstaked WFBIT on Polygon',
           amount: fromWei(args.amount),
           txHash: ev.transactionHash,
           timestamp: ts,

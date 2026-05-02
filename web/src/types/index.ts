@@ -142,8 +142,14 @@ export interface PlatformStats {
   minStakeAmount?: number;
   /** Max stake per user in token units — read from contract (Polygon: MAX_STAKE_PER_USER) */
   maxStakePerUser?: number;
-  /** Lock period in days — read from contract (Polygon: LOCK_PERIOD / 86400) */
+  /** Lock period in days — read from contract (Polygon: LOCK_PERIOD, already in days) */
   lockPeriodDays?: number;
+  /** Minimum seconds between claims — read from contract (Polygon: CLAIM_INTERVAL = 43200 = 12h) */
+  claimIntervalSeconds?: number;
+  /** Cumulative tokens burned via year-end pool burns (Polygon only) */
+  totalYearlyBurned?: number;
+  /** Unix timestamp of last year-end burn (Polygon only) */
+  lastYearBurnTime?: number;
   /** Number of halvings that have already occurred (Solana only, 0 = no halving yet) */
   halvingEpoch?: number;
   /** Unix timestamp when the current halving epoch started — next halving = halvingStartTime + 365 days (Solana only) */
