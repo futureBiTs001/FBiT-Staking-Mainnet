@@ -16,6 +16,7 @@ import { useCallback, useMemo } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAppStore } from '@/lib/store';
 import { NETWORK_CONFIG } from '@/lib/config';
+import type { StakeEntry } from '@/types';
 
 import {
   polygonFetchPlatformStats,
@@ -251,7 +252,11 @@ export function useContract(): ContractHook {
             ? solanaGetReferralInfo(chainAddress)
             : polygonGetReferralInfo(chainAddress),
         ]);
-        if (stakesResult.status === 'fulfilled') update.stakes = stakesResult.value;
+        // Only overwrite stakes when the call succeeded AND returned non-null.
+        // null means an RPC error — preserve whatever the store already has.
+        if (stakesResult.status === 'fulfilled' && stakesResult.value !== null) {
+          update.stakes = stakesResult.value as StakeEntry[];
+        }
         if (userAccountResult.status === 'fulfilled' && userAccountResult.value) update.userAccount = userAccountResult.value;
         if (referralInfoResult.status === 'fulfilled' && referralInfoResult.value) {
           update.referralInfo = referralInfoResult.value;

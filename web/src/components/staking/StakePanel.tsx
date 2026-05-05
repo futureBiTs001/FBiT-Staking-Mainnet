@@ -115,8 +115,6 @@ export default function StakePanel() {
       const stakeEntryId = selectedNetwork === 'solana'
         ? (result.stakedAt ?? existingStakes.length)
         : existingStakes.length;
-      const storageKey = selectedNetwork === 'solana' ? 'fbit-referrer-solana' : 'fbit-referrer-polygon';
-      try { localStorage.removeItem(storageKey); } catch {}
       contract.syncPlatformStats().catch(() => {});
 
       const newStake: StakeEntry = {

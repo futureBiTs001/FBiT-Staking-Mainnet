@@ -160,10 +160,10 @@ export default function ReferralPanel() {
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Total Referrals', value: totalReferrals,            color: 'gradient-text' },
-          { label: 'Active',          value: activeReferrals,            color: 'text-brand-400' },
-          { label: 'Total Earned',    value: formatNumber(totalRewards), color: 'text-accent-cyan' },
-          { label: 'Team Size',       value: teamSize,                   color: 'text-accent-amber' },
+          { label: 'Total Referrals', value: totalReferrals,               color: 'gradient-text' },
+          { label: 'Active',          value: activeReferrals,               color: 'text-brand-400' },
+          { label: 'Total Earned',    value: formatNumber(totalRewards, 8), color: 'text-accent-cyan' },
+          { label: 'Team Size',       value: teamSize,                      color: 'text-accent-amber' },
         ].map(({ label, value, color }) => (
           <div key={label} className="glass-card text-center">
             <p className="text-text-muted text-xs font-display uppercase tracking-wider">{label}</p>
@@ -415,7 +415,7 @@ export default function ReferralPanel() {
                         </span>
                       </td>
                       <td className="py-3 text-right font-mono text-xs">{formatNumber(entry.stakedAmount)} FBiT</td>
-                      <td className="py-3 text-right font-mono text-xs text-brand-400">+{formatNumber(entry.rewardEarned)}</td>
+                      <td className="py-3 text-right font-mono text-xs text-brand-400">+{formatNumber(entry.rewardEarned, 8)}</td>
                       <td className="py-3 text-right pr-3 text-xs text-text-muted">
                         {new Date(entry.registeredAt * 1000).toLocaleDateString()}
                       </td>

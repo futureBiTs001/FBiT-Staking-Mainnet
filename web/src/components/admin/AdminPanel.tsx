@@ -31,10 +31,10 @@ export default function AdminPanel() {
   // Burn BPS management state
   const [burnBpsValue, setBurnBpsValue] = useState('');
 
-  // Team Target Tier management state
+  // Team Target Tier management state — pre-filled from Tier 1 defaults
   const [tierIndex,        setTierIndex]        = useState('0');
-  const [tierMinStaked,    setTierMinStaked]    = useState('');
-  const [tierBonusBps,     setTierBonusBps]     = useState('');
+  const [tierMinStaked,    setTierMinStaked]    = useState(String(TEAM_TARGET_TIERS[0].minTeamStaked));
+  const [tierBonusBps,     setTierBonusBps]     = useState(String(TEAM_TARGET_TIERS[0].bonusBps));
 
   // Base fallback APY (Solana only — used when emission = 0)
   const [baseFallbackApyBps, setBaseFallbackApyBps] = useState('');
@@ -975,7 +975,7 @@ export default function AdminPanel() {
               label="Update Tier On-Chain"
               loadingLabel="Updating…"
               onClick={handleSetTeamTier}
-              disabled={isRenounced || !tierMinStaked || !tierBonusBps || parseInt(tierBonusBps) <= 0 || parseInt(tierBonusBps) > 1000}
+              disabled={isRenounced || !tierMinStaked || !tierBonusBps || !(parseInt(tierBonusBps) >= 1 && parseInt(tierBonusBps) <= 1000) || !(parseFloat(tierMinStaked) > 0)}
               loading={busy('teamTier')}
               variant="amber"
             />
@@ -1392,7 +1392,7 @@ export default function AdminPanel() {
                   label="Burn"
                   loadingLabel="Burning…"
                   onClick={handleBurnUnusedPool}
-                  disabled={isRenounced || busy('burnPool')}
+                  disabled={isRenounced || !burnPoolAmount || parseFloat(burnPoolAmount) <= 0 || busy('burnPool')}
                   loading={busy('burnPool')}
                   variant="rose"
                 />

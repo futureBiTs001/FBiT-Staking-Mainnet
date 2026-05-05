@@ -100,10 +100,10 @@ function ActivityRow({ tx, network }: { tx: TxRecord; network: string }) {
       </div>
 
       {/* Amount */}
-      {tx.amount > 0 && (
+      {(tx.amount > 0 || tx.type === 'claim' || tx.type === 'compound') && (
         <div className="text-right shrink-0">
           <p className={`font-mono text-sm font-semibold ${cfg.text}`}>
-            {tx.type === 'unstake' ? '-' : '+'}{formatNumber(tx.amount)}
+            {tx.type === 'unstake' ? '-' : '+'}{formatNumber(tx.amount, tx.type === 'compound' || tx.type === 'referral' ? 8 : 2)}
           </p>
           <p className="text-text-muted text-[10px]">FBiT</p>
         </div>
@@ -138,6 +138,7 @@ export default function HistoryPanel() {
   const { address, solanaAddress, evmAddress } = useWallet();
   const { getWalletData, selectedNetwork, platformStats } = useAppStore();
   const walletData = getWalletData();
+  const onChainReferralEarned = walletData?.userAccount?.totalReferralRewards ?? 0;
   const localTxs: TxRecord[] = walletData?.transactions ?? [];
 
   const [filter, setFilter] = useState<FilterType>('all');
@@ -272,10 +273,10 @@ export default function HistoryPanel() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <SummaryCard label="Total Staked"    value={formatNumber(totalStaked)}    sub="FBiT staked"           color="text-brand-400" />
         <SummaryCard label="Total Unstaked"  value={formatNumber(totalUnstaked)}  sub="FBiT withdrawn"        color="text-accent-rose" />
-        <SummaryCard label="Total Claimed"   value={formatNumber(totalClaimed)}   sub="FBiT rewards claimed"  color="text-accent-cyan" />
-        <SummaryCard label="Total Compound"  value={formatNumber(totalCompound)}  sub="FBiT re-staked"        color="text-accent-purple" />
-        <SummaryCard label="Referral Earned" value={formatNumber(totalReferral)}  sub="FBiT from referrals"   color="text-accent-amber" />
-        <SummaryCard label="Team Bonus"      value={formatNumber(totalTeamBonus)} sub="FBiT bonus rewards"    color="text-emerald-400" />
+        <SummaryCard label="Total Claimed"   value={formatNumber(totalClaimed, 8)}   sub="FBiT rewards claimed"  color="text-accent-cyan" />
+        <SummaryCard label="Total Compound"  value={formatNumber(totalCompound, 8)}  sub="FBiT re-staked"        color="text-accent-purple" />
+        <SummaryCard label="Referral Earned" value={formatNumber(onChainReferralEarned, 8)} sub="FBiT from referrals" color="text-accent-amber" />
+        <SummaryCard label="Team Bonus"      value={formatNumber(totalTeamBonus, 8)} sub="FBiT bonus rewards"    color="text-emerald-400" />
       </div>
 
       {/* Platform snapshot */}
@@ -284,7 +285,7 @@ export default function HistoryPanel() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div>
             <p className="text-text-muted text-xs">Total Burned 🔥</p>
-            <p className="font-display font-bold text-accent-rose">{formatNumber(platformStats.totalBurned ?? 0)}</p>
+            <p className="font-display font-bold text-accent-rose">{formatNumber(platformStats.totalBurned ?? 0, 8)}</p>
           </div>
           <div>
             <p className="text-text-muted text-xs">Reward Pool</p>

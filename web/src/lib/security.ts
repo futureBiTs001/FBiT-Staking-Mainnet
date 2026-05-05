@@ -151,6 +151,11 @@ export function sanitizeErrorMessage(err: unknown): string {
   if (raw.includes('Stake below minimum')) return 'Minimum stake is 1 FBiT.';
   if (raw.includes('Stake exceeds maximum')) return 'Maximum stake is 500,000,000 FBiT.';
   if (raw.includes('pool fully reserved for pending')) return 'Cannot withdraw: reward pool is fully reserved for pending user rewards.';
+  if (raw.includes('Cooldown') || raw.includes('cooldown') || raw.includes('claim interval') || raw.includes('Claim interval')) return 'Claim cooldown not met — please wait until the 12h interval has passed.';
+  if (raw.includes('Insufficient reward') || raw.includes('insufficient reward')) return 'Reward pool has insufficient balance. Please try again later.';
+  if (raw.includes('User is blocked') || raw.includes('user is blocked')) return 'This wallet has been blocked from claiming.';
+  if (raw.includes('No reward') || raw.includes('no reward') || raw.includes('Nothing to claim')) return 'No claimable reward yet. Rewards accrue every 12 hours.';
+  if (raw.includes('Paused') || raw.includes('paused') || raw.includes('pausable')) return 'The staking contract is paused. Please try again later.';
 
   let safe = raw;
   for (const pattern of _SENSITIVE_PATTERNS) {

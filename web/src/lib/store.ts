@@ -330,7 +330,7 @@ export const useAppStore = create<AppState>()(
       },
     }),
     {
-      name: 'fbit-staking-v4',
+      name: 'fbit-staking-v5',
       storage: createJSONStorage(() =>
         typeof window !== 'undefined' ? localStorage : (undefined as any)
       ),
@@ -348,9 +348,22 @@ export const useAppStore = create<AppState>()(
         if (ps.burnBps === 2500) ps.burnBps = 1000;
         // Migrate: if persisted effectiveAPY is old 100% default (10000), reset to 60% (6000)
         if (ps.effectiveAPY === 10000) ps.effectiveAPY = 6000;
+
+        // Sanitize: strip any stakes with non-numeric IDs (stale data from old versions)
+        const walletStates = (persisted as any)?.walletStates ?? {};
+        for (const addr of Object.keys(walletStates)) {
+          const wd = walletStates[addr];
+          if (wd?.stakes) {
+            wd.stakes = (wd.stakes as StakeEntry[]).filter(
+              s => typeof s.id === 'number' || (typeof s.id === 'string' && s.id !== '' && Number.isFinite(parseInt(s.id, 10)))
+            );
+          }
+        }
+
         return {
           ...current,
           ...(persisted ?? {}),
+          walletStates,
           platformStats: { ...BASE_PLATFORM_STATS, ...ps },
         };
       },

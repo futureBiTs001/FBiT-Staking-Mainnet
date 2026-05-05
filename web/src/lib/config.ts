@@ -25,7 +25,7 @@ export const NETWORK_CONFIG: Record<string, NetworkConfig> = {
     contractAddress:    process.env.NEXT_PUBLIC_POLYGON_CONTRACT_ADDRESS ?? '',
     stakeTokenAddress:  process.env.NEXT_PUBLIC_POLYGON_STAKE_TOKEN      ?? '',
     rewardTokenAddress: process.env.NEXT_PUBLIC_POLYGON_REWARD_TOKEN     ?? '',
-    stakeTokenSymbol:   'FBiT',
+    stakeTokenSymbol:   'WFBIT',
     stakeTokenDecimals: 6,
   },
 };
