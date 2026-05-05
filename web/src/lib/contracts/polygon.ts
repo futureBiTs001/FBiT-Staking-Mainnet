@@ -12,7 +12,7 @@ import { FBIT_STAKING_ABI, ERC20_ABI } from './abi';
 import { NETWORK_CONFIG } from '@/lib/config';
 import type { PlatformStats, StakeEntry, UserAccount, ReferralInfo, ReferralEntry } from '@/types';
 
-const DECIMALS = 8;
+const DECIMALS = 6;
 
 function toWei(amount: number): bigint {
   if (!Number.isFinite(amount) || amount < 0) {
