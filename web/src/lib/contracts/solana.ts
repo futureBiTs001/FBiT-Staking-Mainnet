@@ -727,7 +727,7 @@ function getReadOnlyProgram(): Program {
  * Fetch all active StakeEntry accounts for a given owner.
  * Uses a memcmp filter on the owner field (offset 8, after discriminator).
  */
-export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEntry[]> {
+export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEntry[] | null> {
   try {
     const owner = new PublicKey(ownerAddress);
     const program = getReadOnlyProgram();
@@ -752,7 +752,7 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
         };
       });
   } catch {
-    return [];
+    return null;
   }
 }
 

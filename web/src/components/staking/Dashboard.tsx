@@ -9,6 +9,7 @@ import {
   formatNumber,
   getTimeRemaining,
   calculatePendingReward,
+  calculateLivePendingReward,
   getLockPeriodInfo,
   canClaimRewards,
   getNextClaimLabel,
@@ -92,14 +93,23 @@ export default function Dashboard() {
   const referralInfo = walletData?.referralInfo ?? null;
   const transactions = walletData?.transactions ?? [];
 
-  const activeStakes = stakes.filter(s => s.isActive);
+  const activeStakes = stakes
+    .filter(s => s.isActive)
+    .filter(s => {
+      const id = typeof s.id === 'number' ? s.id : parseInt(String(s.id), 10);
+      return Number.isFinite(id) && id >= 0 && Number.isInteger(id);
+    });
   const totalUserStaked = activeStakes.reduce((a, s) => a + s.amount, 0);
-  // For Polygon: use on-chain pendingReward when available (fetched via getPendingReward).
-  // For Solana: always use client-side calculation (no view function in program).
-  const getPending = (s: typeof activeStakes[0]) =>
+  // Live display reward — counts smoothly every second for visual feedback.
+  // Actual claimable amount (on-chain, discrete 12h intervals) is used inside handleClaim/handleCompound.
+  const getLiveDisplay = (s: typeof activeStakes[0]) =>
+    calculateLivePendingReward(s.amount, s.apy, s.lastClaimAt);
+
+  // Fallback for claim handler when on-chain result.reward is 0.
+  const getDiscretePending = (s: typeof activeStakes[0]) =>
     s.pendingReward !== undefined ? s.pendingReward : calculatePendingReward(s.amount, s.apy, s.lastClaimAt);
 
-  const totalPending = activeStakes.reduce((a, s) => a + getPending(s), 0);
+  const totalPending = activeStakes.reduce((a, s) => a + getLiveDisplay(s), 0);
   const totalClaimed = stakes.reduce((a, s) => a + s.totalClaimed, 0);
 
   const setActionLoading = (key: ActionKey, v: boolean) =>
@@ -108,6 +118,13 @@ export default function Dashboard() {
   const handleClaim = useCallback(async (stakeId: number | string) => {
     const stake = stakes.find(s => s.id === stakeId);
     if (!stake) return;
+    // Guard: stakeId must be a non-negative integer — stale localStorage can hold "" or NaN
+    const numericId = typeof stakeId === 'number' ? stakeId : parseInt(String(stakeId), 10);
+    if (!Number.isFinite(numericId) || numericId < 0) {
+      toast.error('Stake data is stale — refreshing from chain…');
+      void contract.syncUserData().catch(() => {});
+      return;
+    }
     if (!checkRateLimit('claim', { maxCalls: 5, windowMs: 60_000 })) {
       toast.error('Too many claim attempts. Please wait a minute.');
       return;
@@ -119,7 +136,7 @@ export default function Dashboard() {
       const result = await contract.claimRewards(stakeId, stake.stakedAt);
       const txHash = result.txHash;
       const reward = result.reward > 0 ? result.reward
-        : calculatePendingReward(stake.amount, stake.apy, stake.lastClaimAt);
+        : getDiscretePending(stake);
 
       // Burn always applies: burnBps% of gross reward burned from user's share
       const burnBps = platformStats.burnBps ?? 1000; // default 10%
@@ -162,7 +179,13 @@ export default function Dashboard() {
         toast.success(`✓ Claimed ${formatNumber(net)} FBiT · ${formatNumber(burned)} FBiT burned 🔥`);
       }
     } catch (err: any) {
-      toast.error(sanitizeErrorMessage(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('invalid BigNumberish') || msg.includes('BigNumberish')) {
+        toast.error('Transaction failed — please refresh the page and try again.');
+        void contract.syncUserData().catch(() => {});
+      } else {
+        toast.error(sanitizeErrorMessage(err));
+      }
     } finally {
       setActionLoading(key, false);
     }
@@ -171,6 +194,12 @@ export default function Dashboard() {
   const handleCompound = useCallback(async (stakeId: number | string) => {
     const stake = stakes.find(s => s.id === stakeId);
     if (!stake) return;
+    const numericId = typeof stakeId === 'number' ? stakeId : parseInt(String(stakeId), 10);
+    if (!Number.isFinite(numericId) || numericId < 0) {
+      toast.error('Stake data is stale — refreshing from chain…');
+      void contract.syncUserData().catch(() => {});
+      return;
+    }
     if (!checkRateLimit('compound', { maxCalls: 5, windowMs: 60_000 })) {
       toast.error('Too many compound attempts. Please wait a minute.');
       return;
@@ -182,7 +211,7 @@ export default function Dashboard() {
       const result = await contract.compoundRewards(stakeId, stake.stakedAt);
       const txHash = result.txHash;
       const reward = result.reward > 0 ? result.reward
-        : calculatePendingReward(stake.amount, stake.apy, stake.lastClaimAt);
+        : getDiscretePending(stake);
 
       // Burn always applies: burnBps% of gross reward burned from user's share
       const burnBps = platformStats.burnBps ?? 1000; // default 10%
@@ -200,7 +229,7 @@ export default function Dashboard() {
         addTransaction({
           id: Date.now().toString(),
           type: 'compound',
-          label: `Compounded ${formatNumber(net)} FBiT · ${formatNumber(burned)} burned · admin fee ${formatNumber(adminFee)} from pool`,
+          label: `Compounded ${formatNumber(net, 8)} FBiT · ${formatNumber(burned, 8)} burned · admin fee ${formatNumber(adminFee)} from pool`,
           amount: net,
           txHash,
           timestamp: Date.now(),
@@ -208,23 +237,29 @@ export default function Dashboard() {
           network: selectedNetwork,
         });
         toast.success(
-          `↑ Compounded ${formatNumber(net)} FBiT · ${formatNumber(burned)} burned 🔥 · admin fee: ${formatNumber(adminFee)} from pool`
+          `↑ Compounded ${formatNumber(net, 8)} FBiT · ${formatNumber(burned, 8)} burned 🔥 · admin fee: ${formatNumber(adminFee)} from pool`
         );
       } else {
         addTransaction({
           id: Date.now().toString(),
           type: 'compound',
-          label: `Compounded ${formatNumber(net)} FBiT (burned ${formatNumber(burned)})`,
+          label: `Compounded ${formatNumber(net, 8)} FBiT (burned ${formatNumber(burned, 8)})`,
           amount: net,
           txHash,
           timestamp: Date.now(),
           status: 'success',
           network: selectedNetwork,
         });
-        toast.success(`↑ Compounded ${formatNumber(net)} FBiT · ${formatNumber(burned)} FBiT burned 🔥`);
+        toast.success(`↑ Compounded ${formatNumber(net, 8)} FBiT · ${formatNumber(burned, 8)} FBiT burned 🔥`);
       }
     } catch (err: any) {
-      toast.error(sanitizeErrorMessage(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('invalid BigNumberish') || msg.includes('BigNumberish')) {
+        toast.error('Transaction failed — please refresh the page and try again.');
+        void contract.syncUserData().catch(() => {});
+      } else {
+        toast.error(sanitizeErrorMessage(err));
+      }
     } finally {
       setActionLoading(key, false);
     }
@@ -233,6 +268,12 @@ export default function Dashboard() {
   const handleUnstake = useCallback(async (stakeId: number | string) => {
     const stake = stakes.find(s => s.id === stakeId);
     if (!stake) return;
+    const numericId = typeof stakeId === 'number' ? stakeId : parseInt(String(stakeId), 10);
+    if (!Number.isFinite(numericId) || numericId < 0) {
+      toast.error('Stake data is stale — refreshing from chain…');
+      void contract.syncUserData().catch(() => {});
+      return;
+    }
     if (!checkRateLimit('unstake', { maxCalls: 3, windowMs: 60_000 })) {
       toast.error('Too many unstake attempts. Please wait a minute.');
       return;
@@ -260,7 +301,13 @@ export default function Dashboard() {
       });
       toast.success(`✓ Unstaked ${formatNumber(stake.amount)} FBiT — returned to wallet!`);
     } catch (err: any) {
-      toast.error(sanitizeErrorMessage(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('invalid BigNumberish') || msg.includes('BigNumberish')) {
+        toast.error('Transaction failed — please refresh the page and try again.');
+        void contract.syncUserData().catch(() => {});
+      } else {
+        toast.error(sanitizeErrorMessage(err));
+      }
     } finally {
       setActionLoading(key, false);
     }
@@ -308,8 +355,10 @@ export default function Dashboard() {
         </div>
         <div className="glass-card">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Pending Rewards</p>
-          <p className="stat-value text-xl sm:text-2xl md:text-3xl">{formatNumber(totalPending)}</p>
-          <p className="text-text-secondary text-xs mt-1">FBiT Claimable</p>
+          <p className="stat-value text-xl sm:text-2xl md:text-3xl tabular-nums">
+            {totalPending < 0.01 ? totalPending.toFixed(6) : formatNumber(totalPending, 4)}
+          </p>
+          <p className="text-text-secondary text-xs mt-1">WFBIT Accruing</p>
         </div>
         <div className="glass-card">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Total Claimed</p>
@@ -335,7 +384,7 @@ export default function Dashboard() {
         <div className="glass-card border border-accent-cyan/10 bg-linear-to-br from-accent-cyan/5 to-transparent">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Referral Earned</p>
           <p className="font-display font-bold text-2xl sm:text-3xl text-accent-cyan">
-            {formatNumber(userAccount?.totalReferralRewards ?? 0)}
+            {formatNumber(userAccount?.totalReferralRewards ?? 0, 8)}
           </p>
           <p className="text-text-secondary text-xs mt-1">FBiT from referrals</p>
         </div>
@@ -366,7 +415,7 @@ export default function Dashboard() {
           <div className="space-y-3">
             {activeStakes.map((stake) => {
               const period = getLockPeriodInfo(stake.lockPeriodIndex);
-              const pending = getPending(stake);
+              const pending = getLiveDisplay(stake);
               const daily = getDailyReward(stake.amount, stake.apy);
               const isUnlocked = Date.now() / 1000 >= stake.unlockAt;
               const claimable = canClaimRewards(stake.lastClaimAt);
@@ -401,7 +450,7 @@ export default function Dashboard() {
                         <p className="font-display font-semibold">{formatNumber(stake.amount)} FBiT</p>
                         <p className="text-text-muted text-xs">{period.label} lock · {stake.apy / 100}% APY</p>
                         <p className="text-text-muted text-xs mt-0.5">
-                          Per 12h: <span className="text-brand-400 font-mono">+{formatNumber(daily)}</span>
+                          Per 12h: <span className="text-brand-400 font-mono">+{daily < 0.01 ? daily.toFixed(6) : formatNumber(daily, 4)} WFBIT</span>
                         </p>
                       </div>
                     </div>
@@ -410,9 +459,12 @@ export default function Dashboard() {
                     <div className="flex flex-col sm:items-end gap-3 w-full sm:w-auto">
                       <div className="sm:text-right">
                         {/* Live ticking reward counter */}
-                        <p className="text-brand-400 font-mono text-sm font-semibold tabular-nums">
-                          +{formatNumber(pending, 4)} FBiT
-                        </p>
+                        <div className="flex items-center gap-1.5 sm:justify-end">
+                          <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse shrink-0" />
+                          <p className="text-brand-400 font-mono text-sm font-semibold tabular-nums">
+                            +{pending < 0.01 ? pending.toFixed(6) : formatNumber(pending, 4)} WFBIT
+                          </p>
+                        </div>
                         {claimable ? (
                           <p className="text-xs text-brand-400/70">Claim available now</p>
                         ) : (
@@ -432,7 +484,7 @@ export default function Dashboard() {
                           variant="brand"
                         />
                         <ActionButton
-                          label={compoundLoading ? 'Compounding…' : 'Compound'}
+                          label={compoundLoading ? 'Compounding…' : claimable ? 'Compound' : `Compound (${nextClaim})`}
                           disabled={!claimable || !!anyLoading}
                           loading={compoundLoading}
                           onClick={() => handleCompound(stake.id)}

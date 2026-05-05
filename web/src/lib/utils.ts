@@ -58,6 +58,21 @@ export const calculatePendingReward = (
   return (amount * (apy / 10000) * intervals) / 730;
 };
 
+/**
+ * Smooth display-only reward — counts every second so the UI feels live.
+ * Uses continuous time (no interval rounding), matching the discrete value
+ * exactly at each 12h boundary. Only used for visual display; actual
+ * on-chain reward still follows the 12h-interval contract logic.
+ */
+export const calculateLivePendingReward = (
+  amount: number,
+  apy: number,
+  lastClaimAt: number
+): number => {
+  const elapsedSeconds = Math.max(0, Date.now() / 1000 - lastClaimAt);
+  return (amount * (apy / 10000) * elapsedSeconds) / (365 * 24 * 3600);
+};
+
 export const getLockPeriodInfo = (_index?: number) => {
   return LOCK_PERIOD;
 };
