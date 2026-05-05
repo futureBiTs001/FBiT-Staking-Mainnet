@@ -69,7 +69,9 @@ function runFingerprint(): { score: number; signals: string[]; hasAuto: boolean 
   const signals: string[] = [];
   let score = 0;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nav = navigator as any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const win = window as any;
 
   // Automation tool markers
@@ -83,7 +85,7 @@ function runFingerprint(): { score: number; signals: string[]; hasAuto: boolean 
   if (win.__nightmare)                                                         { signals.push('nightmare');           score += 50; }
 
   // User-agent anomalies
-  const ua: string = nav.userAgent ?? '';
+  const ua: string = (nav.userAgent as string) ?? '';
   if (!ua)                                { signals.push('no-ua');                  score += 25; }
   else if (ua.includes('HeadlessChrome')) { signals.push('headless-chrome-ua');     score += 50; }
   else if (ua.includes('PhantomJS'))      { signals.push('phantomjs-ua');           score += 50; }
@@ -111,7 +113,7 @@ function runFingerprint(): { score: number; signals: string[]; hasAuto: boolean 
 
   // WebGL software renderer
   try {
-    const gl = document.createElement('canvas').getContext('webgl') as WebGLRenderingContext | null;
+    const gl = document.createElement('canvas').getContext('webgl');
     if (gl) {
       const ext = gl.getExtension('WEBGL_debug_renderer_info');
       if (ext) {
