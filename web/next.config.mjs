@@ -6,7 +6,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: 'export',
+  // 'export' removed — API routes (bot-assess + future server functions) require
+  // a Node.js runtime. Vercel handles hybrid static+serverless natively.
   trailingSlash: true,
   images: { unoptimized: true },
 

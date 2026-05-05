@@ -22,12 +22,12 @@ export interface BotGuardHook {
 
 export function useBotGuard(): BotGuardHook {
   const guard = getBotGuard();
-  const [assessment, setAssessment] = useState<BotAssessment>(() => guard.assess());
+  const [assessment,      setAssessment]      = useState<BotAssessment>(() => guard.assess());
   const [challengeNeeded, setChallengeNeeded] = useState(false);
-  const [triggerRisk, setTriggerRisk] = useState<RiskLevel | null>(null);
+  const [triggerRisk,     setTriggerRisk]     = useState<RiskLevel | null>(null);
 
-  // Wire the singleton callback so BotGuard can open the modal from anywhere
-  // (e.g. from inside a useContract callback).
+  // Wire singleton callback so BotGuard can open the modal from anywhere
+  // (including from inside a useContract callback).
   useEffect(() => {
     setChallengeRequiredCallback(() => {
       const a = guard.assess();
@@ -37,8 +37,24 @@ export function useBotGuard(): BotGuardHook {
     return () => setChallengeRequiredCallback(null);
   }, [guard]);
 
-  // Refresh the assessment every 5 s so the UI stays current as the
-  // behavioral score accumulates.
+  // Run Layer 7 (TF.js) + Layer 8 (Claude) once on mount, then every 30s.
+  // assessFull() is non-blocking — it updates cached state and the next
+  // assess() call picks it up automatically.
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      if (cancelled) return;
+      const full = await guard.assessFull();
+      if (!cancelled) setAssessment(full);
+    };
+
+    run();
+    const id = setInterval(run, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [guard]);
+
+  // Lightweight sync refresh every 5 s (captures behavioral score changes)
   useEffect(() => {
     const id = setInterval(() => setAssessment(guard.assess()), 5_000);
     return () => clearInterval(id);
@@ -57,7 +73,7 @@ export function useBotGuard(): BotGuardHook {
   }, []);
 
   const challengeRiskLevel: 'medium' | 'high' | null =
-    triggerRisk === 'high' ? 'high' :
+    triggerRisk === 'high'   ? 'high'   :
     triggerRisk === 'medium' ? 'medium' :
     null;
 
