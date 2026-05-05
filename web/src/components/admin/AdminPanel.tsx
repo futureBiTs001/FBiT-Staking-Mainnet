@@ -445,7 +445,7 @@ export default function AdminPanel() {
           { label: 'Reserve',      value: formatNumber(platformStats.totalReserve ?? 0),                              color: 'text-brand-400' },
           { label: 'Reward Pool',  value: formatNumber(platformStats.rewardPoolBalance),                              color: 'text-accent-cyan' },
           { label: 'Current APY',  value: `${Math.round((platformStats.effectiveAPY ?? 6000) / 100)}%`,             color: 'text-accent-amber' },
-          { label: 'Total Burned 🔥', value: formatNumber(platformStats.totalBurned ?? 0),                           color: 'text-accent-rose' },
+          { label: 'Total Burned 🔥', value: formatNumber(platformStats.totalBurned ?? 0, 8),                        color: 'text-accent-rose' },
         ].map(({ label, value, color }) => (
           <div key={label} className="glass-card text-center p-4">
             <p className="text-text-muted text-xs mb-1">{label}</p>
