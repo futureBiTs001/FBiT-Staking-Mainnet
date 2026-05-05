@@ -362,7 +362,7 @@ export default function Dashboard() {
         </div>
         <div className="glass-card">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Total Claimed</p>
-          <p className="stat-value text-xl sm:text-2xl md:text-3xl">{formatNumber(totalClaimed)}</p>
+          <p className="stat-value text-xl sm:text-2xl md:text-3xl">{formatNumber(totalClaimed, 8)}</p>
           <p className="text-text-secondary text-xs mt-1">FBiT Earned</p>
         </div>
         <div className="glass-card">
@@ -805,7 +805,7 @@ function BurnEmissionPanel({ stats, network }: { stats: PlatformStats; network: 
       <div className={`grid grid-cols-2 gap-4 ${colClass}`}>
         <div>
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Total Burned</p>
-          <p className="font-display font-bold text-accent-rose text-lg sm:text-xl">{formatNumber(stats.totalBurned)}</p>
+          <p className="font-display font-bold text-accent-rose text-lg sm:text-xl">{formatNumber(stats.totalBurned, 8)}</p>
           <p className="text-text-secondary text-xs mt-0.5">FBiT permanently destroyed</p>
         </div>
         <div>
