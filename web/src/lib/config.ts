@@ -11,7 +11,7 @@ export const NETWORK_CONFIG: Record<string, NetworkConfig> = {
     stakeTokenAddress:  process.env.NEXT_PUBLIC_SOLANA_STAKE_TOKEN_MINT ?? '',
     rewardTokenAddress: process.env.NEXT_PUBLIC_SOLANA_REWARD_TOKEN_MINT ?? '',
     stakeTokenSymbol:   'FBiT',
-    stakeTokenDecimals: 8,
+    stakeTokenDecimals: 6,
     stakeVaultAddress:   process.env.NEXT_PUBLIC_SOLANA_STAKE_VAULT,
     rewardVaultAddress:  process.env.NEXT_PUBLIC_SOLANA_REWARD_VAULT,
     reserveVaultAddress: process.env.NEXT_PUBLIC_SOLANA_RESERVE_VAULT,
@@ -26,7 +26,7 @@ export const NETWORK_CONFIG: Record<string, NetworkConfig> = {
     stakeTokenAddress:  process.env.NEXT_PUBLIC_POLYGON_STAKE_TOKEN      ?? '',
     rewardTokenAddress: process.env.NEXT_PUBLIC_POLYGON_REWARD_TOKEN     ?? '',
     stakeTokenSymbol:   'WFBIT',
-    stakeTokenDecimals: 8,
+    stakeTokenDecimals: 6,
   },
 };
 

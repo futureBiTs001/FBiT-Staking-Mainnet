@@ -24,7 +24,7 @@ function getProgramId(): PublicKey {
   if (!addr) throw new Error('Solana program ID not configured. Set NEXT_PUBLIC_SOLANA_PROGRAM_ID in your .env.local');
   return new PublicKey(addr);
 }
-const DECIMALS   = 8;
+const DECIMALS   = 6;
 const SCALE      = 10 ** DECIMALS;
 
 function toLamports(amount: number): BN {
