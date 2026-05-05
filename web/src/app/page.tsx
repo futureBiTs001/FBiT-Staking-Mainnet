@@ -3,15 +3,23 @@
 import React from 'react';
 import { Toaster } from 'react-hot-toast';
 import { useAppStore } from '@/lib/store';
+import { useBotGuard } from '@/hooks/useBotGuard';
 import Header from '@/components/layout/Header';
 import Dashboard from '@/components/staking/Dashboard';
 import StakePanel from '@/components/staking/StakePanel';
 import ReferralPanel from '@/components/referral/ReferralPanel';
 import AdminPanel from '@/components/admin/AdminPanel';
 import HistoryPanel from '@/components/history/HistoryPanel';
+import BotChallenge from '@/components/ui/BotChallenge';
 
 export default function Home() {
   const { activeTab, isAdmin } = useAppStore();
+  const {
+    challengeNeeded,
+    challengeRiskLevel,
+    onChallengeSolved,
+    onChallengeDismissed,
+  } = useBotGuard();
 
   const renderContent = () => {
     switch (activeTab) {
@@ -26,6 +34,15 @@ export default function Home() {
 
   return (
     <>
+      {/* Bot management challenge modal */}
+      {challengeNeeded && challengeRiskLevel && (
+        <BotChallenge
+          riskLevel={challengeRiskLevel}
+          onSolved={onChallengeSolved}
+          onDismiss={onChallengeDismissed}
+        />
+      )}
+
       {/* Global toast notifications — dark-themed */}
       <Toaster
         position="bottom-right"

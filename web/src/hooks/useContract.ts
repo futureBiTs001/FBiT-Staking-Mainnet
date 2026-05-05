@@ -16,7 +16,13 @@ import { useCallback, useMemo } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAppStore } from '@/lib/store';
 import { NETWORK_CONFIG } from '@/lib/config';
+import { getBotGuard } from '@/lib/botManagement';
 import type { StakeEntry } from '@/types';
+
+function botCheck(actionType: string): void {
+  const result = getBotGuard().canPerformAction(actionType);
+  if (!result.allowed) throw new Error(result.reason ?? 'Action blocked by security system.');
+}
 
 import {
   polygonFetchPlatformStats,
@@ -166,6 +172,7 @@ export function useContract(): ContractHook {
 
   const stake = useCallback(
     async (amount: number, referrer?: string) => {
+      botCheck('stake');
       if (selectedNetwork === 'solana') {
         return solanaStake(amount, referrer);
       }
@@ -177,6 +184,7 @@ export function useContract(): ContractHook {
 
   const claimRewards = useCallback(
     (stakeId: number | string, stakedAt: number) => {
+      botCheck('claim');
       if (selectedNetwork === 'solana') return solanaClaimRewards(stakeId, stakedAt);
       return polygonClaimRewards(stakeId);
     },
@@ -185,6 +193,7 @@ export function useContract(): ContractHook {
 
   const compoundRewards = useCallback(
     (stakeId: number | string, stakedAt: number) => {
+      botCheck('compound');
       if (selectedNetwork === 'solana') return solanaCompoundRewards(stakeId, stakedAt);
       return polygonCompoundRewards(stakeId);
     },
@@ -193,6 +202,7 @@ export function useContract(): ContractHook {
 
   const unstake = useCallback(
     (stakeId: number | string, stakedAt: number) => {
+      botCheck('unstake');
       if (selectedNetwork === 'solana') return solanaUnstake(Number(stakeId));
       return polygonUnstake(stakeId);
     },
