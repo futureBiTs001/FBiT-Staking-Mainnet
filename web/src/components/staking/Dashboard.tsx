@@ -356,7 +356,7 @@ export default function Dashboard() {
         <div className="glass-card">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Pending Rewards</p>
           <p className="stat-value text-xl sm:text-2xl md:text-3xl tabular-nums">
-            {totalPending < 0.01 ? totalPending.toFixed(6) : formatNumber(totalPending, 4)}
+            {formatNumber(totalPending, 8)}
           </p>
           <p className="text-text-secondary text-xs mt-1">WFBIT Accruing</p>
         </div>
@@ -450,7 +450,7 @@ export default function Dashboard() {
                         <p className="font-display font-semibold">{formatNumber(stake.amount)} FBiT</p>
                         <p className="text-text-muted text-xs">{period.label} lock · {stake.apy / 100}% APY</p>
                         <p className="text-text-muted text-xs mt-0.5">
-                          Per 12h: <span className="text-brand-400 font-mono">+{daily < 0.01 ? daily.toFixed(6) : formatNumber(daily, 4)} WFBIT</span>
+                          Per 12h: <span className="text-brand-400 font-mono">+{formatNumber(daily, 8)} WFBIT</span>
                         </p>
                       </div>
                     </div>
@@ -462,7 +462,7 @@ export default function Dashboard() {
                         <div className="flex items-center gap-1.5 sm:justify-end">
                           <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse shrink-0" />
                           <p className="text-brand-400 font-mono text-sm font-semibold tabular-nums">
-                            +{pending < 0.01 ? pending.toFixed(6) : formatNumber(pending, 4)} WFBIT
+                            +{formatNumber(pending, 8)} WFBIT
                           </p>
                         </div>
                         {claimable ? (
