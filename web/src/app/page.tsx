@@ -509,10 +509,10 @@ export default function LandingPage() {
                 </div>
               </div>
               <ul className="flex flex-col gap-2">
-                {['Anchor program on Mainnet','SPL Token (FBiT)','Phantom & Solflare support','<400ms finality','Permissionless halving trigger'].map(item => (
+                {['Anchor program on Mainnet','SPL Token (FBiT)','Phantom & Solflare support','&lt;400ms finality','Permissionless halving trigger'].map(item => (
                   <li key={item} className="flex items-center gap-2 text-sm text-text-secondary">
                     <FaCheck className="text-xs shrink-0" style={{ color: '#A855F7' }} />
-                    {item}
+                    <span dangerouslySetInnerHTML={{ __html: item }} />
                   </li>
                 ))}
               </ul>
