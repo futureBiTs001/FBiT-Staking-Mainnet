@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { useAppStore } from '@/lib/store';
 import { useWallet } from '@/context/WalletContext';
+import { useContract } from '@/hooks/useContract';
 import { getExplorerTxUrl } from '@/lib/config';
 import { formatNumber } from '@/lib/utils';
 import { sanitizeErrorMessage } from '@/lib/security';
@@ -142,10 +143,18 @@ export default function HistoryPanel() {
   const localTxs: TxRecord[] = walletData?.transactions ?? [];
   const allStakes = walletData?.stakes ?? [];
 
+  const contract = useContract();
+
   const [filter, setFilter] = useState<FilterType>('all');
   const [search, setSearch] = useState('');
   const [onChainTxs, setOnChainTxs] = useState<TxRecord[]>([]);
   const [isFetchingChain, setIsFetchingChain] = useState(false);
+
+  useEffect(() => {
+    if (!address) return;
+    void contract.syncUserData().catch(() => {});
+    void contract.syncPlatformStats().catch(() => {});
+  }, [address, selectedNetwork]);
 
   const handleRefreshFromChain = useCallback(async () => {
     if (!address) return;

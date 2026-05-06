@@ -765,6 +765,27 @@ export async function polygonTogglePause(currentlyPaused: boolean): Promise<{ tx
 
 // ── On-chain history ───────────────────────────────────────────────────────────
 
+// Polygon public RPCs cap eth_getLogs at 10 000 blocks per call.
+// This helper splits any range into 9 000-block chunks and merges results.
+async function queryFilterChunked(
+  contract: Contract,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  filter: any,
+  fromBlock: number,
+  toBlock: number,
+): Promise<any[]> {
+  const CHUNK = 9_000;
+  const all: any[] = [];
+  for (let from = fromBlock; from <= toBlock; from += CHUNK) {
+    const to = Math.min(from + CHUNK - 1, toBlock);
+    try {
+      const evs = await contract.queryFilter(filter, from, to);
+      all.push(...evs);
+    } catch { /* skip failed chunk */ }
+  }
+  return all;
+}
+
 /**
  * Fetch on-chain activity for a wallet from Polygon contract events.
  * Returns TxRecord[] sorted newest-first.
@@ -774,7 +795,12 @@ export async function polygonGetOnChainHistory(address: string): Promise<import(
   if (!contractAddress || contractAddress.toUpperCase().startsWith('YOUR_')) return [];
 
   const contract = getReadOnlyStakingContract();
+  const provider = getReadOnlyProvider();
   const records: import('@/types').TxRecord[] = [];
+
+  // Query last ~2 million blocks (≈11 days on Polygon) to keep RPC calls reasonable.
+  const toBlock   = await provider.getBlockNumber();
+  const fromBlock = Math.max(0, toBlock - 2_000_000);
 
   // Collect all events in parallel; each inner try isolates failures per type
   const blockCache = new Map<number, number>(); // blockNumber → timestamp(ms)
@@ -794,7 +820,7 @@ export async function polygonGetOnChainHistory(address: string): Promise<import(
   const settled = await Promise.allSettled([
     // 1. TokensStaked
     (async () => {
-      const evs = await contract.queryFilter(contract.filters.TokensStaked(address));
+      const evs = await queryFilterChunked(contract, contract.filters.TokensStaked(address), fromBlock, toBlock);
       for (const ev of evs) {
         const args = (ev as any).args;
         const ts = await getTs(ev as any);
@@ -813,7 +839,7 @@ export async function polygonGetOnChainHistory(address: string): Promise<import(
 
     // 2. RewardsClaimed
     (async () => {
-      const evs = await contract.queryFilter(contract.filters.RewardsClaimed(address));
+      const evs = await queryFilterChunked(contract, contract.filters.RewardsClaimed(address), fromBlock, toBlock);
       for (const ev of evs) {
         const args = (ev as any).args;
         const ts = await getTs(ev as any);
@@ -832,7 +858,7 @@ export async function polygonGetOnChainHistory(address: string): Promise<import(
 
     // 3. RewardsCompounded
     (async () => {
-      const evs = await contract.queryFilter(contract.filters.RewardsCompounded(address));
+      const evs = await queryFilterChunked(contract, contract.filters.RewardsCompounded(address), fromBlock, toBlock);
       for (const ev of evs) {
         const args = (ev as any).args;
         const ts = await getTs(ev as any);
@@ -851,7 +877,7 @@ export async function polygonGetOnChainHistory(address: string): Promise<import(
 
     // 4. TokensUnstaked
     (async () => {
-      const evs = await contract.queryFilter(contract.filters.TokensUnstaked(address));
+      const evs = await queryFilterChunked(contract, contract.filters.TokensUnstaked(address), fromBlock, toBlock);
       for (const ev of evs) {
         const args = (ev as any).args;
         const ts = await getTs(ev as any);
@@ -870,7 +896,7 @@ export async function polygonGetOnChainHistory(address: string): Promise<import(
 
     // 5. ReferralReward (where this address is the referrer)
     (async () => {
-      const evs = await contract.queryFilter(contract.filters.ReferralReward(null, address));
+      const evs = await queryFilterChunked(contract, contract.filters.ReferralReward(null, address), fromBlock, toBlock);
       for (const ev of evs) {
         const args = (ev as any).args;
         const ts = await getTs(ev as any);
@@ -890,7 +916,7 @@ export async function polygonGetOnChainHistory(address: string): Promise<import(
 
     // 6. TeamBonusApplied
     (async () => {
-      const evs = await contract.queryFilter(contract.filters.TeamBonusApplied(address));
+      const evs = await queryFilterChunked(contract, contract.filters.TeamBonusApplied(address), fromBlock, toBlock);
       for (const ev of evs) {
         const args = (ev as any).args;
         const ts = await getTs(ev as any);
