@@ -350,7 +350,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <div className="glass-card">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Total Staked</p>
-          <p className="stat-value text-xl sm:text-2xl md:text-3xl">{formatNumber(totalUserStaked)}</p>
+          <p className="stat-value text-xl sm:text-2xl md:text-3xl">{formatNumber(totalUserStaked, 8)}</p>
           <p className="text-text-secondary text-xs mt-1">FBiT Tokens</p>
         </div>
         <div className="glass-card">
@@ -367,7 +367,7 @@ export default function Dashboard() {
         </div>
         <div className="glass-card">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Wallet Balance</p>
-          <p className="stat-value text-xl sm:text-2xl md:text-3xl">{formatNumber(tokenBalance)}</p>
+          <p className="stat-value text-xl sm:text-2xl md:text-3xl">{formatNumber(tokenBalance, 8)}</p>
           <p className="text-text-secondary text-xs mt-1">FBiT Available</p>
         </div>
       </div>
