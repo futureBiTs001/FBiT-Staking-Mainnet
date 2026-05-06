@@ -277,8 +277,8 @@ export default function HistoryPanel() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <SummaryCard label="Total Staked"    value={formatNumber(totalStaked)}    sub="FBiT staked"           color="text-brand-400" />
-        <SummaryCard label="Total Unstaked"  value={formatNumber(totalUnstaked)}  sub="FBiT withdrawn"        color="text-accent-rose" />
+        <SummaryCard label="Total Staked"    value={formatNumber(totalStaked, 8)}    sub="FBiT staked"           color="text-brand-400" />
+        <SummaryCard label="Total Unstaked"  value={formatNumber(totalUnstaked, 8)}  sub="FBiT withdrawn"        color="text-accent-rose" />
         <SummaryCard label="Total Claimed"   value={formatNumber(totalClaimed, 8)}   sub="FBiT rewards claimed"  color="text-accent-cyan" />
         <SummaryCard label="Total Compound"  value={formatNumber(totalCompound, 8)}  sub="FBiT re-staked"        color="text-accent-purple" />
         <SummaryCard label="Referral Earned" value={formatNumber(onChainReferralEarned, 8)} sub="FBiT from referrals" color="text-accent-amber" />
