@@ -237,10 +237,6 @@ export default function AdminPanel() {
       toast.error(`Minimum annual emission is ${EMISSION_MIN.toLocaleString()} FBiT`);
       return;
     }
-    if (emission > EMISSION_MAX) {
-      toast.error(`Maximum annual emission is ${EMISSION_MAX.toLocaleString()} FBiT (1.00M)`);
-      return;
-    }
     run('annualEmission', () => contract.setAnnualEmission(emission), `Annual emission updated to ${emission.toLocaleString()} FBiT/year`);
   };
 
@@ -782,35 +778,121 @@ export default function AdminPanel() {
             <h3 className="font-display font-semibold text-lg">Annual Emission (PoS APY)</h3>
             <p className="text-text-muted text-xs -mt-2">
               Total FBiT distributed to stakers per year. APY auto-adjusts:
-              effectiveAPY = emission ÷ totalStaked, clamped between <span className="text-brand-400">60%</span> and <span className="text-brand-400">250%</span>.
-              More stakers → lower APY. Fewer stakers → higher APY.
+              <span className="text-brand-400 font-mono"> APY = emission ÷ totalStaked</span>, clamped between <span className="text-brand-400">60%</span> and <span className="text-brand-400">250%</span>.
+              More stakers → APY girta hai. Fewer stakers → APY badhta hai.
             </p>
-            <div className="p-3 rounded-xl bg-brand-500/5 border border-brand-500/20 text-xs text-text-muted space-y-1">
-              <p>Current emission: <span className="text-accent-cyan font-mono">{(platformStats.annualEmission ?? 0).toLocaleString()} FBiT/year</span></p>
-              <p>APY range: <span className="text-brand-400 font-semibold">60% – 250%</span></p>
+
+            {/* Current live stats */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="p-3 rounded-xl bg-surface-800/50 border border-white/5">
+                <p className="text-text-muted text-[10px] font-display uppercase tracking-wider mb-1">Current Emission</p>
+                <p className="font-mono font-bold text-accent-cyan text-sm">{(platformStats.annualEmission ?? 0).toLocaleString()}</p>
+                <p className="text-text-muted text-[10px]">FBiT/year</p>
+              </div>
+              <div className="p-3 rounded-xl bg-surface-800/50 border border-white/5">
+                <p className="text-text-muted text-[10px] font-display uppercase tracking-wider mb-1">Total Staked</p>
+                <p className="font-mono font-bold text-brand-400 text-sm">{(platformStats.totalStaked ?? 0).toLocaleString()}</p>
+                <p className="text-text-muted text-[10px]">FBiT</p>
+              </div>
+              <div className="p-3 rounded-xl bg-surface-800/50 border border-white/5">
+                <p className="text-text-muted text-[10px] font-display uppercase tracking-wider mb-1">Current APY</p>
+                <p className={`font-mono font-bold text-sm ${
+                  (platformStats.effectiveAPY ?? 0) >= 25000 ? 'text-accent-rose' :
+                  (platformStats.effectiveAPY ?? 0) <= 6000  ? 'text-accent-amber' : 'text-brand-400'
+                }`}>
+                  {Math.round((platformStats.effectiveAPY ?? 6000) / 100)}%
+                </p>
+                <p className="text-text-muted text-[10px]">
+                  {(platformStats.effectiveAPY ?? 0) >= 25000 ? '⚠ MAX cap' :
+                   (platformStats.effectiveAPY ?? 0) <= 6000  ? '⚠ MIN cap' : '✓ Dynamic'}
+                </p>
+              </div>
             </div>
-            <div>
-              <label className="text-sm text-text-secondary font-display mb-1 block">
-                New Annual Emission (FBiT/year) — Min: 10,000 · Max: 1,000,000
+
+            {/* APY target calculator */}
+            {(() => {
+              const staked = platformStats.totalStaked ?? 0;
+              if (staked === 0) return (
+                <div className="p-3 rounded-xl bg-accent-amber/5 border border-accent-amber/20 text-xs text-accent-amber">
+                  ⚠ Abhi koi stake nahi hai — jab users stake karenge tab APY dynamically change hoga.
+                  Pehle kuch tokens stake karo phir emission set karo.
+                </div>
+              );
+              const emFor250 = Math.ceil(staked * 2.5);
+              const emFor100 = Math.ceil(staked * 1.0);
+              const emFor60  = Math.ceil(staked * 0.6);
+              return (
+                <div className="p-3 rounded-xl bg-brand-500/5 border border-brand-500/10 space-y-2">
+                  <p className="text-xs font-display text-text-secondary font-semibold">
+                    APY Calculator — Total Staked: <span className="text-brand-400 font-mono">{staked.toLocaleString()} FBiT</span>
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setAnnualEmissionValue(String(emFor250))}
+                      className="p-2 rounded-lg bg-accent-rose/10 border border-accent-rose/20 hover:bg-accent-rose/20 transition-all cursor-pointer"
+                    >
+                      <p className="font-bold text-accent-rose">250% APY</p>
+                      <p className="font-mono text-text-muted mt-0.5">{emFor250.toLocaleString()}</p>
+                      <p className="text-[10px] text-text-muted">FBiT/year</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAnnualEmissionValue(String(emFor100))}
+                      className="p-2 rounded-lg bg-brand-500/10 border border-brand-500/20 hover:bg-brand-500/20 transition-all cursor-pointer"
+                    >
+                      <p className="font-bold text-brand-400">100% APY</p>
+                      <p className="font-mono text-text-muted mt-0.5">{emFor100.toLocaleString()}</p>
+                      <p className="text-[10px] text-text-muted">FBiT/year</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAnnualEmissionValue(String(emFor60))}
+                      className="p-2 rounded-lg bg-accent-amber/10 border border-accent-amber/20 hover:bg-accent-amber/20 transition-all cursor-pointer"
+                    >
+                      <p className="font-bold text-accent-amber">60% APY</p>
+                      <p className="font-mono text-text-muted mt-0.5">{emFor60.toLocaleString()}</p>
+                      <p className="text-[10px] text-text-muted">FBiT/year</p>
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-text-muted text-center">↑ Click any button to auto-fill</p>
+                </div>
+              );
+            })()}
+
+            {/* Input + live preview */}
+            <div className="space-y-2">
+              <label className="text-sm text-text-secondary font-display block">
+                New Annual Emission (FBiT/year)
               </label>
               <input
                 type="number"
                 value={annualEmissionValue}
                 onChange={(e) => setAnnualEmissionValue(e.target.value)}
-                placeholder="e.g. 1000000"
+                placeholder="e.g. 500000"
                 min={10_000}
-                max={1_000_000}
                 className="input-field font-mono"
               />
+              {/* Live APY preview */}
               {(() => {
-                const n = parseFloat(annualEmissionValue);
-                if (annualEmissionValue && n > 0 && n < EMISSION_MIN)
-                  return <p className="text-accent-rose text-xs mt-1">Minimum is 10,000 FBiT/year</p>;
-                if (annualEmissionValue && n > EMISSION_MAX)
-                  return <p className="text-accent-rose text-xs mt-1">Maximum is 1,000,000 FBiT/year (1.00M)</p>;
-                return null;
+                const n      = parseFloat(annualEmissionValue);
+                const staked = platformStats.totalStaked ?? 0;
+                if (!annualEmissionValue || isNaN(n) || n <= 0) return null;
+                if (n < EMISSION_MIN) return <p className="text-accent-rose text-xs mt-1">Minimum 10,000 FBiT/year</p>;
+                let previewApy = staked > 0 ? Math.round((n / staked) * 100) : 250;
+                previewApy = Math.min(250, Math.max(60, previewApy));
+                const color = previewApy >= 250 ? 'text-accent-rose' : previewApy <= 60 ? 'text-accent-amber' : 'text-brand-400';
+                return (
+                  <div className="flex items-center gap-2 mt-2 p-2 rounded-lg bg-surface-800/50 border border-white/5 text-xs">
+                    <span className="text-text-muted">Preview APY:</span>
+                    <span className={`font-mono font-bold ${color}`}>{previewApy}%</span>
+                    {previewApy >= 250 && <span className="text-accent-rose">(MAX cap — emission bahut zyada hai)</span>}
+                    {previewApy <= 60  && <span className="text-accent-amber">(MIN cap — emission kam hai)</span>}
+                  </div>
+                );
               })()}
             </div>
+
             <AdminButton
               label="Update Annual Emission"
               loadingLabel="Updating…"
@@ -818,8 +900,7 @@ export default function AdminPanel() {
               disabled={
                 isRenounced ||
                 !annualEmissionValue ||
-                parseFloat(annualEmissionValue) < EMISSION_MIN ||
-                parseFloat(annualEmissionValue) > EMISSION_MAX
+                parseFloat(annualEmissionValue) < EMISSION_MIN
               }
               loading={busy('annualEmission')}
               variant="purple"
