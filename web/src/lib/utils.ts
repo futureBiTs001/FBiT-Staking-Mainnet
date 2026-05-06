@@ -5,7 +5,7 @@ export const shortenAddress = (address: string, chars = 4): string => {
   return `${address.slice(0, chars + 2)}...${address.slice(-chars)}`;
 };
 
-export const formatNumber = (num: number, decimals = 2): string => {
+export const formatNumber = (num: number, decimals = 8): string => {
   if (num == null || Number.isNaN(num)) return (0).toFixed(decimals);
   if (num >= 1_000_000_000) return `${(num / 1_000_000_000).toFixed(decimals)}B`;
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(decimals)}M`;

@@ -158,12 +158,12 @@ export default function TokenPriceWidget() {
 
               {/* Volume */}
               <span className="font-mono text-xs text-text-secondary text-right hidden md:block">
-                ${formatNumber(pair.volume24h)}
+                ${formatNumber(pair.volume24h, 2)}
               </span>
 
               {/* Liquidity */}
               <span className="font-mono text-xs text-text-secondary text-right hidden lg:block">
-                ${formatNumber(pair.liquidityUsd)}
+                ${formatNumber(pair.liquidityUsd, 2)}
               </span>
             </a>
           ))
