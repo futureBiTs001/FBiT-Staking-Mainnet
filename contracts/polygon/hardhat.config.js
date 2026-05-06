@@ -19,19 +19,6 @@ module.exports = {
       gasPrice: 150000000000,  // 150 gwei — above current Polygon base fee (~89 gwei)
     },
   },
-  etherscan: {
-    apiKey: process.env.POLYGONSCAN_API_KEY || "",
-    customChains: [
-      {
-        network: "polygon_mainnet",
-        chainId: 137,
-        urls: {
-          apiURL: "https://api.polygonscan.com/api",
-          browserURL: "https://polygonscan.com",
-        },
-      },
-    ],
-  },
   sourcify: {
     enabled: true,
   },
