@@ -2,6 +2,8 @@
 
 A production-ready, decentralized staking platform for the **FBiT token** running on **Solana** and **Polygon** networks simultaneously. The platform implements Proof-of-Stake (PoS) APY, a 10-level referral commission system, a Team Target Bonus program, a deflationary burn mechanism, and an automated emission reserve — all governed by on-chain smart contracts.
 
+**Live Demo:** [https://stake-futurebit.vercel.app](https://stake-futurebit.vercel.app)
+
 ---
 
 ## Table of Contents
@@ -21,7 +23,8 @@ A production-ready, decentralized staking platform for the **FBiT token** runnin
 13. [Environment Variables](#13-environment-variables)
 14. [Deployment Guide](#14-deployment-guide)
 15. [Technology Stack](#15-technology-stack)
-16. [Token Addresses](#16-token-addresses)
+16. [Token & Contract Addresses](#16-token--contract-addresses)
+17. [Changelog](#17-changelog)
 
 ---
 
@@ -35,7 +38,7 @@ FBiT Staking is a fully on-chain staking DApp where users lock FBiT tokens for *
 |---------|---------|
 | Lock Period | 30 days (fixed) |
 | Claim Interval | Every 12 hours |
-| APY Range | 60% – 500% (auto-adjusting, PoS) |
+| APY Range | 60% – 250% (auto-adjusting, PoS) |
 | Burn Rate | 10% of gross reward (burned to dead address) |
 | Referral Levels | 10 levels deep |
 | Referral Total | 30% distributed across all 10 levels |
@@ -69,7 +72,7 @@ Rewards accumulate every **12 hours**. Formula:
 grossReward = stakedAmount × effectiveAPY × intervals / (730 × 10,000)
 
 Where:
-  effectiveAPY = clamp(ANNUAL_EMISSION × 10,000 / totalStaked, 10,000, 50,000)
+  effectiveAPY = clamp(ANNUAL_EMISSION × 10,000 / totalStaked, 6,000, 25,000)
   intervals    = seconds elapsed / 43,200 (each interval = 12 hours)
   730          = total 12-hour intervals in one year
 ```
@@ -213,13 +216,13 @@ Once per year, the contract automatically burns any **surplus** tokens in the ac
 effectiveAPY (bps) = clamp(
     ANNUAL_EMISSION × 10,000 / totalStaked,
     MIN_APY_BPS =  6,000,   // 60% floor
-    MAX_APY_BPS = 50,000    // 500% ceiling
+    MAX_APY_BPS = 25,000    // 250% ceiling
 )
 ```
 
-When no one is staking: APY = 500% (maximum, attracts stakers).
+When no one is staking: APY = 250% (maximum, attracts stakers).
 As more tokens are staked: APY decreases automatically.
-The APY is always between 60% and 500%.
+The APY is always between 60% and 250%.
 
 ---
 
@@ -299,7 +302,7 @@ uint256 public constant CLAIM_INTERVAL   = 43200;   // 12 hours
 uint256 public constant LOCK_PERIOD      = 30;      // 30 days
 uint256 public constant PLATFORM_FEE_BPS = 100;     // 1%
 uint256 public constant MIN_APY_BPS      =  6_000;  // 60%
-uint256 public constant MAX_APY_BPS      = 50_000;  // 500%
+uint256 public constant MAX_APY_BPS      = 25_000;  // 250%
 uint256 public constant MAX_BURN_BPS     = 5000;    // 50% max
 uint256 public BURN_BPS                  = 1000;    // 10% initial (adjustable)
 ```
@@ -387,6 +390,11 @@ Built with **Next.js 14** (App Router) + **TypeScript** + **Tailwind CSS**.
 |------|---------|
 | `AdminPanel.tsx` | Full admin control: fund pool, set rates, manage users, Team Tiers, Renounce Ownership |
 
+#### `web/src/components/history/`
+| File | Purpose |
+|------|---------|
+| `HistoryPanel.tsx` | Complete activity history: on-chain + local tx records, summary stats, chain refresh |
+
 #### `web/src/components/referral/`
 | File | Purpose |
 |------|---------|
@@ -417,7 +425,7 @@ Zustand store (`web/src/lib/store.ts`) with localStorage persistence:
 - `walletStates` — per-wallet stakes, transactions, balances, referral info
 - `platformStats` — total staked, APY, burn rate, pool balance, emission data
 
-Store key: `fbit-staking-v4` (versioned to force fresh state on breaking changes).
+Store key: `fbit-staking-v5` (versioned to force fresh state on breaking changes).
 
 ### Context
 `WalletContext.tsx` — unified wallet connection state:
@@ -585,8 +593,8 @@ NEXT_PUBLIC_SOLANA_REWARD_VAULT=  # Optional — auto-derived from Program ID
 NEXT_PUBLIC_POLYGON_RPC_URL=https://polygon-bor-rpc.publicnode.com
 NEXT_PUBLIC_POLYGON_CHAIN_ID=137
 NEXT_PUBLIC_POLYGON_CONTRACT_ADDRESS=<deployed_contract_address> # ⚠ Required
-NEXT_PUBLIC_POLYGON_STAKE_TOKEN=0x9003e7d3Fbec68bA1f2A253e7F1be9F631f46c55
-NEXT_PUBLIC_POLYGON_REWARD_TOKEN=0x9003e7d3Fbec68bA1f2A253e7F1be9F631f46c55
+NEXT_PUBLIC_POLYGON_STAKE_TOKEN=0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945
+NEXT_PUBLIC_POLYGON_REWARD_TOKEN=0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945
 ```
 
 > **Note:** The app shows a `ContractSetupNotice` warning until both `PROGRAM_ID` (Solana) and `CONTRACT_ADDRESS` (Polygon) are filled in. All staking buttons are disabled until contracts are configured.
@@ -620,9 +628,8 @@ Edit `contracts/polygon/.env`:
 ```
 PRIVATE_KEY=<your_deployer_private_key>
 POLYGON_MAINNET_RPC=https://polygon-bor-rpc.publicnode.com
-POLYGONSCAN_API_KEY=<your_polygonscan_api_key>
-STAKE_TOKEN_ADDRESS=0x9003e7d3Fbec68bA1f2A253e7F1be9F631f46c55
-REWARD_TOKEN_ADDRESS=0x9003e7d3Fbec68bA1f2A253e7F1be9F631f46c55
+STAKE_TOKEN_ADDRESS=0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945
+REWARD_TOKEN_ADDRESS=0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945
 ```
 
 ```bash
@@ -726,19 +733,55 @@ npm start
 
 ---
 
-## 16. Token Addresses
+## 16. Token & Contract Addresses
 
-### FBiT Token — Polygon Mainnet
+### WFBIT Token — Polygon Mainnet
 ```
-0x9003e7d3Fbec68bA1f2A253e7F1be9F631f46c55
+0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945
 ```
-[View on Polygonscan](https://polygonscan.com/token/0x9003e7d3Fbec68bA1f2A253e7F1be9F631f46c55)
+[View on Polygonscan](https://polygonscan.com/token/0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945)
+
+### FBiTStaking Contract — Polygon Mainnet
+```
+0xb86DA67406DaD482428704c14AdA269E9653FDca
+```
+[View on Polygonscan](https://polygonscan.com/address/0xb86DA67406DaD482428704c14AdA269E9653FDca)
 
 ### FBiT Token — Solana Mainnet
 ```
 CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu
 ```
 [View on Solana Explorer](https://explorer.solana.com/address/CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu)
+
+---
+
+## 17. Changelog
+
+### v1.5 — May 2026
+
+- **History Panel** — New dedicated Activity History tab showing on-chain + local transaction records with summary stats (Total Staked, Unstaked, Claimed, Compound, Referral Earned, Team Bonus)
+- **On-chain history sync** — `queryFilterChunked` helper splits Polygon event log queries into 9,000-block chunks to stay within RPC limits; scans last 2,000,000 blocks automatically
+- **8 decimal places** — All FBiT token amounts now display with 8 decimal places throughout the UI
+- **Loading indicator** — History panel shows "Loading data from chain..." while syncing
+- **`userAccount.totalStaked`** — History panel Total Staked now reads directly from the contract's user struct (most reliable source)
+- **Live APY calculator** — Admin Panel Annual Emission section shows real-time APY preview as admin types a new emission value
+
+### v1.4 — April 2026
+
+- **MAX APY reduced** — Changed from 500% to 250% cap (`MAX_APY_BPS = 25,000`) for sustainable tokenomics
+- **WFBIT token deployed** — New Polygon token `0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945` replaces old address
+- **New staking contract** — `FBiTStaking` redeployed at `0xb86DA67406DaD482428704c14AdA269E9653FDca`
+- **Bot Management System** — Multi-layer bot detection (fingerprinting, behavioral analysis, TF.js Layer 7, Claude AI Layer 8)
+- **Security hardening** — Rate limiting, input validation, HTTP headers, Polygonscan API key removed from codebase
+- **Zustand store v5** — Upgraded from v4 to force fresh state after breaking changes
+
+### v1.3 — March 2026
+
+- Multi-chain wallet connection (Solana + Polygon simultaneously)
+- Auto network switch on wallet connect
+- Referral Panel with 10-level commission tracking
+- Admin Panel with full on-chain controls
+- Landing page removed — DApp at root route
 
 ---
 
