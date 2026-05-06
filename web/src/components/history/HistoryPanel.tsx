@@ -201,8 +201,10 @@ export default function HistoryPanel() {
 
   // ── Summary stats ────────────────────────────────────────────────────────────
   // userAccount.totalStaked is the most reliable on-chain source (same API path as referral/claim data)
-  const totalStaked = walletData?.userAccount?.totalStaked
-    ?? (allStakes.length > 0
+  const _accountStaked = walletData?.userAccount?.totalStaked;
+  const totalStaked = (typeof _accountStaked === 'number' && !Number.isNaN(_accountStaked))
+    ? _accountStaked
+    : (allStakes.length > 0
       ? allStakes.reduce((a, s) => a + s.amount, 0)
       : transactions.filter(t => t.type === 'stake').reduce((a, t) => a + t.amount, 0));
   const totalUnstaked = allStakes.length > 0
