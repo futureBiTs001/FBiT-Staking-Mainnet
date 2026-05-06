@@ -104,7 +104,7 @@ function ActivityRow({ tx, network }: { tx: TxRecord; network: string }) {
       {(tx.amount > 0 || tx.type === 'claim' || tx.type === 'compound') && (
         <div className="text-right shrink-0">
           <p className={`font-mono text-sm font-semibold ${cfg.text}`}>
-            {tx.type === 'unstake' ? '-' : '+'}{formatNumber(tx.amount, tx.type === 'compound' || tx.type === 'referral' ? 8 : 2)}
+            {tx.type === 'unstake' ? '-' : '+'}{formatNumber(tx.amount, 8)}
           </p>
           <p className="text-text-muted text-[10px]">FBiT</p>
         </div>
