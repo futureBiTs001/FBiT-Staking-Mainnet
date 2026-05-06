@@ -577,8 +577,8 @@ export async function polygonGetUserStakes(address: string): Promise<StakeEntry[
     }
 
     return stakes;
-  } catch {
-    // Return null (not []) so callers can distinguish "RPC failed" from "no stakes"
+  } catch (err) {
+    console.warn('[polygonGetUserStakes] failed:', err);
     return null;
   }
 }

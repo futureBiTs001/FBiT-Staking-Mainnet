@@ -149,12 +149,16 @@ export default function HistoryPanel() {
   const [search, setSearch] = useState('');
   const [onChainTxs, setOnChainTxs] = useState<TxRecord[]>([]);
   const [isFetchingChain, setIsFetchingChain] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     if (!address) return;
-    void contract.syncUserData().catch(() => {});
-    void contract.syncPlatformStats().catch(() => {});
-  }, [address, selectedNetwork]);
+    setIsSyncing(true);
+    Promise.allSettled([
+      contract.syncUserData(),
+      contract.syncPlatformStats(),
+    ]).finally(() => setIsSyncing(false));
+  }, [address, selectedNetwork, contract.syncUserData, contract.syncPlatformStats]);
 
   const handleRefreshFromChain = useCallback(async () => {
     if (!address) return;
@@ -196,11 +200,12 @@ export default function HistoryPanel() {
   }, [onChainTxs, localTxs]);
 
   // ── Summary stats ────────────────────────────────────────────────────────────
-  // totalStaked: on-chain stakes ka sum (active + inactive) — transaction records pe depend nahi
-  const totalStaked    = allStakes.length > 0
-    ? allStakes.reduce((a, s) => a + s.amount, 0)
-    : transactions.filter(t => t.type === 'stake').reduce((a, t) => a + t.amount, 0);
-  const totalUnstaked  = allStakes.length > 0
+  // userAccount.totalStaked is the most reliable on-chain source (same API path as referral/claim data)
+  const totalStaked = walletData?.userAccount?.totalStaked
+    ?? (allStakes.length > 0
+      ? allStakes.reduce((a, s) => a + s.amount, 0)
+      : transactions.filter(t => t.type === 'stake').reduce((a, t) => a + t.amount, 0));
+  const totalUnstaked = allStakes.length > 0
     ? allStakes.filter(s => !s.isActive).reduce((a, s) => a + s.amount, 0)
     : transactions.filter(t => t.type === 'unstake').reduce((a, t) => a + t.amount, 0);
   const totalClaimed   = transactions.filter(t => t.type === 'claim').reduce((a, t) => a + t.amount, 0);
@@ -261,8 +266,11 @@ export default function HistoryPanel() {
         <div>
           <h2 className="font-display text-2xl font-bold">Activity History</h2>
           <p className="text-text-muted text-sm mt-1">
-            Your complete staking activity — {transactions.length} total records
-            {onChainTxs.length > 0 && (
+            {isSyncing
+              ? <span className="text-brand-400 animate-pulse">⟳ Loading data from chain...</span>
+              : <>Your complete staking activity — {transactions.length} total records</>
+            }
+            {!isSyncing && onChainTxs.length > 0 && (
               <span className="ml-2 text-brand-400">({onChainTxs.length} from chain)</span>
             )}
           </p>
