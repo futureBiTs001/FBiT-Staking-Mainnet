@@ -140,6 +140,7 @@ export default function HistoryPanel() {
   const walletData = getWalletData();
   const onChainReferralEarned = walletData?.userAccount?.totalReferralRewards ?? 0;
   const localTxs: TxRecord[] = walletData?.transactions ?? [];
+  const allStakes = walletData?.stakes ?? [];
 
   const [filter, setFilter] = useState<FilterType>('all');
   const [search, setSearch] = useState('');
@@ -186,8 +187,13 @@ export default function HistoryPanel() {
   }, [onChainTxs, localTxs]);
 
   // ── Summary stats ────────────────────────────────────────────────────────────
-  const totalStaked    = transactions.filter(t => t.type === 'stake').reduce((a, t) => a + t.amount, 0);
-  const totalUnstaked  = transactions.filter(t => t.type === 'unstake').reduce((a, t) => a + t.amount, 0);
+  // totalStaked: on-chain stakes ka sum (active + inactive) — transaction records pe depend nahi
+  const totalStaked    = allStakes.length > 0
+    ? allStakes.reduce((a, s) => a + s.amount, 0)
+    : transactions.filter(t => t.type === 'stake').reduce((a, t) => a + t.amount, 0);
+  const totalUnstaked  = allStakes.length > 0
+    ? allStakes.filter(s => !s.isActive).reduce((a, s) => a + s.amount, 0)
+    : transactions.filter(t => t.type === 'unstake').reduce((a, t) => a + t.amount, 0);
   const totalClaimed   = transactions.filter(t => t.type === 'claim').reduce((a, t) => a + t.amount, 0);
   const totalCompound  = transactions.filter(t => t.type === 'compound').reduce((a, t) => a + t.amount, 0);
   const totalReferral  = transactions.filter(t => t.type === 'referral').reduce((a, t) => a + t.amount, 0);
