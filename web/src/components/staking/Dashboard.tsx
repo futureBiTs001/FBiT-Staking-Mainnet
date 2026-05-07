@@ -47,9 +47,11 @@ export default function Dashboard() {
 
   // Direct balance fetch — reads straight from RPC into local state
   const [tokenBalance, setTokenBalance] = useState(0);
+  const [balanceFetching, setBalanceFetching] = useState(false);
 
   const fetchTokenBalance = useCallback(async () => {
     if (!address) return;
+    setBalanceFetching(true);
     try {
       let bal = 0;
       if (selectedNetwork === 'solana') {
@@ -61,11 +63,15 @@ export default function Dashboard() {
       }
       setTokenBalance(bal);
       loadOnChainData(address, { tokenBalance: bal });
-    } catch {}
+    } catch (err) {
+      console.warn('[fetchTokenBalance] failed:', err);
+    } finally {
+      setBalanceFetching(false);
+    }
   }, [address, solanaAddress, evmAddress, selectedNetwork, loadOnChainData]);
 
   useEffect(() => {
-    if (!address) { setTokenBalance(0); return; }
+    if (!address) { setTokenBalance(0); setBalanceFetching(false); return; }
     fetchTokenBalance();
     const id = setInterval(fetchTokenBalance, 30_000);
     return () => clearInterval(id);
@@ -367,7 +373,11 @@ export default function Dashboard() {
         </div>
         <div className="glass-card">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Wallet Balance</p>
-          <p className="stat-value text-xl sm:text-2xl md:text-3xl">{formatNumber(tokenBalance, 8)}</p>
+          {balanceFetching && tokenBalance === 0 ? (
+            <p className="stat-value text-xl sm:text-2xl md:text-3xl text-text-muted animate-pulse">···</p>
+          ) : (
+            <p className="stat-value text-xl sm:text-2xl md:text-3xl">{formatNumber(tokenBalance, 8)}</p>
+          )}
           <p className="text-text-secondary text-xs mt-1">FBiT Available</p>
         </div>
       </div>
