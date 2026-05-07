@@ -218,6 +218,11 @@ export default function Header() {
     }
     // "Already a member" path — check on-chain registration
     isDirectConnectRef.current = false;
+    // Admin wallet bypasses registration check
+    if (isAdmin) {
+      setShowReferralGate(false);
+      return;
+    }
     const verify = async () => {
       let registered = false;
       try {
@@ -232,10 +237,8 @@ export default function Header() {
         }
       } catch {}
       if (registered) {
-        // Already registered — close gate, proceed normally (no referral needed)
         setShowReferralGate(false);
       } else {
-        // Not registered yet — disconnect and re-show gate with explanation
         disconnect();
         toast.error('You\'re not yet registered. Please enter a referral address to join FBiT Staking.');
         setTimeout(() => setShowReferralGate(true), 400);
