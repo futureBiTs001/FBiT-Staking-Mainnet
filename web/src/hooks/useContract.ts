@@ -147,7 +147,7 @@ export interface ContractHook {
 
 export function useContract(): ContractHook {
   const { address, solanaAddress, evmAddress } = useWallet();
-  const { selectedNetwork, updatePlatformStats, loadOnChainData } = useAppStore();
+  const { selectedNetwork, updatePlatformStats, loadOnChainData, isAdmin } = useAppStore();
 
   // Resolve the chain-specific address for the selected network
   const chainAddress = selectedNetwork === 'solana'
@@ -222,10 +222,12 @@ export function useContract(): ContractHook {
 
     updatePlatformStats(stats);
 
-    // Auto-trigger halving when 1 year has elapsed (Solana, permissionless)
+    // Auto-trigger halving only when admin wallet is connected (permissionless on-chain,
+    // but uses the caller's SOL for tx fees — don't spend random users' SOL without consent)
     if (
       selectedNetwork === 'solana' &&
       chainAddress &&
+      isAdmin &&
       stats.halvingStartTime &&
       stats.halvingStartTime > 0
     ) {

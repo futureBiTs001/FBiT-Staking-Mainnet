@@ -403,7 +403,9 @@ export default function ReferralPanel() {
                 <tbody className="divide-y divide-white/5">
                   {referralInfo?.referrals.map((entry, i) => (
                     <tr key={i} className="hover:bg-white/2 transition-colors">
-                      <td className="py-3 pl-3 font-mono text-xs">{entry.address}</td>
+                      <td className="py-3 pl-3 font-mono text-xs" title={entry.address}>
+                        {entry.address.slice(0, 6)}...{entry.address.slice(-4)}
+                      </td>
                       <td className="py-3 text-center">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${
                           entry.level === 1 ? 'bg-brand-500/10 text-brand-400' :

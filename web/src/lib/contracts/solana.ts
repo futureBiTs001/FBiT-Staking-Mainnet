@@ -141,16 +141,25 @@ function ata(mint: PublicKey, owner: PublicKey): PublicKey {
 
 export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> {
   try {
-    const program = getProgram();
+    const program = getReadOnlyProgram();
     const [pda] = platformPda();
     const platform: any = await (program.account as any).platform.fetch(pda);
 
     const totalStaked = fromLamports(platform.totalStaked);
 
-    // Deployed program stores APY in baseApy[0] (basis points, e.g. 6000 = 60%).
-    const effectiveAPY = Math.min(25_000, Math.max(6_000,
-      platform.baseApy ? Number(platform.baseApy[0]) : 6_000
-    ));
+    // Live dynamic APY: annualEmission / totalStaked × 10000 (bps), same formula as on-chain.
+    // Falls back to baseApy[0] when emission is zero (admin hasn't funded yet).
+    let effectiveAPY = platform.baseApy
+      ? Math.min(25_000, Math.max(6_000, Number(platform.baseApy[0])))
+      : 6_000;
+    if (platform.annualEmission && platform.totalStaked) {
+      const emBN = new BN(platform.annualEmission.toString());
+      const stBN = new BN(platform.totalStaked.toString());
+      if (emBN.gtn(0) && stBN.gtn(0)) {
+        const raw = emBN.muln(10_000).div(stBN).toNumber();
+        effectiveAPY = Math.min(25_000, Math.max(6_000, raw));
+      }
+    }
     const halvingEpoch     = platform.halvingEpoch     ? Number(platform.halvingEpoch)     : 0;
     const halvingStartTime = platform.halvingStartTime ? Number(platform.halvingStartTime) : 0;
 
@@ -172,10 +181,10 @@ export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> 
 
     return {
       totalStaked,
-      totalUsers:            platform.totalUsers.toNumber(),
+      totalUsers:            platform.totalUsers ? Number(platform.totalUsers.toString()) : 0,
       rewardPoolBalance:     fromLamports(platform.rewardPoolBalance),
-      rewardRate:            platform.rewardRate.toNumber(),
-      referralRewardRate:    platform.referralRewardRate.toNumber(),
+      rewardRate:            platform.rewardRate ? Number(platform.rewardRate.toString()) : 0,
+      referralRewardRate:    platform.referralRewardRate ? Number(platform.referralRewardRate.toString()) : 0,
       isPaused:              platform.isPaused,
       totalBurned:           fromLamports(platform.totalBurned),
       annualEmission,
@@ -198,12 +207,18 @@ export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> 
 
 export async function solanaIsRegistered(owner: PublicKey): Promise<boolean> {
   try {
-    const program = getProgram();
+    const program = getReadOnlyProgram();
     const [pda] = userPda(owner);
     await (program.account as any).userAccount.fetch(pda);
     return true;
-  } catch {
-    return false;
+  } catch (err: any) {
+    const msg = String(err?.message ?? '');
+    // "Account does not exist" = PDA not initialized → user not registered
+    if (msg.includes('does not exist') || msg.includes('has no data') || msg.includes('Account not found')) {
+      return false;
+    }
+    // Any other error (network, RPC timeout) — rethrow so callers don't silently re-register
+    throw err;
   }
 }
 
@@ -219,8 +234,13 @@ export async function solanaRegisterUser(referrer?: string): Promise<{ txHash: s
   if (referrer) {
     try {
       referrerPubkey = new PublicKey(referrer);
+      // Client-side self-referral guard (on-chain also enforces error 6015)
+      if (referrerPubkey.equals(owner)) throw new Error('Cannot use your own wallet as referrer.');
       [referrerAccPda] = userPda(referrerPubkey);
-    } catch {}
+    } catch (err: any) {
+      if (err?.message?.includes('referrer')) throw err;
+      referrerPubkey = null; // invalid address — proceed without referrer
+    }
   }
 
   const tx = await (program.methods as any)
@@ -241,6 +261,7 @@ export async function solanaStake(
   amount: number,
   referrer?: string
 ): Promise<{ txHash: string; stakedAt: number }> {
+  if (!amount || amount < 1) throw new Error('Minimum stake is 1 FBiT.');
   const program  = getProgram();
   const owner    = getOwner();
   const [platPda] = platformPda();
@@ -278,6 +299,7 @@ export async function solanaStake(
 
   // Build remaining_accounts: walk the referral chain up to 10 levels.
   // Each level contributes 2 accounts: [UserAccount PDA (writable), reward ATA (writable)].
+  // ATAs are always canonically derived via ata(rewardMint, referrerPubkey) — never user-supplied.
   const remainingAccounts: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = [];
   try {
     // The staker's own account already has referrer stored on-chain (set during registerUser).
@@ -286,7 +308,14 @@ export async function solanaStake(
       ? new PublicKey(userAccData.referrer.toString())
       : null;
 
+    // Cycle detection: track seen pubkeys to prevent infinite loops in corrupted chains
+    const seenKeys = new Set<string>([owner.toBase58()]);
+
     for (let lvl = 0; lvl < 10 && currentReferrerKey !== null; lvl++) {
+      const keyStr = currentReferrerKey.toBase58();
+      if (seenKeys.has(keyStr)) break; // cycle detected — stop walking
+      seenKeys.add(keyStr);
+
       const [referrerUserPda] = userPda(currentReferrerKey);
       const referrerRewardAta = ata(rewardMint, currentReferrerKey);
 
@@ -353,14 +382,17 @@ export async function solanaClaimRewards(
     const intervals = Math.floor((now - entry.lastClaimAt.toNumber()) / 43200);
     // Live dynamic APY = emission / totalStaked (same as contract)
     let liveApy = 6_000;
-    if (platform.annualEmission && platform.totalStaked &&
-        platform.annualEmission.toNumber() > 0 && platform.totalStaked.toNumber() > 0) {
-      const raw = platform.annualEmission.toNumber() * 10_000 / platform.totalStaked.toNumber();
-      liveApy = Math.min(25_000, Math.max(6_000, raw));
-    } else {
-      liveApy = Math.min(25_000, Math.max(6_000,
-        platform.baseApy ? Number(platform.baseApy[0]) : 6_000
-      ));
+    if (platform.annualEmission && platform.totalStaked) {
+      const emBN = new BN(platform.annualEmission.toString());
+      const stBN = new BN(platform.totalStaked.toString());
+      if (emBN.gtn(0) && stBN.gtn(0)) {
+        const raw = emBN.muln(10_000).div(stBN).toNumber();
+        liveApy = Math.min(25_000, Math.max(6_000, raw));
+      } else {
+        liveApy = Math.min(25_000, Math.max(6_000,
+          platform.baseApy ? Number(platform.baseApy[0]) : 6_000
+        ));
+      }
     }
     reward = fromLamports(entry.amount) * liveApy * intervals / (730 * 10_000);
   } catch {}
@@ -424,14 +456,17 @@ export async function solanaCompoundRewards(
     const now = Math.floor(Date.now() / 1000);
     const intervals = Math.floor((now - entry.lastClaimAt.toNumber()) / 43200);
     let liveApy = 6_000;
-    if (platform.annualEmission && platform.totalStaked &&
-        platform.annualEmission.toNumber() > 0 && platform.totalStaked.toNumber() > 0) {
-      const raw = platform.annualEmission.toNumber() * 10_000 / platform.totalStaked.toNumber();
-      liveApy = Math.min(25_000, Math.max(6_000, raw));
-    } else {
-      liveApy = Math.min(25_000, Math.max(6_000,
-        platform.baseApy ? Number(platform.baseApy[0]) : 6_000
-      ));
+    if (platform.annualEmission && platform.totalStaked) {
+      const emBN = new BN(platform.annualEmission.toString());
+      const stBN = new BN(platform.totalStaked.toString());
+      if (emBN.gtn(0) && stBN.gtn(0)) {
+        const raw = emBN.muln(10_000).div(stBN).toNumber();
+        liveApy = Math.min(25_000, Math.max(6_000, raw));
+      } else {
+        liveApy = Math.min(25_000, Math.max(6_000,
+          platform.baseApy ? Number(platform.baseApy[0]) : 6_000
+        ));
+      }
     }
     reward = fromLamports(entry.amount) * liveApy * intervals / (730 * 10_000);
   } catch {}
@@ -588,10 +623,30 @@ export async function solanaReleaseEmission(): Promise<{ txHash: string }> {
   const program   = getProgram();
   const [platPda] = platformPda();
 
+  // Pre-check: verify that emission is actually available before spending SOL on tx fees.
+  // Mirrors the on-chain releasable = min(reserve, accrued - released) calculation.
+  try {
+    const platform: any = await (program.account as any).platform.fetch(platPda);
+    const annualEmission = platform.annualEmission ? new BN(platform.annualEmission.toString()).toNumber() : 0;
+    const totalReserve   = platform.totalReserve   ? new BN(platform.totalReserve.toString()).toNumber()   : 0;
+    if (annualEmission === 0) throw new Error('Annual emission is not configured yet. Set annual emission first.');
+    if (totalReserve   === 0) throw new Error('Reserve vault is empty. Deposit tokens first.');
+    const emissionStart    = platform.emissionStartTime ? Number(platform.emissionStartTime) : 0;
+    const totalReleased    = platform.totalEmissionReleased ? new BN(platform.totalEmissionReleased.toString()).toNumber() : 0;
+    if (emissionStart > 0) {
+      const elapsed    = Math.max(0, Math.floor(Date.now() / 1000) - emissionStart);
+      const accrued    = annualEmission * (elapsed / (365 * 24 * 3600));
+      const releasable = Math.max(0, Math.min(totalReserve, accrued - totalReleased));
+      if (releasable < SCALE) throw new Error('No emission available to release yet — wait for more time to accrue.');
+    }
+  } catch (err: any) {
+    // Only block when we computed "nothing to release"; let other errors through (RPC issues etc.)
+    if (err?.message?.includes('emission') || err?.message?.includes('Reserve') || err?.message?.includes('No emission')) throw err;
+  }
+
   const reserveVault = getReserveVault();
   const rewardVault  = getRewardVault();
 
-  // releaseEmission is permissionless — no authority required
   const tx = await (program.methods as any)
     .releaseEmission()
     .accounts({
@@ -624,10 +679,11 @@ export async function solanaSetReferralRewardRate(rate: number): Promise<{ txHas
 }
 
 export async function solanaBlockUser(userAddress: string): Promise<{ txHash: string }> {
+  let targetKey: PublicKey;
+  try { targetKey = new PublicKey(userAddress); } catch { throw new Error('Invalid Solana address'); }
   const program  = getProgram();
   const owner    = getOwner();
   const [platPda] = platformPda();
-  const targetKey = new PublicKey(userAddress);
   const [targetPda] = userPda(targetKey);
   const tx = await (program.methods as any).blockUser()
     .accounts({ platform: platPda, userAccount: targetPda, authority: owner }).rpc();
@@ -635,10 +691,11 @@ export async function solanaBlockUser(userAddress: string): Promise<{ txHash: st
 }
 
 export async function solanaUnblockUser(userAddress: string): Promise<{ txHash: string }> {
+  let targetKey: PublicKey;
+  try { targetKey = new PublicKey(userAddress); } catch { throw new Error('Invalid Solana address'); }
   const program  = getProgram();
   const owner    = getOwner();
   const [platPda] = platformPda();
-  const targetKey = new PublicKey(userAddress);
   const [targetPda] = userPda(targetKey);
   const tx = await (program.methods as any).unblockUser()
     .accounts({ platform: platPda, userAccount: targetPda, authority: owner }).rpc();
@@ -735,8 +792,11 @@ export async function solanaRenounceOwnership(): Promise<{ txHash: string }> {
 // ── Read-only helpers ──────────────────────────────────────────────────────────
 
 /** Returns a read-only Anchor program instance (no wallet signer required). */
+// Reliable RPC for read-only queries — mainnet-beta first (publicnode 504s on some methods)
+const READ_RPC = 'https://api.mainnet-beta.solana.com';
+
 function getReadOnlyProgram(): Program {
-  const connection = new Connection(NETWORK_CONFIG.solana.rpcUrl, 'confirmed');
+  const connection = new Connection(READ_RPC, 'confirmed');
   // Anchor requires a wallet shape but read ops don't sign anything
   const noopWallet = {
     publicKey: new PublicKey('11111111111111111111111111111111'),
@@ -755,7 +815,9 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
   try {
     const owner = new PublicKey(ownerAddress);
     const program = getReadOnlyProgram();
+    // dataSize: 8(disc) + 32+8+1+8+8+8+8+1+8+8+1 = 99 — prevents Platform/UserAccount false matches
     const all = await (program.account as any).stakeEntry.all([
+      { dataSize: 99 },
       { memcmp: { offset: 8, bytes: owner.toBase58() } },
     ]);
     return (all as any[])
@@ -783,16 +845,24 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
 
 // Raw JSON-RPC helper — bypasses @solana/web3.js Connection to avoid URL
 // manipulation issues with the Next.js dev proxy (trailingSlash redirect).
+// 8-second timeout per endpoint so a hanging gateway (e.g. 504) doesn't block the fallback chain.
 async function rpcCall(endpoint: string, method: string, params: unknown[]): Promise<any> {
-  const res = await fetch(endpoint, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-  });
-  if (!res.ok) throw new Error(`RPC ${res.status}`);
-  const json = await res.json();
-  if (json.error) throw new Error(json.error.message ?? 'RPC error');
-  return json.result;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8_000);
+  try {
+    const res = await fetch(endpoint, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      signal:  controller.signal,
+    });
+    if (!res.ok) throw new Error(`RPC ${res.status}`);
+    const json = await res.json();
+    if (json.error) throw new Error(json.error.message ?? 'RPC error');
+    return json.result;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -809,13 +879,14 @@ export async function solanaGetTokenBalance(ownerAddress: string): Promise<numbe
 
   try { new PublicKey(ownerAddress); new PublicKey(stakeTokenAddr); } catch { return 0; }
 
+  // publicnode.com returns 504 for getTokenAccountsByOwner — put reliable endpoints first.
   const endpoints = [
-    'https://solana-rpc.publicnode.com',
-    NETWORK_CONFIG.solana.rpcUrl,
     'https://api.mainnet-beta.solana.com',
+    'https://solana-mainnet.g.alchemy.com/v2/demo',
+    NETWORK_CONFIG.solana.rpcUrl,
+    'https://solana-rpc.publicnode.com',
   ].filter((u, i, a) => u && a.indexOf(u) === i);
 
-  // Use getTokenAccountsByOwner — works with both SPL Token and Token-2022
   for (const rpc of endpoints) {
     try {
       const result = await rpcCall(rpc, 'getTokenAccountsByOwner', [
@@ -835,7 +906,7 @@ export async function solanaGetTokenBalance(ownerAddress: string): Promise<numbe
 
 export async function solanaGetUserAccount(ownerAddress: string): Promise<UserAccount | null> {
   try {
-    const program = getProgram();
+    const program = getReadOnlyProgram();
     const owner = new PublicKey(ownerAddress);
     const [pda] = userPda(owner);
     const acc = await (program.account as any).userAccount.fetch(pda);
@@ -858,7 +929,7 @@ export async function solanaGetUserAccount(ownerAddress: string): Promise<UserAc
 
 export async function solanaGetReferralInfo(ownerAddress: string): Promise<ReferralInfo | null> {
   try {
-    const program    = getProgram();
+    const program    = getReadOnlyProgram();
     const owner      = new PublicKey(ownerAddress);
     const [pda]      = userPda(owner);
     const acc        = await (program.account as any).userAccount.fetch(pda);
@@ -881,12 +952,12 @@ export async function solanaGetReferralInfo(ownerAddress: string): Promise<Refer
     //   team_total_staked:      u64     → data[122]–data[129]  (slice[114]–slice[121])
     const referrals: import('@/types').ReferralEntry[] = [];
     try {
-      const connection = new Connection(NETWORK_CONFIG.solana.rpcUrl, 'confirmed');
+      const connection = new Connection(READ_RPC, 'confirmed');
       const programId  = getProgramId();
 
       const accounts = await connection.getProgramAccounts(programId, {
         filters: [
-          { dataSize: 152 },   // USER_ACCOUNT_SPACE
+          { dataSize: 139 },   // USER_ACCOUNT_SPACE (8 disc + 131 fields)
           // Match accounts where the referrer Option<Pubkey> = Some(owner):
           // offset 65 skips the discriminator (8) + fields before referrer (56) + Option tag byte (1)
           { memcmp: { offset: 65, bytes: owner.toBase58() } },
@@ -964,11 +1035,12 @@ export async function solanaUpdateUserTeamStats(
 
 // ── On-chain history ───────────────────────────────────────────────────────────
 
+// Anchor logs instruction names as the CamelCase IDL name: "Instruction: ClaimRewards" etc.
 const INSTRUCTION_TYPE_MAP: Record<string, import('@/types').TxRecord['type']> = {
-  'Instruction: Stake':    'stake',
-  'Instruction: Claim':    'claim',
-  'Instruction: Compound': 'compound',
-  'Instruction: Unstake':  'unstake',
+  'Instruction: Stake':          'stake',
+  'Instruction: ClaimRewards':   'claim',
+  'Instruction: CompoundRewards': 'compound',
+  'Instruction: Unstake':        'unstake',
 };
 
 /**
@@ -981,7 +1053,7 @@ export async function solanaGetOnChainHistory(address: string): Promise<import('
   if (!programAddr || programAddr.toUpperCase().startsWith('YOUR_')) return [];
 
   try {
-    const connection = new Connection(NETWORK_CONFIG.solana.rpcUrl || 'https://api.mainnet-beta.solana.com', 'confirmed');
+    const connection = new Connection(READ_RPC, 'confirmed');
     const owner = new PublicKey(address);
     const [userAccPda] = userPda(owner);
 

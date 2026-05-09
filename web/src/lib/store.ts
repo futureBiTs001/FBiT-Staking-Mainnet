@@ -337,14 +337,23 @@ export const useAppStore = create<AppState>()(
           polygon: { ...BASE_PLATFORM_STATS, ...rawNet.polygon },
         };
 
-        // Migrate: old burnBps 25% → 10%, old effectiveAPY 100% → 60%
+        // Migrate: old burnBps 25% → 10%
         for (const net of ['solana', 'polygon'] as NetworkType[]) {
-          if (networkPlatformStats[net].burnBps   === 2500)  networkPlatformStats[net].burnBps   = 1000;
-          if (networkPlatformStats[net].effectiveAPY === 10000) networkPlatformStats[net].effectiveAPY = 6000;
+          if (networkPlatformStats[net].burnBps === 2500) networkPlatformStats[net].burnBps = 1000;
+          // Note: effectiveAPY is refreshed live on every syncPlatformStats — do not reset cached values
         }
 
         // Sanitize: strip stakes with non-numeric IDs (stale data from old versions)
-        const walletStates = p.walletStates ?? {};
+        const walletStates: Record<string, any> = p.walletStates ?? {};
+
+        // Migrate pre-v6 wallet keys: plain "address" → "${network}:address"
+        for (const key of Object.keys(walletStates)) {
+          if (!key.includes(':')) {
+            const network = key.startsWith('0x') ? 'polygon' : 'solana';
+            walletStates[`${network}:${key}`] = walletStates[key];
+            delete walletStates[key];
+          }
+        }
         for (const addr of Object.keys(walletStates)) {
           const wd = walletStates[addr];
           if (wd?.stakes) {

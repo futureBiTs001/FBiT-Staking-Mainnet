@@ -21,6 +21,23 @@ export const maxDuration = 10;
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? '' });
 
+// ── Simple in-process rate limiter (10 req / min per IP) ──────────────────────
+const _rl = new Map<string, { count: number; reset: number }>();
+function checkRateLimit(ip: string): boolean {
+  const now  = Date.now();
+  const slot = _rl.get(ip);
+  if (!slot || now > slot.reset) {
+    _rl.set(ip, { count: 1, reset: now + 60_000 });
+    return true;
+  }
+  if (slot.count >= 10) return false;
+  slot.count++;
+  return true;
+}
+
+// Allowed origins — tighten if you have a fixed production domain
+const ALLOWED_ORIGINS = (process.env.NEXT_PUBLIC_SITE_URL ?? '').split(',').map(s => s.trim()).filter(Boolean);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Request / response types
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,6 +72,20 @@ const VALID_RISKS = new Set(['low', 'medium', 'high', 'blocked']);
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  // ── Rate limit ──────────────────────────────────────────────────────────────
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
+  if (!checkRateLimit(ip)) {
+    return NextResponse.json<AssessResponse>(failOpen(), { status: 429 });
+  }
+
+  // ── Origin check (skip when no allowed origins configured) ─────────────────
+  if (ALLOWED_ORIGINS.length > 0) {
+    const origin = req.headers.get('origin') ?? '';
+    if (!ALLOWED_ORIGINS.some(o => origin === o || origin.endsWith(`.${o}`))) {
+      return NextResponse.json<AssessResponse>(failOpen(), { status: 403 });
+    }
+  }
+
   try {
     const body = (await req.json()) as Partial<AssessRequest>;
 
@@ -65,10 +96,15 @@ export async function POST(req: NextRequest) {
     const b   = body.behavior ?? { mouseMovements:0, mouseDistance:0, clicks:0, keystrokes:0, scrolls:0, sessionAgeMs:0 };
     const ageS = Math.round((b.sessionAgeMs ?? 0) / 1000);
 
+    // Sanitize signals — strip newlines and any chars that could break prompt structure
+    const safeSignals = (body.signals ?? [])
+      .map(s => String(s).replace(/[\r\n\t=]/g, ' ').slice(0, 80))
+      .slice(0, 20);
+
     const prompt = `You are a bot-detection classifier for FBiT, a DeFi staking platform. Analyze this browser session and classify it.
 
 == Session Data ==
-Fingerprint signals : ${(body.signals ?? []).join(', ') || 'none'}
+Fingerprint signals : ${safeSignals.join(', ') || 'none'}
 Fingerprint score   : ${body.fpScore}/100  (higher = more bot-like)
 Behavioral score    : ${body.humanScore}/100  (higher = more human-like)
 ML bot probability  : ${((body.mlProbability ?? 0.5) * 100).toFixed(1)}%
