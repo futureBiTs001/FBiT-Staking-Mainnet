@@ -9,8 +9,8 @@ import { SolflareWalletAdapter } from '@solana/wallet-adapter-solflare';
 
 // Primary:  dashboard.walletconnect.com
 // Fallback: dashboard.reown.com
-const PRIMARY_PROJECT_ID  = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID  ?? '';
-const FALLBACK_PROJECT_ID = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID_2 ?? '';
+const PRIMARY_PROJECT_ID  = (process.env.NEXT_PUBLIC_REOWN_PROJECT_ID  ?? '').trim();
+const FALLBACK_PROJECT_ID = (process.env.NEXT_PUBLIC_REOWN_PROJECT_ID_2 ?? '').trim();
 
 const ethersAdapter = new EthersAdapter();
 
