@@ -144,7 +144,7 @@ export default function StakePanel() {
       // Immediately update referrer's local count (same-browser testing + instant feedback)
       if (referrer) {
         const { walletStates } = useAppStore.getState();
-        const refData = walletStates[referrer];
+        const refData = walletStates[`${selectedNetwork}:${referrer}`];
         if (refData) {
           const prevCount = refData.referralInfo?.totalReferrals ?? refData.userAccount?.referralCount ?? 0;
           loadOnChainData(referrer, {
@@ -293,7 +293,7 @@ export default function StakePanel() {
               <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-0.5">Current APY</p>
               <p className="font-display font-bold text-brand-400 text-lg">{effectiveAPY}%</p>
               <p className="text-[10px] text-text-muted">PoS · 60%–250%</p>
-              <p className="text-[10px] text-accent-amber">Locked at stake time</p>
+              <p className="text-[10px] text-accent-amber">Dynamic PoS · updates live</p>
             </div>
           </div>
         </div>

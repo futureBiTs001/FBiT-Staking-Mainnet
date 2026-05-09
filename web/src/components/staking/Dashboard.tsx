@@ -106,14 +106,17 @@ export default function Dashboard() {
       return Number.isFinite(id) && id >= 0 && Number.isInteger(id);
     });
   const totalUserStaked = activeStakes.reduce((a, s) => a + s.amount, 0);
+  // Always use live platform APY for reward display — APY is dynamic (not locked at stake time)
+  const liveApyBps = platformStats.effectiveAPY ?? 6000;
+
   // Live display reward — counts smoothly every second for visual feedback.
   // Actual claimable amount (on-chain, discrete 12h intervals) is used inside handleClaim/handleCompound.
   const getLiveDisplay = (s: typeof activeStakes[0]) =>
-    calculateLivePendingReward(s.amount, s.apy, s.lastClaimAt);
+    calculateLivePendingReward(s.amount, liveApyBps, s.lastClaimAt);
 
   // Fallback for claim handler when on-chain result.reward is 0.
   const getDiscretePending = (s: typeof activeStakes[0]) =>
-    s.pendingReward !== undefined ? s.pendingReward : calculatePendingReward(s.amount, s.apy, s.lastClaimAt);
+    s.pendingReward !== undefined ? s.pendingReward : calculatePendingReward(s.amount, liveApyBps, s.lastClaimAt);
 
   const totalPending = activeStakes.reduce((a, s) => a + getLiveDisplay(s), 0);
   const totalClaimed = stakes.reduce((a, s) => a + s.totalClaimed, 0);
@@ -426,7 +429,7 @@ export default function Dashboard() {
             {activeStakes.map((stake) => {
               const period = getLockPeriodInfo(stake.lockPeriodIndex);
               const pending = getLiveDisplay(stake);
-              const daily = getDailyReward(stake.amount, stake.apy);
+              const daily = getDailyReward(stake.amount, liveApyBps);
               const isUnlocked = Date.now() / 1000 >= stake.unlockAt;
               const claimable = canClaimRewards(stake.lastClaimAt);
               const nextClaim = getNextClaimLabel(stake.lastClaimAt);
@@ -458,7 +461,7 @@ export default function Dashboard() {
                       </div>
                       <div>
                         <p className="font-display font-semibold">{formatNumber(stake.amount)} FBiT</p>
-                        <p className="text-text-muted text-xs">{period.label} lock · {stake.apy / 100}% APY</p>
+                        <p className="text-text-muted text-xs">{period.label} lock · {Math.round(liveApyBps / 100)}% APY (live)</p>
                         <p className="text-text-muted text-xs mt-0.5">
                           Per 12h: <span className="text-brand-400 font-mono">+{formatNumber(daily, 8)} WFBIT</span>
                         </p>
@@ -839,7 +842,7 @@ function BurnEmissionPanel({ stats, network }: { stats: PlatformStats; network: 
         </div>
         {/* Halving countdown — Solana only */}
         {network === 'solana' && (() => {
-          const SECS_PER_YEAR = 365 * 24 * 60 * 60;
+          const SECS_PER_YEAR = 180 * 24 * 60 * 60; // 6-month halving period
           const hStart = stats.halvingStartTime ?? 0;
           if (!hStart) return null;
           const nowSecs   = Math.floor(Date.now() / 1000);
