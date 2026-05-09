@@ -867,38 +867,41 @@ async function rpcCall(endpoint: string, method: string, params: unknown[]): Pro
 
 /**
  * Fetch the FBiT SPL token balance for a wallet address.
- * On localhost: proxies through /dev-rpc/solana/ (Next.js rewrite) — avoids
- * the 403 that Solana public RPCs return for browser requests from localhost.
- * On production: calls the configured RPC directly (production domains not blocked).
- * Returns 0 if the wallet has no token account for this mint.
+ *
+ * Strategy: compute the Associated Token Account (ATA) directly and call
+ * getTokenAccountBalance — a single targeted lookup that is faster and less
+ * rate-limited than a full getTokenAccountsByOwner scan.
+ * Falls back through multiple RPC endpoints with an 8 s timeout each.
+ * Returns 0 if the wallet has no ATA for this mint or all endpoints fail.
  */
 export async function solanaGetTokenBalance(ownerAddress: string): Promise<number> {
   if (!ownerAddress || ownerAddress.startsWith('0x')) return 0;
   const stakeTokenAddr = NETWORK_CONFIG.solana.stakeTokenAddress;
   if (!stakeTokenAddr || stakeTokenAddr.length < 10 || stakeTokenAddr.toUpperCase().startsWith('YOUR_')) return 0;
 
-  try { new PublicKey(ownerAddress); new PublicKey(stakeTokenAddr); } catch { return 0; }
+  let owner: PublicKey, mint: PublicKey;
+  try {
+    owner = new PublicKey(ownerAddress);
+    mint  = new PublicKey(stakeTokenAddr);
+  } catch { return 0; }
 
-  // publicnode.com returns 504 for getTokenAccountsByOwner — put reliable endpoints first.
+  // Derive ATA — deterministic, no RPC call needed
+  const ataAddress = ata(mint, owner).toBase58();
+
   const endpoints = [
     'https://api.mainnet-beta.solana.com',
-    'https://solana-mainnet.g.alchemy.com/v2/demo',
+    READ_RPC,
     NETWORK_CONFIG.solana.rpcUrl,
     'https://solana-rpc.publicnode.com',
   ].filter((u, i, a) => u && a.indexOf(u) === i);
 
   for (const rpc of endpoints) {
     try {
-      const result = await rpcCall(rpc, 'getTokenAccountsByOwner', [
-        ownerAddress,
-        { mint: stakeTokenAddr },
-        { encoding: 'jsonParsed' },
-      ]);
-      if (!result?.value?.length) return 0;
-      return (result.value as any[]).reduce((sum: number, acct: any) =>
-        sum + (acct.account?.data?.parsed?.info?.tokenAmount?.uiAmount ?? 0), 0);
+      const result = await rpcCall(rpc, 'getTokenAccountBalance', [ataAddress]);
+      // result.value.uiAmount is null if account has 0 balance; treat as 0
+      return result?.value?.uiAmount ?? 0;
     } catch {
-      // try next endpoint
+      // account not found or RPC error — try next endpoint
     }
   }
   return 0;
