@@ -195,8 +195,9 @@ export default function Header() {
   const { connect, adminConnect, disconnect, address, isConnecting, solanaReferrer, polygonReferrer, setSolanaReferrer, setPolygonReferrer } = useWallet();
   const { selectedNetwork, setSelectedNetwork, activeTab, setActiveTab, isAdmin, walletAddress, walletStates } = useAppStore();
   const currentReferrer = selectedNetwork === 'solana' ? solanaReferrer : polygonReferrer;
-  const referralCount = walletAddress
-    ? (walletStates[walletAddress]?.referralInfo?.totalReferrals ?? walletStates[walletAddress]?.userAccount?.referralCount ?? 0)
+  const walletKey = walletAddress ? `${selectedNetwork}:${walletAddress}` : null;
+  const referralCount = walletKey
+    ? (walletStates[walletKey]?.referralInfo?.totalReferrals ?? walletStates[walletKey]?.userAccount?.referralCount ?? 0)
     : 0;
   const [showWalletMenu, setShowWalletMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
