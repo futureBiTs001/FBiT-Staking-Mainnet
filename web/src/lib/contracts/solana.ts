@@ -16,7 +16,7 @@ import { Connection, PublicKey, SystemProgram } from '@solana/web3.js';
 import { AnchorProvider, Program, BN } from '@coral-xyz/anchor';
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { IDL } from './idl';
-import { NETWORK_CONFIG } from '@/lib/config';
+import { NETWORK_CONFIG, HELIUS_RPC_URL } from '@/lib/config';
 import type { PlatformStats, StakeEntry, UserAccount, ReferralInfo } from '@/types';
 
 function getProgramId(): PublicKey {
@@ -792,8 +792,8 @@ export async function solanaRenounceOwnership(): Promise<{ txHash: string }> {
 // ── Read-only helpers ──────────────────────────────────────────────────────────
 
 /** Returns a read-only Anchor program instance (no wallet signer required). */
-// Reliable RPC for read-only queries — mainnet-beta first (publicnode 504s on some methods)
-const READ_RPC = 'https://api.mainnet-beta.solana.com';
+// Helius is preferred when configured; falls back to Solana Foundation mainnet-beta.
+const READ_RPC = HELIUS_RPC_URL || 'https://api.mainnet-beta.solana.com';
 
 function getReadOnlyProgram(): Program {
   const connection = new Connection(READ_RPC, 'confirmed');
@@ -889,10 +889,10 @@ export async function solanaGetTokenBalance(ownerAddress: string): Promise<numbe
   const ataAddress = ata(mint, owner).toBase58();
 
   const endpoints = [
-    'https://api.mainnet-beta.solana.com',
-    READ_RPC,
-    NETWORK_CONFIG.solana.rpcUrl,
-    'https://solana-rpc.publicnode.com',
+    READ_RPC,                               // Helius if configured, else mainnet-beta
+    'https://api.mainnet-beta.solana.com',  // Solana Foundation fallback
+    NETWORK_CONFIG.solana.rpcUrl,           // custom RPC from env (deduped if same as above)
+    'https://solana-rpc.publicnode.com',    // last resort
   ].filter((u, i, a) => u && a.indexOf(u) === i);
 
   for (const rpc of endpoints) {

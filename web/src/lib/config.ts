@@ -1,5 +1,12 @@
 import { NetworkConfig } from '@/types';
 
+// Helius RPC URL — set NEXT_PUBLIC_HELIUS_API_KEY to enable.
+// Get a free key at https://dev.helius.xyz
+const _heliusKey = (process.env.NEXT_PUBLIC_HELIUS_API_KEY ?? '').trim();
+export const HELIUS_RPC_URL = _heliusKey
+  ? `https://mainnet.helius-rpc.com/?api-key=${_heliusKey}`
+  : '';
+
 // ===== MAINNET CONFIGURATION =====
 // NOTE: process.env.NEXT_PUBLIC_* must be written as static literals so
 // Next.js's DefinePlugin can inline them at build time. Dynamic access
@@ -10,7 +17,8 @@ export const NETWORK_CONFIG: Record<string, NetworkConfig> = {
   solana: {
     name: 'Solana',
     type: 'solana',
-    rpcUrl:             (process.env.NEXT_PUBLIC_SOLANA_RPC_URL           ?? 'https://api.mainnet-beta.solana.com').trim(),
+    // If Helius key is set it takes priority; otherwise fall back to mainnet-beta.
+    rpcUrl: HELIUS_RPC_URL || (process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? 'https://api.mainnet-beta.solana.com').trim(),
     explorerUrl:        'https://explorer.solana.com',
     contractAddress:    (process.env.NEXT_PUBLIC_SOLANA_PROGRAM_ID        ?? '').trim(),
     stakeTokenAddress:  (process.env.NEXT_PUBLIC_SOLANA_STAKE_TOKEN_MINT  ?? '').trim(),
