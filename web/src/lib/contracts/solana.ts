@@ -147,31 +147,27 @@ export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> 
 
     const totalStaked = fromLamports(platform.totalStaked);
 
-    // Reserve / emission fields (new on-chain fields)
+    // Deployed program stores APY in baseApy[0] (basis points, e.g. 6000 = 60%).
+    const effectiveAPY = Math.min(25_000, Math.max(6_000,
+      platform.baseApy ? Number(platform.baseApy[0]) : 6_000
+    ));
+    const halvingEpoch     = platform.halvingEpoch     ? Number(platform.halvingEpoch)     : 0;
+    const halvingStartTime = platform.halvingStartTime ? Number(platform.halvingStartTime) : 0;
+
+    const annualEmission        = platform.annualEmission        ? fromLamports(platform.annualEmission)        : 0;
+    const burnBps               = platform.burnBps               ? Number(platform.burnBps)                     : 0;
     const totalReserve          = platform.totalReserve          ? fromLamports(platform.totalReserve)          : 0;
     const totalEmissionReleased = platform.totalEmissionReleased ? fromLamports(platform.totalEmissionReleased) : 0;
-    const emissionStartTime     = platform.emissionStartTime     ? platform.emissionStartTime.toNumber()        : 0;
-    const annualEmission        = platform.annualEmission        ? fromLamports(platform.annualEmission)        : 0;
-    // Halving epoch tracking
-    const halvingEpoch          = platform.halvingEpoch          ? Number(platform.halvingEpoch)                : 0;
-    const halvingStartTime      = platform.halvingStartTime      ? Number(platform.halvingStartTime)            : (emissionStartTime || 0);
+    const emissionStartTime     = platform.emissionStartTime     ? Number(platform.emissionStartTime)           : 0;
 
-    // PoS dynamic APY: emission / totalStaked, clamped 60%–250% (6000–25000 bps).
-    // Fallback also clamped to PoS range so default is always 60%–250%.
-    const effectiveAPY = (annualEmission > 0 && totalStaked > 0)
-      ? Math.min(25_000, Math.max(6_000, Math.round(annualEmission / totalStaked * 10_000)))
-      : Math.min(25_000, Math.max(6_000, platform.baseApy ? Number(platform.baseApy[0]) : 6_000));
-    const burnBps               = platform.burnBps               ? platform.burnBps.toNumber()                  : 1000;
-
-    // Compute releasable emission client-side
+    // Calculate releasable emission: proportional to elapsed time since emission start
     let releasableEmission = 0;
-    if (annualEmission > 0 && emissionStartTime > 0) {
-      const nowSecs     = Math.floor(Date.now() / 1000);
-      const elapsed     = nowSecs - emissionStartTime;
-      const secsPerYear = 365 * 86400;
-      const totalReleasable = annualEmission * (elapsed / secsPerYear);
-      releasableEmission = Math.max(0, totalReleasable - totalEmissionReleased);
-      releasableEmission = Math.min(releasableEmission, totalReserve);
+    if (annualEmission > 0 && emissionStartTime > 0 && totalReserve > 0) {
+      const now          = Math.floor(Date.now() / 1000);
+      const elapsed      = Math.max(0, now - emissionStartTime);
+      const secondsYear  = 365 * 24 * 3600;
+      const released     = annualEmission * (elapsed / secondsYear);
+      releasableEmission = Math.max(0, Math.min(totalReserve, released - totalEmissionReleased));
     }
 
     return {
@@ -256,31 +252,29 @@ export async function solanaStake(
     await solanaRegisterUser(referrer);
   }
 
-  // Fetch current stake_count — this is the PDA seed for the new entry
-  const [userAccPdaForCount] = userPda(owner);
-  let stakeId = 0;
-  try {
-    const userAccData: any = await (program.account as any).userAccount.fetch(userAccPdaForCount);
-    stakeId = userAccData.stakeCount.toNumber();
-  } catch {}
-
-  const [stakeEntryAccPda] = stakeEntryPda(owner, stakeId);
-
-  const stakeMint   = new PublicKey(NETWORK_CONFIG.solana.stakeTokenAddress);
-  const rewardMint  = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
+  // stakeId = UserAccount.stakeCount (monotonic counter, incremented by contract on each stake).
+  const stakeMint    = new PublicKey(NETWORK_CONFIG.solana.stakeTokenAddress);
+  const rewardMint   = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
   const userTokenAcc = ata(stakeMint, owner);
   const stakeVault   = getStakeVault();
   const rewardVault  = getRewardVault();
 
-  // Resolve admin stake account (authority's stake-mint ATA)
-  let adminStakeAccount = userTokenAcc; // fallback (unused when renounced)
+  let stakeId = 0;
+  let adminStakeAccount = ata(stakeMint, owner); // fallback
   try {
-    const platform: any = await (program.account as any).platform.fetch(platPda);
-    if (!platform.isRenounced && platform.authority) {
-      const authorityKey = new PublicKey(platform.authority.toString());
-      adminStakeAccount = ata(stakeMint, authorityKey);
-    }
+    const userAccData: any = await (program.account as any).userAccount.fetch(userAccPda);
+    stakeId = userAccData.stakeCount ? userAccData.stakeCount.toNumber() : 0;
   } catch {}
+
+  // Get platform authority for adminStakeAccount
+  try {
+    const [pda] = platformPda();
+    const platformData: any = await (program.account as any).platform.fetch(pda);
+    const authorityKey = new PublicKey(platformData.authority.toString());
+    adminStakeAccount = ata(stakeMint, authorityKey);
+  } catch {}
+
+  const [stakeEntryAccPda] = stakeEntryPda(owner, stakeId);
 
   // Build remaining_accounts: walk the referral chain up to 10 levels.
   // Each level contributes 2 accounts: [UserAccount PDA (writable), reward ATA (writable)].
@@ -347,14 +341,28 @@ export async function solanaClaimRewards(
   const [userAccPda] = userPda(owner);
   const [stakeEntryAccPda] = stakeEntryPda(owner, Number(stakeId));
 
-  // Read pending reward before claiming
+  // Read pending reward using live APY (dynamic PoS — not locked at stake time)
   let reward = 0;
   try {
-    const entry: any = await (program.account as any).stakeEntry.fetch(stakeEntryAccPda);
+    const [pda] = platformPda();
+    const [entry, platform]: [any, any] = await Promise.all([
+      (program.account as any).stakeEntry.fetch(stakeEntryAccPda),
+      (program.account as any).platform.fetch(pda),
+    ]);
     const now = Math.floor(Date.now() / 1000);
-    // Match contract: reward accrues per completed 12h interval
     const intervals = Math.floor((now - entry.lastClaimAt.toNumber()) / 43200);
-    reward = fromLamports(entry.amount) * entry.apy.toNumber() * intervals / (730 * 10_000);
+    // Live dynamic APY = emission / totalStaked (same as contract)
+    let liveApy = 6_000;
+    if (platform.annualEmission && platform.totalStaked &&
+        platform.annualEmission.toNumber() > 0 && platform.totalStaked.toNumber() > 0) {
+      const raw = platform.annualEmission.toNumber() * 10_000 / platform.totalStaked.toNumber();
+      liveApy = Math.min(25_000, Math.max(6_000, raw));
+    } else {
+      liveApy = Math.min(25_000, Math.max(6_000,
+        platform.baseApy ? Number(platform.baseApy[0]) : 6_000
+      ));
+    }
+    reward = fromLamports(entry.amount) * liveApy * intervals / (730 * 10_000);
   } catch {}
 
   const rewardMint = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
@@ -409,11 +417,23 @@ export async function solanaCompoundRewards(
 
   let reward = 0;
   try {
-    const entry: any = await (program.account as any).stakeEntry.fetch(stakeEntryAccPda);
+    const [entry, platform]: [any, any] = await Promise.all([
+      (program.account as any).stakeEntry.fetch(stakeEntryAccPda),
+      (program.account as any).platform.fetch(platPda),
+    ]);
     const now = Math.floor(Date.now() / 1000);
-    // Match contract: reward accrues per completed 12h interval
     const intervals = Math.floor((now - entry.lastClaimAt.toNumber()) / 43200);
-    reward = fromLamports(entry.amount) * entry.apy.toNumber() * intervals / (730 * 10_000);
+    let liveApy = 6_000;
+    if (platform.annualEmission && platform.totalStaked &&
+        platform.annualEmission.toNumber() > 0 && platform.totalStaked.toNumber() > 0) {
+      const raw = platform.annualEmission.toNumber() * 10_000 / platform.totalStaked.toNumber();
+      liveApy = Math.min(25_000, Math.max(6_000, raw));
+    } else {
+      liveApy = Math.min(25_000, Math.max(6_000,
+        platform.baseApy ? Number(platform.baseApy[0]) : 6_000
+      ));
+    }
+    reward = fromLamports(entry.amount) * liveApy * intervals / (730 * 10_000);
   } catch {}
 
   const rewardMint  = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
@@ -464,13 +484,12 @@ export async function solanaUnstake(stakeId: number): Promise<{ txHash: string }
   const userTokenAcc = ata(stakeMint, owner);
   const stakeVault   = getStakeVault();
 
-  // Resolve admin stake account (authority's stake-mint ATA); fallback when renounced
-  let adminStakeAccount = userTokenAcc;
+  // adminStakeAccount = authority's stake token ATA
+  let adminStakeAccount = ata(stakeMint, owner); // fallback
   try {
-    const platform: any = await (program.account as any).platform.fetch(platPda);
-    if (!platform.isRenounced && platform.authority) {
-      adminStakeAccount = ata(stakeMint, new PublicKey(platform.authority.toString()));
-    }
+    const platformData: any = await (program.account as any).platform.fetch(platPda);
+    const authorityKey = new PublicKey(platformData.authority.toString());
+    adminStakeAccount = ata(stakeMint, authorityKey);
   } catch {}
 
   const tx = await (program.methods as any)
@@ -518,23 +537,23 @@ export async function solanaFundRewardPool(amount: number): Promise<{ txHash: st
 }
 
 export async function solanaRefundRewardPool(amount: number): Promise<{ txHash: string }> {
-  if (amount <= 0) throw new Error('Refund amount must be greater than 0');
-  const program  = getProgram();
-  const owner    = getOwner();
+  if (amount < 1) throw new Error('Minimum refund is 1 FBiT');
+  const program   = getProgram();
+  const authority = getOwner();
   const [platPda] = platformPda();
 
   const rewardMint          = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
-  const authorityTokenAcc   = ata(rewardMint, owner);
+  const authorityTokenAccount = ata(rewardMint, authority);
   const rewardVault         = getRewardVault();
 
   const tx = await (program.methods as any)
     .refundRewardPool(toLamports(amount))
     .accounts({
-      platform:              platPda,
-      authority:             owner,
-      authorityTokenAccount: authorityTokenAcc,
+      platform:               platPda,
+      authority,
+      authorityTokenAccount,
       rewardVault,
-      tokenProgram:          TOKEN_PROGRAM_ID,
+      tokenProgram:           TOKEN_PROGRAM_ID,
     })
     .rpc();
 
@@ -542,32 +561,37 @@ export async function solanaRefundRewardPool(amount: number): Promise<{ txHash: 
 }
 
 export async function solanaDepositReserve(amount: number): Promise<{ txHash: string }> {
-  if (amount < 1)           throw new Error('Minimum deposit is 1 FBiT');
-  if (amount > 800_000_000) throw new Error('Maximum deposit is 800,000,000 FBiT (800M)');
+  if (amount < 1) throw new Error('Minimum deposit is 1 FBiT');
   const program   = getProgram();
-  const owner     = getOwner();
+  const authority = getOwner();
   const [platPda] = platformPda();
+
   const rewardMint       = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
-  const funderTokenAcc   = ata(rewardMint, owner);
+  const funderTokenAccount = ata(rewardMint, authority);
   const reserveVault     = getReserveVault();
+
   const tx = await (program.methods as any)
     .depositReserve(toLamports(amount))
     .accounts({
-      platform:           platPda,
-      authority:          owner,
-      funderTokenAccount: funderTokenAcc,
+      platform:            platPda,
+      authority,
+      funderTokenAccount,
       reserveVault,
-      tokenProgram:       TOKEN_PROGRAM_ID,
+      tokenProgram:        TOKEN_PROGRAM_ID,
     })
     .rpc();
+
   return { txHash: tx };
 }
 
 export async function solanaReleaseEmission(): Promise<{ txHash: string }> {
   const program   = getProgram();
   const [platPda] = platformPda();
+
   const reserveVault = getReserveVault();
   const rewardVault  = getRewardVault();
+
+  // releaseEmission is permissionless — no authority required
   const tx = await (program.methods as any)
     .releaseEmission()
     .accounts({
@@ -577,6 +601,7 @@ export async function solanaReleaseEmission(): Promise<{ txHash: string }> {
       tokenProgram: TOKEN_PROGRAM_ID,
     })
     .rpc();
+
   return { txHash: tx };
 }
 
@@ -630,25 +655,24 @@ export async function solanaTogglePause(): Promise<{ txHash: string }> {
 }
 
 export async function solanaSetAnnualEmission(annualEmission: number): Promise<{ txHash: string }> {
-  if (annualEmission <= 0) throw new Error('Annual emission must be greater than 0');
   const program   = getProgram();
-  const owner     = getOwner();
+  const authority = getOwner();
   const [platPda] = platformPda();
   const tx = await (program.methods as any)
     .setAnnualEmission(toLamports(annualEmission))
-    .accounts({ platform: platPda, authority: owner })
+    .accounts({ platform: platPda, authority })
     .rpc();
   return { txHash: tx };
 }
 
 export async function solanaSetBurnBps(burnBps: number): Promise<{ txHash: string }> {
-  if (burnBps < 0 || burnBps > 5000) throw new Error('Burn BPS must be 0–5000');
+  if (burnBps > 5000) throw new Error('burnBps exceeds maximum (5000 = 50%)');
   const program   = getProgram();
-  const owner     = getOwner();
+  const authority = getOwner();
   const [platPda] = platformPda();
   const tx = await (program.methods as any)
     .setBurnBps(new BN(burnBps))
-    .accounts({ platform: platPda, authority: owner })
+    .accounts({ platform: platPda, authority })
     .rpc();
   return { txHash: tx };
 }
@@ -737,10 +761,11 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
     return (all as any[])
       .filter((e: any) => e.account.isActive)
       .map((e: any): StakeEntry => {
-        const stakeId  = e.account.stakeId.toNumber();
+        // stakeId field is now stored directly in StakeEntry
+        const id = e.account.stakeId !== undefined ? e.account.stakeId.toNumber() : -1;
         const stakedAt = e.account.stakedAt.toNumber();
         return {
-          id:              stakeId,  // stake_count — used as PDA seed for claim/compound/unstake
+          id:              id >= 0 ? id : stakedAt,
           amount:          fromLamports(e.account.amount),
           lockPeriodIndex: e.account.lockPeriodIndex,
           stakedAt,

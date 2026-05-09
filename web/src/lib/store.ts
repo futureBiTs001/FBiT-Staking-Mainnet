@@ -82,11 +82,12 @@ interface AppState {
   isConnected: boolean;
   setWallet: (address: string | null) => void; // kept for WalletContext compat
 
-  // Per-wallet persistent data
+  // Per-wallet persistent data (key = `${network}:${address}`)
   walletStates: Record<string, WalletData>;
 
-  // Platform
-  platformStats: PlatformStats;
+  // Platform — per-network cache so switching chains never leaks data
+  networkPlatformStats: Record<NetworkType, PlatformStats>;
+  platformStats: PlatformStats; // always = networkPlatformStats[selectedNetwork]
   updatePlatformStats: (partial: Partial<PlatformStats>) => void;
 
   // UI
@@ -123,7 +124,11 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       // ── Network
       selectedNetwork: 'solana',
-      setSelectedNetwork: (network) => set({ selectedNetwork: network }),
+      setSelectedNetwork: (network) => set(state => ({
+        selectedNetwork: network,
+        // Immediately switch platformStats to the target network's cached stats
+        platformStats: { ...BASE_PLATFORM_STATS, ...state.networkPlatformStats[network] },
+      })),
 
       // ── Wallet
       walletAddress: null,
@@ -133,31 +138,38 @@ export const useAppStore = create<AppState>()(
           set({ walletAddress: null, isConnected: false });
           return;
         }
-        // Initialise wallet data if first time
-        const existing = get().walletStates[address];
+        const network  = get().selectedNetwork;
+        const key      = `${network}:${address}`;
+        const existing = get().walletStates[key];
         if (!existing) {
           const data = createEmptyWalletData(address);
           set(state => ({
             walletAddress: address,
             isConnected: true,
-            platformStats: {
-              ...state.platformStats,
-              totalUsers: state.platformStats.totalUsers + 1,
-            },
-            walletStates: { ...state.walletStates, [address]: data },
+            walletStates: { ...state.walletStates, [key]: data },
           }));
         } else {
           set({ walletAddress: address, isConnected: true });
         }
       },
 
-      // ── Per-wallet data
+      // ── Per-wallet data (keyed by `${network}:${address}`)
       walletStates: {},
 
-      // ── Platform
+      // ── Platform (per-network)
+      networkPlatformStats: { solana: BASE_PLATFORM_STATS, polygon: BASE_PLATFORM_STATS },
       platformStats: BASE_PLATFORM_STATS,
       updatePlatformStats: (partial) =>
-        set(state => ({ platformStats: { ...state.platformStats, ...partial } })),
+        set(state => ({
+          platformStats: { ...state.platformStats, ...partial },
+          networkPlatformStats: {
+            ...state.networkPlatformStats,
+            [state.selectedNetwork]: {
+              ...state.networkPlatformStats[state.selectedNetwork],
+              ...partial,
+            },
+          },
+        })),
 
       // ── UI
       isLoading: false,
@@ -169,52 +181,42 @@ export const useAppStore = create<AppState>()(
 
       // ── Stake actions
       addStake: (stake) => {
-        const addr = get().walletAddress;
+        const { walletAddress: addr, selectedNetwork: net } = get();
         if (!addr) return;
+        const key = `${net}:${addr}`;
         set(state => {
-          const wd = state.walletStates[addr] ?? createEmptyWalletData(addr);
+          const wd = state.walletStates[key] ?? createEmptyWalletData(addr);
           return {
             walletStates: {
               ...state.walletStates,
-              [addr]: {
+              [key]: {
                 ...wd,
                 stakes: [...wd.stakes, stake],
                 tokenBalance: wd.tokenBalance - stake.amount,
-                userAccount: {
-                  ...wd.userAccount,
-                  totalStaked: wd.userAccount.totalStaked + stake.amount,
-                },
+                userAccount: { ...wd.userAccount, totalStaked: wd.userAccount.totalStaked + stake.amount },
               },
-            },
-            platformStats: {
-              ...state.platformStats,
-              totalStaked: state.platformStats.totalStaked + stake.amount,
             },
           };
         });
       },
 
       claimStakeReward: (id, reward) => {
-        const addr = get().walletAddress;
+        const { walletAddress: addr, selectedNetwork: net } = get();
         if (!addr) return;
+        const key = `${net}:${addr}`;
         const now = Math.floor(Date.now() / 1000);
         set(state => {
-          const wd = state.walletStates[addr] ?? createEmptyWalletData(addr);
+          const wd = state.walletStates[key] ?? createEmptyWalletData(addr);
           return {
             walletStates: {
               ...state.walletStates,
-              [addr]: {
+              [key]: {
                 ...wd,
                 stakes: wd.stakes.map(s =>
-                  s.id === id
-                    ? { ...s, lastClaimAt: now, totalClaimed: s.totalClaimed + reward }
-                    : s
+                  s.id === id ? { ...s, lastClaimAt: now, totalClaimed: s.totalClaimed + reward } : s
                 ),
                 tokenBalance: wd.tokenBalance + reward,
-                userAccount: {
-                  ...wd.userAccount,
-                  totalRewardsEarned: wd.userAccount.totalRewardsEarned + reward,
-                },
+                userAccount: { ...wd.userAccount, totalRewardsEarned: wd.userAccount.totalRewardsEarned + reward },
               },
             },
           };
@@ -222,24 +224,20 @@ export const useAppStore = create<AppState>()(
       },
 
       compoundStakeReward: (id, reward) => {
-        const addr = get().walletAddress;
+        const { walletAddress: addr, selectedNetwork: net } = get();
         if (!addr) return;
+        const key = `${net}:${addr}`;
         const now = Math.floor(Date.now() / 1000);
         set(state => {
-          const wd = state.walletStates[addr] ?? createEmptyWalletData(addr);
+          const wd = state.walletStates[key] ?? createEmptyWalletData(addr);
           return {
             walletStates: {
               ...state.walletStates,
-              [addr]: {
+              [key]: {
                 ...wd,
                 stakes: wd.stakes.map(s =>
                   s.id === id
-                    ? {
-                        ...s,
-                        amount: s.amount + reward,
-                        lastClaimAt: now,
-                        totalClaimed: s.totalClaimed + reward,
-                      }
+                    ? { ...s, amount: s.amount + reward, lastClaimAt: now, totalClaimed: s.totalClaimed + reward }
                     : s
                 ),
                 userAccount: {
@@ -249,74 +247,61 @@ export const useAppStore = create<AppState>()(
                 },
               },
             },
-            platformStats: {
-              ...state.platformStats,
-              totalStaked: state.platformStats.totalStaked + reward,
-            },
           };
         });
       },
 
       unstakeEntry: (id) => {
-        const addr = get().walletAddress;
+        const { walletAddress: addr, selectedNetwork: net } = get();
         if (!addr) return;
-        const stake = get().walletStates[addr]?.stakes.find(s => s.id === id);
+        const key   = `${net}:${addr}`;
+        const stake = get().walletStates[key]?.stakes.find(s => s.id === id);
         if (!stake) return;
         set(state => {
-          const wd = state.walletStates[addr];
+          const wd = state.walletStates[key];
           return {
             walletStates: {
               ...state.walletStates,
-              [addr]: {
+              [key]: {
                 ...wd,
-                stakes: wd.stakes.map(s =>
-                  s.id === id ? { ...s, isActive: false } : s
-                ),
+                stakes: wd.stakes.map(s => s.id === id ? { ...s, isActive: false } : s),
                 tokenBalance: wd.tokenBalance + stake.amount,
-                userAccount: {
-                  ...wd.userAccount,
-                  totalStaked: wd.userAccount.totalStaked - stake.amount,
-                },
+                userAccount: { ...wd.userAccount, totalStaked: wd.userAccount.totalStaked - stake.amount },
               },
-            },
-            platformStats: {
-              ...state.platformStats,
-              totalStaked: state.platformStats.totalStaked - stake.amount,
             },
           };
         });
       },
 
       addTransaction: (tx) => {
-        const addr = get().walletAddress;
+        const { walletAddress: addr, selectedNetwork: net } = get();
         if (!addr) return;
+        const key = `${net}:${addr}`;
         set(state => {
-          const wd = state.walletStates[addr] ?? createEmptyWalletData(addr);
+          const wd = state.walletStates[key] ?? createEmptyWalletData(addr);
           return {
             walletStates: {
               ...state.walletStates,
-              [addr]: {
-                ...wd,
-                transactions: [tx, ...wd.transactions].slice(0, 50), // keep last 50
-              },
+              [key]: { ...wd, transactions: [tx, ...wd.transactions].slice(0, 50) },
             },
           };
         });
       },
 
       loadOnChainData: (address, { stakes, tokenBalance, userAccount, referralInfo }) => {
+        const net = get().selectedNetwork;
+        const key = `${net}:${address}`;
         set(state => {
-          // Auto-init wallet state if not yet created (e.g. setWallet race condition).
-          const wd = state.walletStates[address] ?? createEmptyWalletData(address);
+          const wd = state.walletStates[key] ?? createEmptyWalletData(address);
           return {
             walletStates: {
               ...state.walletStates,
-              [address]: {
+              [key]: {
                 ...wd,
-                ...(stakes        !== undefined ? { stakes }        : {}),
-                ...(tokenBalance  !== undefined ? { tokenBalance }  : {}),
-                ...(userAccount   !== undefined ? { userAccount }   : {}),
-                ...(referralInfo  !== undefined ? { referralInfo }  : {}),
+                ...(stakes       !== undefined ? { stakes }       : {}),
+                ...(tokenBalance !== undefined ? { tokenBalance } : {}),
+                ...(userAccount  !== undefined ? { userAccount }  : {}),
+                ...(referralInfo !== undefined ? { referralInfo } : {}),
               },
             },
           };
@@ -324,33 +309,42 @@ export const useAppStore = create<AppState>()(
       },
 
       getWalletData: () => {
-        const addr = get().walletAddress;
+        const { walletAddress: addr, selectedNetwork: net } = get();
         if (!addr) return null;
-        return get().walletStates[addr] ?? null;
+        return get().walletStates[`${net}:${addr}`] ?? null;
       },
     }),
     {
-      name: 'fbit-staking-v5',
+      name: 'fbit-staking-v6',
       storage: createJSONStorage(() =>
         typeof window !== 'undefined' ? localStorage : (undefined as any)
       ),
       // Only persist the data that must survive page refreshes
       partialize: (state) => ({
         walletStates: state.walletStates,
-        platformStats: state.platformStats,
+        networkPlatformStats: state.networkPlatformStats,
         selectedNetwork: state.selectedNetwork,
       }),
       // Merge persisted platformStats with BASE defaults so new fields (e.g. totalBurned)
       // are always present even when loading a pre-burn-halving saved state.
       merge: (persisted: any, current) => {
-        const ps = (persisted as any)?.platformStats ?? {};
-        // Migrate: if persisted burnBps is the old 25% default, reset to 10%
-        if (ps.burnBps === 2500) ps.burnBps = 1000;
-        // Migrate: if persisted effectiveAPY is old 100% default (10000), reset to 60% (6000)
-        if (ps.effectiveAPY === 10000) ps.effectiveAPY = 6000;
+        const p = persisted as any ?? {};
 
-        // Sanitize: strip any stakes with non-numeric IDs (stale data from old versions)
-        const walletStates = (persisted as any)?.walletStates ?? {};
+        // Build per-network platform stats, merging with BASE defaults
+        const rawNet = p.networkPlatformStats ?? {};
+        const networkPlatformStats: Record<NetworkType, PlatformStats> = {
+          solana:  { ...BASE_PLATFORM_STATS, ...rawNet.solana  },
+          polygon: { ...BASE_PLATFORM_STATS, ...rawNet.polygon },
+        };
+
+        // Migrate: old burnBps 25% → 10%, old effectiveAPY 100% → 60%
+        for (const net of ['solana', 'polygon'] as NetworkType[]) {
+          if (networkPlatformStats[net].burnBps   === 2500)  networkPlatformStats[net].burnBps   = 1000;
+          if (networkPlatformStats[net].effectiveAPY === 10000) networkPlatformStats[net].effectiveAPY = 6000;
+        }
+
+        // Sanitize: strip stakes with non-numeric IDs (stale data from old versions)
+        const walletStates = p.walletStates ?? {};
         for (const addr of Object.keys(walletStates)) {
           const wd = walletStates[addr];
           if (wd?.stakes) {
@@ -360,11 +354,14 @@ export const useAppStore = create<AppState>()(
           }
         }
 
+        const selectedNetwork: NetworkType = p.selectedNetwork ?? current.selectedNetwork;
+
         return {
           ...current,
-          ...(persisted ?? {}),
+          selectedNetwork,
           walletStates,
-          platformStats: { ...BASE_PLATFORM_STATS, ...ps },
+          networkPlatformStats,
+          platformStats: networkPlatformStats[selectedNetwork],
         };
       },
     }

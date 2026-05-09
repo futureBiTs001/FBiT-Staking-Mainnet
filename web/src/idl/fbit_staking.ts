@@ -32,6 +32,42 @@ export type FbitStaking = {
       ]
     },
     {
+      "name": "refundRewardPool",
+      "accounts": [
+        { "name": "platform", "isMut": true, "isSigner": false },
+        { "name": "authority", "isMut": false, "isSigner": true },
+        { "name": "authorityTokenAccount", "isMut": true, "isSigner": false },
+        { "name": "rewardVault", "isMut": true, "isSigner": false },
+        { "name": "tokenProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": [
+        { "name": "amount", "type": "u64" }
+      ]
+    },
+    {
+      "name": "depositReserve",
+      "accounts": [
+        { "name": "platform", "isMut": true, "isSigner": false },
+        { "name": "authority", "isMut": true, "isSigner": true },
+        { "name": "funderTokenAccount", "isMut": true, "isSigner": false },
+        { "name": "reserveVault", "isMut": true, "isSigner": false },
+        { "name": "tokenProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": [
+        { "name": "amount", "type": "u64" }
+      ]
+    },
+    {
+      "name": "releaseEmission",
+      "accounts": [
+        { "name": "platform", "isMut": true, "isSigner": false },
+        { "name": "reserveVault", "isMut": true, "isSigner": false },
+        { "name": "rewardVault", "isMut": true, "isSigner": false },
+        { "name": "tokenProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": []
+    },
+    {
       "name": "registerUser",
       "accounts": [
         { "name": "platform", "isMut": true, "isSigner": false },
@@ -52,6 +88,8 @@ export type FbitStaking = {
         { "name": "stakeEntry", "isMut": true, "isSigner": false },
         { "name": "userTokenAccount", "isMut": true, "isSigner": false },
         { "name": "stakeVault", "isMut": true, "isSigner": false },
+        { "name": "adminStakeAccount", "isMut": true, "isSigner": false },
+        { "name": "rewardVault", "isMut": true, "isSigner": false },
         { "name": "owner", "isMut": true, "isSigner": true },
         { "name": "tokenProgram", "isMut": false, "isSigner": false },
         { "name": "systemProgram", "isMut": false, "isSigner": false }
@@ -102,6 +140,7 @@ export type FbitStaking = {
         { "name": "stakeEntry", "isMut": true, "isSigner": false },
         { "name": "userTokenAccount", "isMut": true, "isSigner": false },
         { "name": "stakeVault", "isMut": true, "isSigner": false },
+        { "name": "adminStakeAccount", "isMut": true, "isSigner": false },
         { "name": "owner", "isMut": false, "isSigner": true },
         { "name": "tokenProgram", "isMut": false, "isSigner": false }
       ],
@@ -113,9 +152,7 @@ export type FbitStaking = {
         { "name": "platform", "isMut": true, "isSigner": false },
         { "name": "authority", "isMut": false, "isSigner": true }
       ],
-      "args": [
-        { "name": "newRate", "type": "u64" }
-      ]
+      "args": [{ "name": "newRate", "type": "u64" }]
     },
     {
       "name": "setReferralRewardRate",
@@ -123,9 +160,23 @@ export type FbitStaking = {
         { "name": "platform", "isMut": true, "isSigner": false },
         { "name": "authority", "isMut": false, "isSigner": true }
       ],
-      "args": [
-        { "name": "newRate", "type": "u64" }
-      ]
+      "args": [{ "name": "newRate", "type": "u64" }]
+    },
+    {
+      "name": "setAnnualEmission",
+      "accounts": [
+        { "name": "platform", "isMut": true, "isSigner": false },
+        { "name": "authority", "isMut": false, "isSigner": true }
+      ],
+      "args": [{ "name": "annualEmission", "type": "u64" }]
+    },
+    {
+      "name": "setBurnBps",
+      "accounts": [
+        { "name": "platform", "isMut": true, "isSigner": false },
+        { "name": "authority", "isMut": false, "isSigner": true }
+      ],
+      "args": [{ "name": "burnBps", "type": "u64" }]
     },
     {
       "name": "blockUser",
@@ -239,7 +290,12 @@ export type FbitStaking = {
           { "name": "isRenounced", "type": "bool" },
           { "name": "feeRecipient", "type": "publicKey" },
           { "name": "totalFeesCollected", "type": "u64" },
-          { "name": "bump", "type": "u8" }
+          { "name": "bump", "type": "u8" },
+          { "name": "totalReserve", "type": "u64" },
+          { "name": "totalEmissionReleased", "type": "u64" },
+          { "name": "emissionStartTime", "type": "i64" },
+          { "name": "annualEmission", "type": "u64" },
+          { "name": "burnBps", "type": "u64" }
         ]
       }
     },
@@ -258,7 +314,8 @@ export type FbitStaking = {
           { "name": "registeredAt", "type": "i64" },
           { "name": "teamSize", "type": "u64" },
           { "name": "teamTotalStaked", "type": "u64" },
-          { "name": "bump", "type": "u8" }
+          { "name": "bump", "type": "u8" },
+          { "name": "stakeCount", "type": "u64" }
         ]
       }
     },
@@ -276,163 +333,10 @@ export type FbitStaking = {
           { "name": "totalClaimed", "type": "u64" },
           { "name": "isActive", "type": "bool" },
           { "name": "apy", "type": "u64" },
+          { "name": "stakeId", "type": "u64" },
           { "name": "bump", "type": "u8" }
         ]
       }
-    }
-  ],
-  "events": [
-    {
-      "name": "RewardPoolFunded",
-      "fields": [
-        { "name": "authority", "type": "publicKey", "index": false },
-        { "name": "amount", "type": "u64", "index": false },
-        { "name": "totalPool", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "UserRegistered",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "referrer", "type": { "option": "publicKey" }, "index": false },
-        { "name": "timestamp", "type": "i64", "index": false }
-      ]
-    },
-    {
-      "name": "TokensStaked",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "amount", "type": "u64", "index": false },
-        { "name": "lockPeriod", "type": "u64", "index": false },
-        { "name": "unlockAt", "type": "i64", "index": false },
-        { "name": "apy", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "RewardsClaimed",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "amount", "type": "u64", "index": false },
-        { "name": "timestamp", "type": "i64", "index": false }
-      ]
-    },
-    {
-      "name": "RewardsCompounded",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "amount", "type": "u64", "index": false },
-        { "name": "newStake", "type": "u64", "index": false },
-        { "name": "timestamp", "type": "i64", "index": false }
-      ]
-    },
-    {
-      "name": "TokensUnstaked",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "amount", "type": "u64", "index": false },
-        { "name": "timestamp", "type": "i64", "index": false }
-      ]
-    },
-    {
-      "name": "ReferralReward",
-      "fields": [
-        { "name": "staker", "type": "publicKey", "index": false },
-        { "name": "referrer", "type": "publicKey", "index": false },
-        { "name": "amount", "type": "u64", "index": false },
-        { "name": "level", "type": "u8", "index": false }
-      ]
-    },
-    {
-      "name": "RewardRateUpdated",
-      "fields": [
-        { "name": "newRate", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "ReferralRateUpdated",
-      "fields": [
-        { "name": "newRate", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "UserBlocked",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false }
-      ]
-    },
-    {
-      "name": "UserUnblocked",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false }
-      ]
-    },
-    {
-      "name": "PlatformPauseToggled",
-      "fields": [
-        { "name": "isPaused", "type": "bool", "index": false }
-      ]
-    },
-    {
-      "name": "LockPeriodAPYUpdated",
-      "fields": [
-        { "name": "index", "type": "u8", "index": false },
-        { "name": "apy", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "TeamTargetTierUpdated",
-      "fields": [
-        { "name": "index", "type": "u8", "index": false },
-        { "name": "minTeamStaked", "type": "u64", "index": false },
-        { "name": "bonusBps", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "TeamBonusApplied",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "bonusAmount", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "UserTeamStatsUpdated",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "teamSize", "type": "u64", "index": false },
-        { "name": "teamTotalStaked", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "TokensBurned",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "burnAmount", "type": "u64", "index": false },
-        { "name": "totalBurned", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "HalvingTriggered",
-      "fields": [
-        { "name": "triggeredBy", "type": "publicKey", "index": false },
-        { "name": "halvingEpoch", "type": "u64", "index": false },
-        { "name": "timestamp", "type": "i64", "index": false }
-      ]
-    },
-    {
-      "name": "OwnershipRenounced",
-      "fields": [
-        { "name": "formerOwner", "type": "publicKey", "index": false },
-        { "name": "timestamp", "type": "i64", "index": false }
-      ]
-    },
-    {
-      "name": "RenounceFeeCollected",
-      "fields": [
-        { "name": "recipient", "type": "publicKey", "index": false },
-        { "name": "claimant", "type": "publicKey", "index": false },
-        { "name": "feeAmount", "type": "u64", "index": false },
-        { "name": "totalFeesCollected", "type": "u64", "index": false }
-      ]
     }
   ],
   "errors": [
@@ -444,16 +348,30 @@ export type FbitStaking = {
     { "code": 6005, "name": "StakeNotActive", "msg": "Stake is not active" },
     { "code": 6006, "name": "NoRewardsToClaim", "msg": "No rewards to claim" },
     { "code": 6007, "name": "InsufficientRewardPool", "msg": "Insufficient reward pool" },
-    { "code": 6008, "name": "ClaimTooEarly", "msg": "Claim too early - wait 24 hours" },
+    { "code": 6008, "name": "ClaimTooEarly", "msg": "Claim too early - wait 12 hours" },
     { "code": 6009, "name": "UserBlocked", "msg": "User is blocked" },
     { "code": 6010, "name": "OverflowError", "msg": "Overflow error" },
     { "code": 6011, "name": "InvalidAdminAccount", "msg": "Invalid admin fee account" },
     { "code": 6012, "name": "InvalidMint", "msg": "Invalid token mint" },
     { "code": 6013, "name": "InvalidTierIndex", "msg": "Invalid tier index (0-9)" },
     { "code": 6014, "name": "TeamBonusTooHigh", "msg": "Team bonus BPS exceeds maximum" },
-    { "code": 6015, "name": "HalvingNotDue", "msg": "Halving interval has not elapsed yet" },
-    { "code": 6016, "name": "AlreadyRenounced", "msg": "Ownership has already been renounced" },
-    { "code": 6017, "name": "InvalidFeeRecipient", "msg": "Fee recipient token account does not match" }
+    { "code": 6015, "name": "SelfReferral", "msg": "Cannot refer yourself" },
+    { "code": 6016, "name": "ReferrerMismatch", "msg": "Referrer account does not match referrer key" },
+    { "code": 6017, "name": "InvalidVault", "msg": "Invalid vault account" },
+    { "code": 6018, "name": "InvalidUserAccount", "msg": "Invalid user token account" },
+    { "code": 6019, "name": "APYTooHigh", "msg": "APY exceeds maximum allowed value" },
+    { "code": 6020, "name": "HalvingNotDue", "msg": "Halving is not due yet" },
+    { "code": 6021, "name": "AlreadyRenounced", "msg": "Ownership has already been renounced" },
+    { "code": 6022, "name": "InvalidFeeRecipient", "msg": "Fee recipient token account does not match" },
+    { "code": 6023, "name": "BelowMinDeposit", "msg": "Deposit amount below minimum (1 FBiT)" },
+    { "code": 6024, "name": "AboveMaxDeposit", "msg": "Deposit amount above maximum (800 M FBiT)" },
+    { "code": 6025, "name": "ReserveNotFunded", "msg": "Reserve vault not funded yet" },
+    { "code": 6026, "name": "NoEmissionAvailable", "msg": "No emission available to release yet" },
+    { "code": 6027, "name": "AnnualEmissionNotSet", "msg": "Annual emission not configured" },
+    { "code": 6028, "name": "BurnBpsTooHigh", "msg": "Burn BPS exceeds maximum (5000 = 50%)" },
+    { "code": 6029, "name": "BelowMinStake", "msg": "Stake amount is below minimum (1 FBiT)" },
+    { "code": 6030, "name": "AboveMaxStake", "msg": "Stake amount exceeds maximum (500M FBiT)" },
+    { "code": 6031, "name": "InvalidReferralATA", "msg": "Invalid referral token account" }
   ]
 };
 
@@ -491,6 +409,42 @@ export const IDL: FbitStaking = {
       ]
     },
     {
+      "name": "refundRewardPool",
+      "accounts": [
+        { "name": "platform", "isMut": true, "isSigner": false },
+        { "name": "authority", "isMut": false, "isSigner": true },
+        { "name": "authorityTokenAccount", "isMut": true, "isSigner": false },
+        { "name": "rewardVault", "isMut": true, "isSigner": false },
+        { "name": "tokenProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": [
+        { "name": "amount", "type": "u64" }
+      ]
+    },
+    {
+      "name": "depositReserve",
+      "accounts": [
+        { "name": "platform", "isMut": true, "isSigner": false },
+        { "name": "authority", "isMut": true, "isSigner": true },
+        { "name": "funderTokenAccount", "isMut": true, "isSigner": false },
+        { "name": "reserveVault", "isMut": true, "isSigner": false },
+        { "name": "tokenProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": [
+        { "name": "amount", "type": "u64" }
+      ]
+    },
+    {
+      "name": "releaseEmission",
+      "accounts": [
+        { "name": "platform", "isMut": true, "isSigner": false },
+        { "name": "reserveVault", "isMut": true, "isSigner": false },
+        { "name": "rewardVault", "isMut": true, "isSigner": false },
+        { "name": "tokenProgram", "isMut": false, "isSigner": false }
+      ],
+      "args": []
+    },
+    {
       "name": "registerUser",
       "accounts": [
         { "name": "platform", "isMut": true, "isSigner": false },
@@ -511,6 +465,8 @@ export const IDL: FbitStaking = {
         { "name": "stakeEntry", "isMut": true, "isSigner": false },
         { "name": "userTokenAccount", "isMut": true, "isSigner": false },
         { "name": "stakeVault", "isMut": true, "isSigner": false },
+        { "name": "adminStakeAccount", "isMut": true, "isSigner": false },
+        { "name": "rewardVault", "isMut": true, "isSigner": false },
         { "name": "owner", "isMut": true, "isSigner": true },
         { "name": "tokenProgram", "isMut": false, "isSigner": false },
         { "name": "systemProgram", "isMut": false, "isSigner": false }
@@ -561,6 +517,7 @@ export const IDL: FbitStaking = {
         { "name": "stakeEntry", "isMut": true, "isSigner": false },
         { "name": "userTokenAccount", "isMut": true, "isSigner": false },
         { "name": "stakeVault", "isMut": true, "isSigner": false },
+        { "name": "adminStakeAccount", "isMut": true, "isSigner": false },
         { "name": "owner", "isMut": false, "isSigner": true },
         { "name": "tokenProgram", "isMut": false, "isSigner": false }
       ],
@@ -572,9 +529,7 @@ export const IDL: FbitStaking = {
         { "name": "platform", "isMut": true, "isSigner": false },
         { "name": "authority", "isMut": false, "isSigner": true }
       ],
-      "args": [
-        { "name": "newRate", "type": "u64" }
-      ]
+      "args": [{ "name": "newRate", "type": "u64" }]
     },
     {
       "name": "setReferralRewardRate",
@@ -582,9 +537,23 @@ export const IDL: FbitStaking = {
         { "name": "platform", "isMut": true, "isSigner": false },
         { "name": "authority", "isMut": false, "isSigner": true }
       ],
-      "args": [
-        { "name": "newRate", "type": "u64" }
-      ]
+      "args": [{ "name": "newRate", "type": "u64" }]
+    },
+    {
+      "name": "setAnnualEmission",
+      "accounts": [
+        { "name": "platform", "isMut": true, "isSigner": false },
+        { "name": "authority", "isMut": false, "isSigner": true }
+      ],
+      "args": [{ "name": "annualEmission", "type": "u64" }]
+    },
+    {
+      "name": "setBurnBps",
+      "accounts": [
+        { "name": "platform", "isMut": true, "isSigner": false },
+        { "name": "authority", "isMut": false, "isSigner": true }
+      ],
+      "args": [{ "name": "burnBps", "type": "u64" }]
     },
     {
       "name": "blockUser",
@@ -698,7 +667,12 @@ export const IDL: FbitStaking = {
           { "name": "isRenounced", "type": "bool" },
           { "name": "feeRecipient", "type": "publicKey" },
           { "name": "totalFeesCollected", "type": "u64" },
-          { "name": "bump", "type": "u8" }
+          { "name": "bump", "type": "u8" },
+          { "name": "totalReserve", "type": "u64" },
+          { "name": "totalEmissionReleased", "type": "u64" },
+          { "name": "emissionStartTime", "type": "i64" },
+          { "name": "annualEmission", "type": "u64" },
+          { "name": "burnBps", "type": "u64" }
         ]
       }
     },
@@ -717,7 +691,8 @@ export const IDL: FbitStaking = {
           { "name": "registeredAt", "type": "i64" },
           { "name": "teamSize", "type": "u64" },
           { "name": "teamTotalStaked", "type": "u64" },
-          { "name": "bump", "type": "u8" }
+          { "name": "bump", "type": "u8" },
+          { "name": "stakeCount", "type": "u64" }
         ]
       }
     },
@@ -735,163 +710,10 @@ export const IDL: FbitStaking = {
           { "name": "totalClaimed", "type": "u64" },
           { "name": "isActive", "type": "bool" },
           { "name": "apy", "type": "u64" },
+          { "name": "stakeId", "type": "u64" },
           { "name": "bump", "type": "u8" }
         ]
       }
-    }
-  ],
-  "events": [
-    {
-      "name": "RewardPoolFunded",
-      "fields": [
-        { "name": "authority", "type": "publicKey", "index": false },
-        { "name": "amount", "type": "u64", "index": false },
-        { "name": "totalPool", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "UserRegistered",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "referrer", "type": { "option": "publicKey" }, "index": false },
-        { "name": "timestamp", "type": "i64", "index": false }
-      ]
-    },
-    {
-      "name": "TokensStaked",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "amount", "type": "u64", "index": false },
-        { "name": "lockPeriod", "type": "u64", "index": false },
-        { "name": "unlockAt", "type": "i64", "index": false },
-        { "name": "apy", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "RewardsClaimed",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "amount", "type": "u64", "index": false },
-        { "name": "timestamp", "type": "i64", "index": false }
-      ]
-    },
-    {
-      "name": "RewardsCompounded",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "amount", "type": "u64", "index": false },
-        { "name": "newStake", "type": "u64", "index": false },
-        { "name": "timestamp", "type": "i64", "index": false }
-      ]
-    },
-    {
-      "name": "TokensUnstaked",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "amount", "type": "u64", "index": false },
-        { "name": "timestamp", "type": "i64", "index": false }
-      ]
-    },
-    {
-      "name": "ReferralReward",
-      "fields": [
-        { "name": "staker", "type": "publicKey", "index": false },
-        { "name": "referrer", "type": "publicKey", "index": false },
-        { "name": "amount", "type": "u64", "index": false },
-        { "name": "level", "type": "u8", "index": false }
-      ]
-    },
-    {
-      "name": "RewardRateUpdated",
-      "fields": [
-        { "name": "newRate", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "ReferralRateUpdated",
-      "fields": [
-        { "name": "newRate", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "UserBlocked",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false }
-      ]
-    },
-    {
-      "name": "UserUnblocked",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false }
-      ]
-    },
-    {
-      "name": "PlatformPauseToggled",
-      "fields": [
-        { "name": "isPaused", "type": "bool", "index": false }
-      ]
-    },
-    {
-      "name": "LockPeriodAPYUpdated",
-      "fields": [
-        { "name": "index", "type": "u8", "index": false },
-        { "name": "apy", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "TeamTargetTierUpdated",
-      "fields": [
-        { "name": "index", "type": "u8", "index": false },
-        { "name": "minTeamStaked", "type": "u64", "index": false },
-        { "name": "bonusBps", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "TeamBonusApplied",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "bonusAmount", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "UserTeamStatsUpdated",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "teamSize", "type": "u64", "index": false },
-        { "name": "teamTotalStaked", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "TokensBurned",
-      "fields": [
-        { "name": "user", "type": "publicKey", "index": false },
-        { "name": "burnAmount", "type": "u64", "index": false },
-        { "name": "totalBurned", "type": "u64", "index": false }
-      ]
-    },
-    {
-      "name": "HalvingTriggered",
-      "fields": [
-        { "name": "triggeredBy", "type": "publicKey", "index": false },
-        { "name": "halvingEpoch", "type": "u64", "index": false },
-        { "name": "timestamp", "type": "i64", "index": false }
-      ]
-    },
-    {
-      "name": "OwnershipRenounced",
-      "fields": [
-        { "name": "formerOwner", "type": "publicKey", "index": false },
-        { "name": "timestamp", "type": "i64", "index": false }
-      ]
-    },
-    {
-      "name": "RenounceFeeCollected",
-      "fields": [
-        { "name": "recipient", "type": "publicKey", "index": false },
-        { "name": "claimant", "type": "publicKey", "index": false },
-        { "name": "feeAmount", "type": "u64", "index": false },
-        { "name": "totalFeesCollected", "type": "u64", "index": false }
-      ]
     }
   ],
   "errors": [
@@ -903,15 +725,29 @@ export const IDL: FbitStaking = {
     { "code": 6005, "name": "StakeNotActive", "msg": "Stake is not active" },
     { "code": 6006, "name": "NoRewardsToClaim", "msg": "No rewards to claim" },
     { "code": 6007, "name": "InsufficientRewardPool", "msg": "Insufficient reward pool" },
-    { "code": 6008, "name": "ClaimTooEarly", "msg": "Claim too early - wait 24 hours" },
+    { "code": 6008, "name": "ClaimTooEarly", "msg": "Claim too early - wait 12 hours" },
     { "code": 6009, "name": "UserBlocked", "msg": "User is blocked" },
     { "code": 6010, "name": "OverflowError", "msg": "Overflow error" },
     { "code": 6011, "name": "InvalidAdminAccount", "msg": "Invalid admin fee account" },
     { "code": 6012, "name": "InvalidMint", "msg": "Invalid token mint" },
     { "code": 6013, "name": "InvalidTierIndex", "msg": "Invalid tier index (0-9)" },
     { "code": 6014, "name": "TeamBonusTooHigh", "msg": "Team bonus BPS exceeds maximum" },
-    { "code": 6015, "name": "HalvingNotDue", "msg": "Halving interval has not elapsed yet" },
-    { "code": 6016, "name": "AlreadyRenounced", "msg": "Ownership has already been renounced" },
-    { "code": 6017, "name": "InvalidFeeRecipient", "msg": "Fee recipient token account does not match" }
+    { "code": 6015, "name": "SelfReferral", "msg": "Cannot refer yourself" },
+    { "code": 6016, "name": "ReferrerMismatch", "msg": "Referrer account does not match referrer key" },
+    { "code": 6017, "name": "InvalidVault", "msg": "Invalid vault account" },
+    { "code": 6018, "name": "InvalidUserAccount", "msg": "Invalid user token account" },
+    { "code": 6019, "name": "APYTooHigh", "msg": "APY exceeds maximum allowed value" },
+    { "code": 6020, "name": "HalvingNotDue", "msg": "Halving is not due yet" },
+    { "code": 6021, "name": "AlreadyRenounced", "msg": "Ownership has already been renounced" },
+    { "code": 6022, "name": "InvalidFeeRecipient", "msg": "Fee recipient token account does not match" },
+    { "code": 6023, "name": "BelowMinDeposit", "msg": "Deposit amount below minimum (1 FBiT)" },
+    { "code": 6024, "name": "AboveMaxDeposit", "msg": "Deposit amount above maximum (800 M FBiT)" },
+    { "code": 6025, "name": "ReserveNotFunded", "msg": "Reserve vault not funded yet" },
+    { "code": 6026, "name": "NoEmissionAvailable", "msg": "No emission available to release yet" },
+    { "code": 6027, "name": "AnnualEmissionNotSet", "msg": "Annual emission not configured" },
+    { "code": 6028, "name": "BurnBpsTooHigh", "msg": "Burn BPS exceeds maximum (5000 = 50%)" },
+    { "code": 6029, "name": "BelowMinStake", "msg": "Stake amount is below minimum (1 FBiT)" },
+    { "code": 6030, "name": "AboveMaxStake", "msg": "Stake amount exceeds maximum (500M FBiT)" },
+    { "code": 6031, "name": "InvalidReferralATA", "msg": "Invalid referral token account" }
   ]
 };
