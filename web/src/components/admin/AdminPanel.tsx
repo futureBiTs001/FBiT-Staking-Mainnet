@@ -474,8 +474,8 @@ export default function AdminPanel() {
       {activeSection === 'pool' && (
         <div className="space-y-4">
 
-          {/* ── Auto-Emission Reserve (primary) — Polygon only ── */}
-          {selectedNetwork === 'polygon' && <div className="glass-card space-y-4 border border-brand-500/20">
+          {/* ── Auto-Emission Reserve (primary) — Both networks ── */}
+          {<div className="glass-card space-y-4 border border-brand-500/20">
             <div>
               <h3 className="font-display font-semibold text-lg mb-1">Auto-Emission Reserve</h3>
               <p className="text-text-muted text-xs leading-relaxed">
@@ -780,8 +780,8 @@ export default function AdminPanel() {
             />
           </div>
 
-          {/* Burn BPS update — Polygon only */}
-          {selectedNetwork === 'polygon' && <div className="glass-card space-y-4">
+          {/* Burn BPS update — both networks */}
+          {<div className="glass-card space-y-4">
             <h3 className="font-display font-semibold text-lg">Burn Percentage</h3>
             <p className="text-text-muted text-xs -mt-2">
               Percentage of user's reward burned on every claim / compound.
@@ -813,8 +813,8 @@ export default function AdminPanel() {
             />
           </div>}
 
-          {/* Annual Emission update — Polygon only */}
-          {selectedNetwork === 'polygon' && <div className="glass-card space-y-4">
+          {/* Annual Emission update — both networks */}
+          {<div className="glass-card space-y-4">
             <h3 className="font-display font-semibold text-lg">Annual Emission (PoS APY)</h3>
             <p className="text-text-muted text-xs -mt-2">
               Total FBiT distributed to stakers per year. APY auto-adjusts:
@@ -1259,12 +1259,12 @@ export default function AdminPanel() {
 
           {/* Halving Mechanism — Solana only, permissionless */}
           {selectedNetwork === 'solana' && (() => {
-            const SECS_PER_YEAR   = 365 * 24 * 60 * 60;
+            const SECS_PER_PERIOD = 180 * 24 * 60 * 60; // 6-month halving
             const INITIAL_EMISSION = 1_000_000;
             const epoch           = platformStats.halvingEpoch   ?? 0;
             const hStart          = platformStats.halvingStartTime ?? 0;
             const nowSecs         = Math.floor(Date.now() / 1000);
-            const nextHalvingAt   = hStart > 0 ? hStart + SECS_PER_YEAR : 0;
+            const nextHalvingAt   = hStart > 0 ? hStart + SECS_PER_PERIOD : 0;
             const secsUntil       = nextHalvingAt > 0 ? nextHalvingAt - nowSecs : 0;
             const halvingDue      = secsUntil <= 0 && hStart > 0;
 
@@ -1295,7 +1295,7 @@ export default function AdminPanel() {
                       </span>
                     </h3>
                     <p className="text-text-muted text-xs mt-0.5">
-                      Annual reward halves every year — 50% cut each cycle. Permissionless (auto-triggered by platform).
+                      Reward emission halves every 6 months — 50% cut each cycle. Permissionless (auto-triggered by platform).
                     </p>
                   </div>
                 </div>
@@ -1327,7 +1327,7 @@ export default function AdminPanel() {
 
                 {/* Emission Schedule */}
                 <div>
-                  <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-2">Emission Schedule (50% Halving Each Year)</p>
+                  <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-2">Emission Schedule (50% Halving Each 6 Months)</p>
                   <div className="rounded-xl overflow-hidden border border-white/5">
                     <table className="w-full text-xs">
                       <thead>
@@ -1341,10 +1341,10 @@ export default function AdminPanel() {
                       <tbody>
                         {schedule.map(({ epoch: ep, emission, active }) => (
                           <tr key={ep} className={`border-t border-white/5 ${active ? 'bg-accent-amber/5' : ''}`}>
-                            <td className="px-3 py-2 font-mono text-text-secondary">Year {ep + 1}</td>
+                            <td className="px-3 py-2 font-mono text-text-secondary">Period {ep + 1} (6M)</td>
                             <td className="px-3 py-2 text-right font-mono">
                               <span className={active ? 'text-accent-amber font-bold' : 'text-text-secondary'}>
-                                {emission >= 1000 ? `${(emission / 1000).toFixed(0)}K` : emission.toFixed(0)} FBiT
+                                {emission >= 1000 ? `${(emission / 1000).toFixed(0)}K` : emission.toFixed(0)} FBiT/yr
                               </span>
                             </td>
                             <td className="px-3 py-2 text-right font-mono text-text-muted">
@@ -1366,9 +1366,9 @@ export default function AdminPanel() {
                 </div>
 
                 <div className="text-xs text-text-muted space-y-1 p-3 rounded-xl bg-surface-800/40 border border-white/5">
-                  <p><span className="text-accent-amber">●</span> Auto-triggered by the platform when 1 year elapses — no admin action needed.</p>
-                  <p><span className="text-brand-400">●</span> Existing stakers keep their locked-in APY. Only new stakes use the post-halving rate.</p>
-                  <p><span className="text-accent-rose">●</span> Contract enforces the 365-day time lock — early calls revert automatically.</p>
+                  <p><span className="text-accent-amber">●</span> Auto-triggered by the platform when 6 months elapses — no admin action needed.</p>
+                  <p><span className="text-brand-400">●</span> Emission halves by 50% on every trigger — APY adjusts dynamically in real time.</p>
+                  <p><span className="text-accent-rose">●</span> Contract enforces the 180-day time lock — early calls revert automatically.</p>
                 </div>
 
                 {/* Manual trigger (always available for non-overdue state as backup) */}
