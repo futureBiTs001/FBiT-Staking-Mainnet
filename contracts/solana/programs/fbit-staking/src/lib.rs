@@ -13,7 +13,7 @@ pub const DEFAULT_APY: [u64; 1] = [6_000]; // 60% — PoS minimum
 pub const PLATFORM_FEE_BPS:  u64 = 100;    // 1%
 pub const BURN_BPS:          u64 = 1000;   // 10% burn on every claim/compound
 pub const RENOUNCE_FEE_BPS:  u64 = 2500;  // 25% of gross reward to feeRecipient after renouncement
-pub const MAX_APY_BPS:       u64 = 50_000; // 500% max APY (safety ceiling)
+pub const MAX_APY_BPS:       u64 = 25_000; // 250% max APY (safety ceiling)
 pub const MIN_FUND_LAMPORTS:  u64 = 1_000_000;                    // 1 FBiT  (6 decimals)
 pub const MAX_FUND_LAMPORTS:  u64 = 800_000_000 * 1_000_000;     // 800 M FBiT
 pub const MIN_STAKE_LAMPORTS: u64 = 1_000_000;                    // 1 FBiT minimum per stake
@@ -44,10 +44,10 @@ fn get_effective_apy_bps(platform: &Platform, fallback_apy: u64) -> u64 {
         let apy = (platform.annual_emission as u128)
             .saturating_mul(10_000)
             / (platform.total_staked as u128);
-        (apy.max(6_000).min(50_000)) as u64
+        (apy.max(6_000).min(25_000)) as u64
     } else {
-        // Fallback is also clamped to PoS range (60%–500%)
-        fallback_apy.max(6_000).min(50_000)
+        // Fallback is also clamped to PoS range (60%–250%)
+        fallback_apy.max(6_000).min(25_000)
     }
 }
 
@@ -389,42 +389,56 @@ pub mod fbit_staking {
                 // [H1] Verify UserAccount is owned by this program — prevents crafted accounts
                 if ref_user_ai.owner != ctx.program_id { break; }
 
-                // Deserialize referrer's UserAccount to read owner/blocked/next-referrer.
+                // Read-only borrow to get owner/blocked/next-referrer (scoped — released before mut borrow)
                 let (user_owner, is_blocked, next_ref): (Pubkey, bool, Option<Pubkey>) = {
                     let data = ref_user_ai.try_borrow_data()
                         .map_err(|_| error!(StakingError::Unauthorized))?;
-                    let mut slice: &[u8] = &data[8..]; // skip 8-byte discriminator
+                    let mut slice: &[u8] = &data[8..];
                     match UserAccount::deserialize(&mut slice) {
                         Ok(u) => (u.owner, u.is_blocked, u.referrer),
-                        Err(_) => break, // not a valid UserAccount — stop chain
+                        Err(_) => break,
                     }
                 };
 
-                // Always advance regardless of whether we pay this level
                 cur_referrer = next_ref;
-
                 if user_owner != expected_key { continue; }
 
                 let level_bps  = REFERRAL_PERCENTAGES[level];
                 let ref_reward = staked_amount.checked_mul(level_bps).unwrap().checked_div(10_000).unwrap();
+                let can_pay    = !is_blocked && ref_reward > 0 && ctx.accounts.platform.reward_pool_balance >= ref_reward;
 
-                if is_blocked || ref_reward == 0 || ctx.accounts.platform.reward_pool_balance < ref_reward {
-                    continue;
-                }
-
-                // [C1] Verify ref_reward_ai is a valid SPL token account owned by expected_key
-                // with the correct reward mint — prevents reward redirection attacks.
-                {
+                // [C1] Verify reward ATA before mutable borrow (only when paying)
+                if can_pay {
                     require!(ref_reward_ai.owner == &token::ID, StakingError::InvalidReferralATA);
                     let ata_data = ref_reward_ai.try_borrow_data()
                         .map_err(|_| error!(StakingError::InvalidReferralATA))?;
                     require!(ata_data.len() >= 64, StakingError::InvalidReferralATA);
-                    // SPL TokenAccount layout: [mint: 32 bytes][owner: 32 bytes][...]
                     let ata_mint: [u8; 32]  = ata_data[0..32].try_into().map_err(|_| error!(StakingError::InvalidReferralATA))?;
                     let ata_owner: [u8; 32] = ata_data[32..64].try_into().map_err(|_| error!(StakingError::InvalidReferralATA))?;
                     require!(Pubkey::from(ata_mint)  == reward_mint_key,  StakingError::InvalidReferralATA);
                     require!(Pubkey::from(ata_owner) == expected_key,     StakingError::InvalidReferralATA);
                 }
+
+                // Mutable update: team_total_staked (always) + total_referral_rewards (if paying)
+                // Single write per ancestor — Polygon-style auto team tracking.
+                {
+                    let mut data = ref_user_ai.try_borrow_mut_data()
+                        .map_err(|_| error!(StakingError::Unauthorized))?;
+                    let mut updated = {
+                        let mut slice: &[u8] = &data[8..];
+                        UserAccount::deserialize(&mut slice)
+                            .map_err(|_| error!(StakingError::Unauthorized))?
+                    };
+                    updated.team_total_staked = updated.team_total_staked.saturating_add(staked_amount);
+                    if can_pay {
+                        updated.total_referral_rewards = updated.total_referral_rewards
+                            .checked_add(ref_reward).unwrap();
+                    }
+                    updated.serialize(&mut &mut data[8..])
+                        .map_err(|_| error!(StakingError::Unauthorized))?;
+                }
+
+                if !can_pay { continue; }
 
                 // Transfer reward_vault → referrer's reward ATA
                 token::transfer(CpiContext::new_with_signer(
@@ -436,21 +450,6 @@ pub mod fbit_staking {
                     },
                     signer,
                 ), ref_reward)?;
-
-                // Update total_referral_rewards in the UserAccount on-chain
-                {
-                    let mut data = ref_user_ai.try_borrow_mut_data()
-                        .map_err(|_| error!(StakingError::Unauthorized))?;
-                    let mut updated = {
-                        let mut slice: &[u8] = &data[8..];
-                        UserAccount::deserialize(&mut slice)
-                            .map_err(|_| error!(StakingError::Unauthorized))?
-                    };
-                    updated.total_referral_rewards = updated.total_referral_rewards
-                        .checked_add(ref_reward).unwrap();
-                    updated.serialize(&mut &mut data[8..])
-                        .map_err(|_| error!(StakingError::Unauthorized))?;
-                }
 
                 ctx.accounts.platform.reward_pool_balance =
                     ctx.accounts.platform.reward_pool_balance.checked_sub(ref_reward).unwrap();
@@ -477,13 +476,11 @@ pub mod fbit_staking {
         require!(elapsed >= CLAIM_INTERVAL, StakingError::ClaimTooEarly);
 
         let intervals    = elapsed as u64 / CLAIM_INTERVAL as u64;
-        // [C3] Use APY locked at stake time — consistent with Polygon contract behavior.
-        // Falls back to live PoS APY only for legacy stakes where apy field is 0.
-        let effective_apy = if ctx.accounts.stake_entry.apy > 0 {
-            ctx.accounts.stake_entry.apy
-        } else {
-            get_effective_apy_bps(&ctx.accounts.platform, DEFAULT_APY[0])
-        };
+        // Always use live PoS APY — dynamic, changes with total_staked in real time.
+        let effective_apy = get_effective_apy_bps(
+            &ctx.accounts.platform,
+            ctx.accounts.platform.base_apy[ctx.accounts.stake_entry.lock_period_index as usize],
+        );
         let gross_reward = ctx.accounts.stake_entry.amount
             .checked_mul(effective_apy).unwrap()
             .checked_mul(intervals).unwrap()
@@ -584,12 +581,11 @@ pub mod fbit_staking {
         require!(elapsed >= CLAIM_INTERVAL, StakingError::ClaimTooEarly);
 
         let intervals    = elapsed as u64 / CLAIM_INTERVAL as u64;
-        // [C3] Use APY locked at stake time — consistent with Polygon contract behavior.
-        let effective_apy = if ctx.accounts.stake_entry.apy > 0 {
-            ctx.accounts.stake_entry.apy
-        } else {
-            get_effective_apy_bps(&ctx.accounts.platform, DEFAULT_APY[0])
-        };
+        // Always use live PoS APY — dynamic, changes with total_staked in real time.
+        let effective_apy = get_effective_apy_bps(
+            &ctx.accounts.platform,
+            ctx.accounts.platform.base_apy[ctx.accounts.stake_entry.lock_period_index as usize],
+        );
         let gross_reward = ctx.accounts.stake_entry.amount
             .checked_mul(effective_apy).unwrap()
             .checked_mul(intervals).unwrap()
@@ -844,21 +840,28 @@ pub mod fbit_staking {
         Ok(())
     }
 
-    /// Trigger the annual halving. Halves all base_apy values (floored at 1 BPS).
+    /// Trigger the 6-month halving. Halves base_apy AND annual_emission (Bitcoin-style).
     /// New stakes created after the halving receive the reduced APY.
     /// Existing stakes keep their locked-in APY.
     pub fn trigger_halving(ctx: Context<TriggerHalving>) -> Result<()> {
-        let now             = Clock::get()?.unix_timestamp;
-        let halving_epoch   = ctx.accounts.platform.halving_epoch;
-        let start_time      = ctx.accounts.platform.halving_start_time;
-        let seconds_per_year: i64 = 365 * SECONDS_PER_DAY;
-        let next_halving    = start_time + (halving_epoch as i64 + 1) * seconds_per_year;
+        let now                   = Clock::get()?.unix_timestamp;
+        let halving_epoch         = ctx.accounts.platform.halving_epoch;
+        let start_time            = ctx.accounts.platform.halving_start_time;
+        let seconds_per_period: i64 = 180 * SECONDS_PER_DAY; // 6-month halving
+        let next_halving          = start_time + (halving_epoch as i64 + 1) * seconds_per_period;
 
         require!(now >= next_halving, StakingError::HalvingNotDue);
 
+        // Halve base_apy (fallback APY when emission = 0)
         for i in 0..1 {
             let halved = ctx.accounts.platform.base_apy[i] / 2;
             ctx.accounts.platform.base_apy[i] = if halved == 0 { 1 } else { halved };
+        }
+
+        // Halve annual_emission (Bitcoin-style: fewer tokens emitted each period)
+        if ctx.accounts.platform.annual_emission > 0 {
+            let halved_emission = ctx.accounts.platform.annual_emission / 2;
+            ctx.accounts.platform.annual_emission = if halved_emission == 0 { 1 } else { halved_emission };
         }
 
         ctx.accounts.platform.halving_epoch = halving_epoch.checked_add(1).unwrap();
@@ -890,6 +893,7 @@ pub mod fbit_staking {
 
 #[account]
 pub struct Platform {
+    // ── Core fields (same byte-order as deployed v1) ──────────────────────────
     pub authority:            Pubkey,
     pub reward_token_mint:    Pubkey,
     pub stake_token_mint:     Pubkey,
@@ -900,26 +904,21 @@ pub struct Platform {
     pub reward_pool_balance:  u64,
     pub is_paused:            bool,
     pub base_apy:             [u64; 1],
-    // Team Target Bonus (10 tiers)
     pub team_tier_min_staked: [u64; 10],
     pub team_tier_bonus_bps:  [u64; 10],
-    pub bump:                 u8,
-    // Burn system
     pub total_burned:         u64,
-    // Halving system
     pub halving_epoch:        u64,
     pub halving_start_time:   i64,
-    // Renouncement + passive fee
     pub is_renounced:         bool,
     pub fee_recipient:        Pubkey,
     pub total_fees_collected: u64,
-    // Auto-emission reserve system
+    pub bump:                 u8,   // ← kept LAST among v1 fields (backward-compat)
+    // ── v2 fields (read as 0 from existing accounts; 600-byte space has room) ─
     pub total_reserve:           u64,
     pub total_emission_released: u64,
     pub emission_start_time:     i64,
-    // Settable emission & burn rate (runtime-configurable)
-    pub annual_emission: u64,  // lamports per year released from reserve
-    pub burn_bps:        u64,  // burn % on claim/compound (default 1000 = 10%)
+    pub annual_emission:         u64,
+    pub burn_bps:                u64,
 }
 // space: 427 (existing) + 7 new fields * 8 bytes = 427 + 56 = 483
 // Use 600 for future-proof safety padding
@@ -1053,29 +1052,29 @@ pub struct RegisterUser<'info> {
 #[derive(Accounts)]
 pub struct Stake<'info> {
     #[account(mut, seeds = [b"platform"], bump = platform.bump)]
-    pub platform:           Account<'info, Platform>,
+    pub platform:           Box<Account<'info, Platform>>,
     #[account(mut, seeds = [b"user", owner.key().as_ref()], bump = user_account.bump)]
-    pub user_account:       Account<'info, UserAccount>,
+    pub user_account:       Box<Account<'info, UserAccount>>,
     #[account(init, payer = owner, space = 8+32+8+1+8+8+8+8+1+8+8+1,
         seeds = [b"stake", owner.key().as_ref(), &user_account.stake_count.to_le_bytes()], bump)]
-    pub stake_entry:        Account<'info, StakeEntry>,
+    pub stake_entry:        Box<Account<'info, StakeEntry>>,
     #[account(mut,
         constraint = user_token_account.owner == owner.key() @ StakingError::InvalidUserAccount,
         constraint = user_token_account.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
-    pub user_token_account: Account<'info, TokenAccount>,
+    pub user_token_account: Box<Account<'info, TokenAccount>>,
     #[account(mut,
         constraint = stake_vault.owner == platform.key() @ StakingError::InvalidVault,
         constraint = stake_vault.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
-    pub stake_vault:        Account<'info, TokenAccount>,
+    pub stake_vault:        Box<Account<'info, TokenAccount>>,
     #[account(mut,
         constraint = (platform.is_renounced || admin_stake_account.owner == platform.authority) @ StakingError::InvalidAdminAccount,
         constraint = admin_stake_account.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
-    pub admin_stake_account: Account<'info, TokenAccount>,
+    pub admin_stake_account: Box<Account<'info, TokenAccount>>,
     /// Reward vault — pays multi-level referral rewards on stake (via remaining_accounts).
     #[account(mut,
         constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
         constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
-    pub reward_vault: Account<'info, TokenAccount>,
+    pub reward_vault: Box<Account<'info, TokenAccount>>,
     #[account(mut)]
     pub owner:              Signer<'info>,
     pub token_program:      Program<'info, Token>,
@@ -1086,23 +1085,23 @@ pub struct Stake<'info> {
 #[derive(Accounts)]
 pub struct ClaimRewards<'info> {
     #[account(mut, seeds = [b"platform"], bump = platform.bump)]
-    pub platform:            Account<'info, Platform>,
+    pub platform:            Box<Account<'info, Platform>>,
     #[account(mut, seeds = [b"user", owner.key().as_ref()], bump = user_account.bump)]
-    pub user_account:        Account<'info, UserAccount>,
+    pub user_account:        Box<Account<'info, UserAccount>>,
     // PDA seed verification: proves this entry was created via stake() for this owner
     #[account(mut,
         seeds = [b"stake", owner.key().as_ref(), &stake_entry.stake_id.to_le_bytes()],
         bump = stake_entry.bump,
         has_one = owner @ StakingError::InvalidUserAccount)]
-    pub stake_entry:         Account<'info, StakeEntry>,
+    pub stake_entry:         Box<Account<'info, StakeEntry>>,
     #[account(mut,
         constraint = user_token_account.owner == owner.key() @ StakingError::InvalidUserAccount,
         constraint = user_token_account.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
-    pub user_token_account:  Account<'info, TokenAccount>,
+    pub user_token_account:  Box<Account<'info, TokenAccount>>,
     #[account(mut,
         constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
         constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
-    pub reward_vault:        Account<'info, TokenAccount>,
+    pub reward_vault:        Box<Account<'info, TokenAccount>>,
     /// When not renounced: must be authority's reward-mint ATA (receives 1% fee).
     /// When renounced: pass any valid reward-mint token account (fee is skipped).
     #[account(mut,
@@ -1111,13 +1110,13 @@ pub struct ClaimRewards<'info> {
             platform.is_renounced
         ) @ StakingError::InvalidAdminAccount,
         constraint = admin_reward_account.mint == platform.reward_token_mint @ StakingError::InvalidMint)]
-    pub admin_reward_account:          Account<'info, TokenAccount>,
+    pub admin_reward_account:          Box<Account<'info, TokenAccount>>,
     /// Reward token mint — required for the 1:1 burn CPI
     #[account(mut, constraint = reward_token_mint.key() == platform.reward_token_mint @ StakingError::InvalidMint)]
-    pub reward_token_mint:             Account<'info, Mint>,
+    pub reward_token_mint:             Box<Account<'info, Mint>>,
     /// Receives the 25% passive renounce fee (only used when platform.is_renounced).
     #[account(mut, constraint = fee_recipient_token_account.mint == platform.reward_token_mint @ StakingError::InvalidMint)]
-    pub fee_recipient_token_account:   Account<'info, TokenAccount>,
+    pub fee_recipient_token_account:   Box<Account<'info, TokenAccount>>,
     pub owner:               Signer<'info>,
     pub token_program:       Program<'info, Token>,
 }
@@ -1125,18 +1124,18 @@ pub struct ClaimRewards<'info> {
 #[derive(Accounts)]
 pub struct CompoundRewards<'info> {
     #[account(mut, seeds = [b"platform"], bump = platform.bump)]
-    pub platform:             Account<'info, Platform>,
+    pub platform:             Box<Account<'info, Platform>>,
     #[account(mut, seeds = [b"user", owner.key().as_ref()], bump = user_account.bump)]
-    pub user_account:         Account<'info, UserAccount>,
+    pub user_account:         Box<Account<'info, UserAccount>>,
     #[account(mut,
         seeds = [b"stake", owner.key().as_ref(), &stake_entry.stake_id.to_le_bytes()],
         bump = stake_entry.bump,
         has_one = owner @ StakingError::InvalidUserAccount)]
-    pub stake_entry:          Account<'info, StakeEntry>,
+    pub stake_entry:          Box<Account<'info, StakeEntry>>,
     #[account(mut,
         constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
         constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
-    pub reward_vault:         Account<'info, TokenAccount>,
+    pub reward_vault:         Box<Account<'info, TokenAccount>>,
     /// When not renounced: must be authority's reward-mint ATA (receives 1% fee).
     /// When renounced: pass any valid reward-mint token account (fee is skipped).
     #[account(mut,
@@ -1145,13 +1144,13 @@ pub struct CompoundRewards<'info> {
             platform.is_renounced
         ) @ StakingError::InvalidAdminAccount,
         constraint = admin_reward_account.mint == platform.reward_token_mint @ StakingError::InvalidMint)]
-    pub admin_reward_account:          Account<'info, TokenAccount>,
+    pub admin_reward_account:          Box<Account<'info, TokenAccount>>,
     /// Reward token mint — required for the 1:1 burn CPI
     #[account(mut, constraint = reward_token_mint.key() == platform.reward_token_mint @ StakingError::InvalidMint)]
-    pub reward_token_mint:             Account<'info, Mint>,
+    pub reward_token_mint:             Box<Account<'info, Mint>>,
     /// Receives the 25% passive renounce fee (only used when platform.is_renounced).
     #[account(mut, constraint = fee_recipient_token_account.mint == platform.reward_token_mint @ StakingError::InvalidMint)]
-    pub fee_recipient_token_account:   Account<'info, TokenAccount>,
+    pub fee_recipient_token_account:   Box<Account<'info, TokenAccount>>,
     pub owner:                Signer<'info>,
     pub token_program:        Program<'info, Token>,
 }

@@ -55,3 +55,6 @@ contracts/polygon/node_modules/
 # TypeScript
 *.tsbuildinfo
 web/next-env.d.ts
+
+# Local Netlify folder
+.netlify

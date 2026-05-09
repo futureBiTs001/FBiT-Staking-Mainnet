@@ -211,7 +211,7 @@ export function useContract(): ContractHook {
 
   // ── Sync ──────────────────────────────────────────────────────────────────
 
-  const SECS_PER_YEAR = 365 * 24 * 60 * 60;
+  const SECS_PER_YEAR = 180 * 24 * 60 * 60; // 6-month halving period for Solana
 
   const syncPlatformStats = useCallback(async () => {
     const stats =

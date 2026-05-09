@@ -438,7 +438,9 @@ export default function AdminPanel() {
         {[
           { label: 'TVL',          value: formatNumber(platformStats.totalStaked),                                    color: 'text-brand-400' },
           { label: 'Users',        value: formatNumber(platformStats.totalUsers, 0),                                  color: 'text-accent-purple' },
-          { label: 'Reserve',      value: formatNumber(platformStats.totalReserve ?? 0),                              color: 'text-brand-400' },
+          ...(selectedNetwork === 'polygon' ? [
+            { label: 'Reserve',   value: formatNumber(platformStats.totalReserve ?? 0),                              color: 'text-brand-400' },
+          ] : []),
           { label: 'Reward Pool',  value: formatNumber(platformStats.rewardPoolBalance),                              color: 'text-accent-cyan' },
           { label: 'Current APY',  value: `${Math.round((platformStats.effectiveAPY ?? 6000) / 100)}%`,             color: 'text-accent-amber' },
           { label: 'Total Burned 🔥', value: formatNumber(platformStats.totalBurned ?? 0, 8),                        color: 'text-accent-rose' },
@@ -472,8 +474,8 @@ export default function AdminPanel() {
       {activeSection === 'pool' && (
         <div className="space-y-4">
 
-          {/* ── Auto-Emission Reserve (primary) ── */}
-          <div className="glass-card space-y-4 border border-brand-500/20">
+          {/* ── Auto-Emission Reserve (primary) — Polygon only ── */}
+          {selectedNetwork === 'polygon' && <div className="glass-card space-y-4 border border-brand-500/20">
             <div>
               <h3 className="font-display font-semibold text-lg mb-1">Auto-Emission Reserve</h3>
               <p className="text-text-muted text-xs leading-relaxed">
@@ -577,35 +579,73 @@ export default function AdminPanel() {
                 variant="amber"
               />
             </div>
-          </div>
+          </div>}
 
-          {/* ── Manual Pool Top-Up (fallback) ── */}
-          <details className="glass-card space-y-4">
-            <summary className="font-display font-semibold text-sm text-text-secondary cursor-pointer select-none">
-              Manual Pool Top-Up (fallback)
-            </summary>
-            <p className="text-text-muted text-xs mt-2">
-              Add tokens directly to the reward pool. Use only if the auto-emission reserve was not funded.
-            </p>
-            <div>
-              <label className="text-sm text-text-secondary font-display mb-1 block">Amount (FBiT)</label>
-              <input
-                type="number"
-                value={fundAmount}
-                onChange={(e) => setFundAmount(e.target.value)}
-                placeholder="e.g. 100000"
-                className="input-field font-mono"
+          {/* ── Fund Reward Pool — Solana: primary card; Polygon: collapsed fallback ── */}
+          {selectedNetwork === 'solana' ? (
+            <div className="glass-card space-y-4 border border-accent-cyan/20">
+              <div>
+                <h3 className="font-display font-semibold text-lg mb-1">Fund Reward Pool</h3>
+                <p className="text-text-muted text-xs leading-relaxed">
+                  Apne wallet se directly reward pool me FBiT daalo. Stakers ko yahan se rewards milenge.
+                </p>
+              </div>
+              <div>
+                <label className="text-sm text-text-secondary font-display mb-1 block">Amount (FBiT)</label>
+                <input
+                  type="number"
+                  value={fundAmount}
+                  onChange={(e) => setFundAmount(e.target.value)}
+                  placeholder="e.g. 800000000"
+                  min={1}
+                  className="input-field font-mono"
+                />
+                {fundAmount && parseFloat(fundAmount) > 0 && (
+                  <p className="text-xs text-text-muted mt-1">
+                    Pool badhkar <span className="text-brand-400 font-mono">{formatNumber(platformStats.rewardPoolBalance + parseFloat(fundAmount))} FBiT</span> ho jayega
+                  </p>
+                )}
+              </div>
+              <AdminButton
+                label={`Fund Reward Pool${fundAmount && parseFloat(fundAmount) > 0 ? ` — ${formatNumber(parseFloat(fundAmount))} FBiT` : ''}`}
+                loadingLabel="Funding…"
+                onClick={handleFund}
+                disabled={isRenounced || !fundAmount || parseFloat(fundAmount) <= 0}
+                loading={busy('fund')}
+                variant="cyan"
               />
+              {isRenounced && (
+                <p className="text-xs text-accent-rose">⚠ Ownership renounce hone ke baad direct funding disabled hai.</p>
+              )}
             </div>
-            <AdminButton
-              label="Fund Reward Pool"
-              loadingLabel="Funding…"
-              onClick={handleFund}
-              disabled={isRenounced || !fundAmount || parseFloat(fundAmount) <= 0}
-              loading={busy('fund')}
-              variant="cyan"
-            />
-          </details>
+          ) : (
+            <details className="glass-card space-y-4">
+              <summary className="font-display font-semibold text-sm text-text-secondary cursor-pointer select-none">
+                Manual Pool Top-Up (fallback)
+              </summary>
+              <p className="text-text-muted text-xs mt-2">
+                Add tokens directly to the reward pool. Use only if the auto-emission reserve was not funded.
+              </p>
+              <div>
+                <label className="text-sm text-text-secondary font-display mb-1 block">Amount (FBiT)</label>
+                <input
+                  type="number"
+                  value={fundAmount}
+                  onChange={(e) => setFundAmount(e.target.value)}
+                  placeholder="e.g. 100000"
+                  className="input-field font-mono"
+                />
+              </div>
+              <AdminButton
+                label="Fund Reward Pool"
+                loadingLabel="Funding…"
+                onClick={handleFund}
+                disabled={isRenounced || !fundAmount || parseFloat(fundAmount) <= 0}
+                loading={busy('fund')}
+                variant="cyan"
+              />
+            </details>
+          )}
 
           {/* ── Refund Pool Reward ── */}
           {selectedNetwork === 'solana' && (
@@ -740,8 +780,8 @@ export default function AdminPanel() {
             />
           </div>
 
-          {/* Burn BPS update */}
-          <div className="glass-card space-y-4">
+          {/* Burn BPS update — Polygon only */}
+          {selectedNetwork === 'polygon' && <div className="glass-card space-y-4">
             <h3 className="font-display font-semibold text-lg">Burn Percentage</h3>
             <p className="text-text-muted text-xs -mt-2">
               Percentage of user's reward burned on every claim / compound.
@@ -771,10 +811,10 @@ export default function AdminPanel() {
               loading={busy('burnBps')}
               variant="rose"
             />
-          </div>
+          </div>}
 
-          {/* Annual Emission update */}
-          <div className="glass-card space-y-4">
+          {/* Annual Emission update — Polygon only */}
+          {selectedNetwork === 'polygon' && <div className="glass-card space-y-4">
             <h3 className="font-display font-semibold text-lg">Annual Emission (PoS APY)</h3>
             <p className="text-text-muted text-xs -mt-2">
               Total FBiT distributed to stakers per year. APY auto-adjusts:
@@ -905,7 +945,7 @@ export default function AdminPanel() {
               loading={busy('annualEmission')}
               variant="purple"
             />
-          </div>
+          </div>}
           {/* Base Fallback APY — Solana only, used when emission = 0 */}
           {selectedNetwork === 'solana' && (
             <div className="glass-card space-y-4">
