@@ -807,14 +807,7 @@ export async function solanaGetTokenBalance(ownerAddress: string): Promise<numbe
   const stakeTokenAddr = NETWORK_CONFIG.solana.stakeTokenAddress;
   if (!stakeTokenAddr || stakeTokenAddr.length < 10 || stakeTokenAddr.toUpperCase().startsWith('YOUR_')) return 0;
 
-  let ownerPk: PublicKey, mintPk: PublicKey;
-  try { ownerPk = new PublicKey(ownerAddress); mintPk = new PublicKey(stakeTokenAddr); } catch { return 0; }
-
-  // Derive Associated Token Account address deterministically — no RPC needed
-  const [ataAddress] = PublicKey.findProgramAddressSync(
-    [ownerPk.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mintPk.toBuffer()],
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-  );
+  try { new PublicKey(ownerAddress); new PublicKey(stakeTokenAddr); } catch { return 0; }
 
   const endpoints = [
     'https://solana-rpc.publicnode.com',
@@ -822,15 +815,17 @@ export async function solanaGetTokenBalance(ownerAddress: string): Promise<numbe
     'https://api.mainnet-beta.solana.com',
   ].filter((u, i, a) => u && a.indexOf(u) === i);
 
+  // Use getTokenAccountsByOwner — works with both SPL Token and Token-2022
   for (const rpc of endpoints) {
     try {
-      const result = await rpcCall(rpc, 'getAccountInfo', [
-        ataAddress.toString(),
+      const result = await rpcCall(rpc, 'getTokenAccountsByOwner', [
+        ownerAddress,
+        { mint: stakeTokenAddr },
         { encoding: 'jsonParsed' },
       ]);
-      // null value means ATA doesn't exist yet → 0 balance
-      if (!result?.value) return 0;
-      return result.value.data?.parsed?.info?.tokenAmount?.uiAmount ?? 0;
+      if (!result?.value?.length) return 0;
+      return (result.value as any[]).reduce((sum: number, acct: any) =>
+        sum + (acct.account?.data?.parsed?.info?.tokenAmount?.uiAmount ?? 0), 0);
     } catch {
       // try next endpoint
     }

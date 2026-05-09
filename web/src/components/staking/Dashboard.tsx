@@ -21,6 +21,7 @@ import ContractSetupNotice from '@/components/ui/ContractSetupNotice';
 import { LOCK_PERIOD, TEAM_TARGET_TIERS, type PlatformStats } from '@/types';
 import { solanaGetTokenBalance } from '@/lib/contracts/solana';
 import { polygonGetTokenBalance } from '@/lib/contracts/polygon';
+import { useTokenPrice } from '@/hooks/useTokenPrice';
 
 type ActionKey = string;
 
@@ -37,6 +38,8 @@ export default function Dashboard() {
     loadOnChainData,
   } = useAppStore();
   const contract = useContract();
+  const { pairs: pricePairs } = useTokenPrice();
+  const fbitPriceUsd = pricePairs[0] ? Number(pricePairs[0].priceUsd) : null;
 
   // Re-render every second so pending rewards tick live
   const [, setTick] = useState(0);
@@ -379,6 +382,19 @@ export default function Dashboard() {
             <p className="stat-value text-xl sm:text-2xl md:text-3xl">{formatNumber(tokenBalance, 8)}</p>
           )}
           <p className="text-text-secondary text-xs mt-1">FBiT Available</p>
+          {fbitPriceUsd !== null && (
+            <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] font-mono text-accent-cyan font-semibold">
+                ${fbitPriceUsd.toFixed(6)}
+              </span>
+              <span className="text-[10px] text-text-muted">/FBiT</span>
+              {tokenBalance > 0 && (
+                <span className="text-[11px] font-mono text-brand-400 font-semibold ml-auto">
+                  ≈ ${(tokenBalance * fbitPriceUsd).toFixed(4)}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
