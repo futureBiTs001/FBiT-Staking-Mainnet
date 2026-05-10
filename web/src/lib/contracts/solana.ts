@@ -12,7 +12,7 @@
  * Amount parameters are in token units (not lamports).
  */
 
-import { Connection, PublicKey, SystemProgram } from '@solana/web3.js';
+import { Connection, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY } from '@solana/web3.js';
 import { AnchorProvider, Program, BN } from '@coral-xyz/anchor';
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { IDL } from './idl';
@@ -138,6 +138,53 @@ function ata(mint: PublicKey, owner: PublicKey): PublicKey {
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
+
+/**
+ * Initialize the Platform PDA — must be called ONCE by admin before any other
+ * instruction (depositReserve, stake, etc.) can work. Creates the on-chain
+ * Platform account that all other instructions reference.
+ */
+export async function solanaInitializePlatform(
+  rewardRate        = 100,
+  referralRewardRate = 500
+): Promise<{ txHash: string }> {
+  const program   = getProgram();
+  const authority = getOwner();
+  const [platPda] = platformPda();
+
+  const rewardTokenMint = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
+  const stakeTokenMint  = new PublicKey(NETWORK_CONFIG.solana.stakeTokenAddress);
+
+  const tx = await (program.methods as any)
+    .initialize(new BN(rewardRate), new BN(referralRewardRate))
+    .accounts({
+      platform:       platPda,
+      authority,
+      rewardTokenMint,
+      stakeTokenMint,
+      systemProgram:  SystemProgram.programId,
+      tokenProgram:   TOKEN_PROGRAM_ID,
+      rent:           SYSVAR_RENT_PUBKEY,
+    })
+    .rpc();
+
+  return { txHash: tx };
+}
+
+/**
+ * Returns true if the Platform PDA exists on-chain (initialize was called).
+ * Returns false if the program is deployed but not yet initialized.
+ */
+export async function solanaIsPlatformInitialized(): Promise<boolean> {
+  try {
+    const program = getReadOnlyProgram();
+    const [pda]   = platformPda();
+    await (program.account as any).platform.fetch(pda);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> {
   try {

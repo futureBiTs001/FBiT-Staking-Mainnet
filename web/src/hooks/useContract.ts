@@ -51,6 +51,8 @@ import {
 } from '@/lib/contracts/polygon';
 
 import {
+  solanaInitializePlatform,
+  solanaIsPlatformInitialized,
   solanaFetchPlatformStats,
   solanaStake,
   solanaClaimRewards,
@@ -143,6 +145,10 @@ export interface ContractHook {
   burnUnusedPool(amount: number): Promise<{ txHash: string }>;
   /** Emergency withdraw any token from contract (onlyOwner + whenPaused). Polygon only. */
   emergencyWithdraw(tokenAddress: string, toAddress: string, amount: number): Promise<{ txHash: string }>;
+  /** One-time setup: create the Platform PDA. Must be called before any other instruction. Solana only. */
+  initializePlatform(rewardRate?: number, referralRewardRate?: number): Promise<{ txHash: string }>;
+  /** Check whether the Platform PDA has been initialized on-chain. Solana only. */
+  isPlatformInitialized(): Promise<boolean>;
 }
 
 export function useContract(): ContractHook {
@@ -449,6 +455,22 @@ export function useContract(): ContractHook {
     [selectedNetwork]
   );
 
+  const initializePlatform = useCallback(
+    (rewardRate?: number, referralRewardRate?: number) => {
+      if (selectedNetwork === 'solana') return solanaInitializePlatform(rewardRate, referralRewardRate);
+      return Promise.reject(new Error('Initialize platform is not supported on Polygon.'));
+    },
+    [selectedNetwork]
+  );
+
+  const isPlatformInitialized = useCallback(
+    () => {
+      if (selectedNetwork === 'solana') return solanaIsPlatformInitialized();
+      return Promise.resolve(true); // Polygon contracts are always "initialized"
+    },
+    [selectedNetwork]
+  );
+
   return {
     isLive,
     isReady,
@@ -476,5 +498,7 @@ export function useContract(): ContractHook {
     setBaseFallbackApy,
     burnUnusedPool,
     emergencyWithdraw,
+    initializePlatform,
+    isPlatformInitialized,
   };
 }
