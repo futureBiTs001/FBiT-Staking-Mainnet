@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { useWallet } from '@/context/WalletContext';
 import { isAdminAddress } from '@/context/WalletContext';
@@ -15,6 +15,9 @@ export default function AdminPanel() {
   const { address } = useWallet();
   const { selectedNetwork, platformStats, updatePlatformStats, addTransaction, getWalletData } = useAppStore();
   const contract = useContract();
+
+  // null = checking, true = initialized, false = not initialized
+  const [platformInitialized, setPlatformInitialized] = useState<boolean | null>(null);
 
   const [fundAmount, setFundAmount]         = useState('');
   const [reserveAmount, setReserveAmount]   = useState('');
@@ -91,6 +94,26 @@ export default function AdminPanel() {
     } finally {
       setProcessing(null);
     }
+  };
+
+  // Check on-chain whether Platform PDA is initialized
+  useEffect(() => {
+    if (selectedNetwork !== 'solana' || !contract.isLive) {
+      setPlatformInitialized(true); // Polygon is always "initialized"
+      return;
+    }
+    setPlatformInitialized(null);
+    contract.isPlatformInitialized()
+      .then(ok => setPlatformInitialized(ok))
+      .catch(() => setPlatformInitialized(false));
+  }, [selectedNetwork, contract.isLive]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleInitializePlatform = () => {
+    run('initPlatform', () => contract.initializePlatform(), 'Platform initialized successfully! Proceed to deposit reserve.');
+    // Re-check after a short delay so the UI updates
+    setTimeout(() => {
+      contract.isPlatformInitialized().then(ok => setPlatformInitialized(ok)).catch(() => {});
+    }, 5000);
   };
 
   const RESERVE_MIN = 1;
@@ -473,6 +496,36 @@ export default function AdminPanel() {
       {/* ── Reward Pool ── */}
       {activeSection === 'pool' && (
         <div className="space-y-4">
+
+          {/* ── Initialize Platform (Solana only — must be done FIRST) ── */}
+          {selectedNetwork === 'solana' && platformInitialized === false && (
+            <div className="glass-card border border-accent-rose/40 bg-accent-rose/5 space-y-3">
+              <div className="flex items-start gap-3">
+                <span className="text-2xl">🚨</span>
+                <div>
+                  <h3 className="font-display font-bold text-lg text-accent-rose">Platform Not Initialized</h3>
+                  <p className="text-text-muted text-xs mt-1 leading-relaxed">
+                    The on-chain Platform account does not exist yet. You must initialize it <span className="text-accent-rose font-semibold">once</span> before
+                    any other admin action (deposit reserve, set emission, etc.) will work.
+                    This creates the Platform PDA using your admin wallet.
+                  </p>
+                </div>
+              </div>
+              <AdminButton
+                label="Initialize Platform (One-Time Setup)"
+                loadingLabel="Initializing…"
+                onClick={handleInitializePlatform}
+                loading={busy('initPlatform')}
+                variant="primary"
+              />
+            </div>
+          )}
+
+          {selectedNetwork === 'solana' && platformInitialized === null && (
+            <div className="glass-card border border-white/10 py-3 text-center text-text-muted text-sm animate-pulse">
+              Checking platform status…
+            </div>
+          )}
 
           {/* ── Auto-Emission Reserve (primary) — Both networks ── */}
           {<div className="glass-card space-y-4 border border-brand-500/20">
