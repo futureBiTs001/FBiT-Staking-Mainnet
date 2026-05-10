@@ -515,6 +515,7 @@ export default function AdminPanel() {
                 label="Initialize Platform (One-Time Setup)"
                 loadingLabel="Initializing…"
                 onClick={handleInitializePlatform}
+                disabled={busy('initPlatform')}
                 loading={busy('initPlatform')}
                 variant="primary"
               />
