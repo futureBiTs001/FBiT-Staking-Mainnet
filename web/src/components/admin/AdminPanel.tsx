@@ -1474,11 +1474,12 @@ export default function AdminPanel() {
 
           {/* Halving Schedule — Polygon (client-side display, manual action required) */}
           {selectedNetwork === 'polygon' && (() => {
-            const SECS_PER_PERIOD  = 4 * 365 * 24 * 60 * 60; // 4-year halving period
+            const SECS_PER_YEAR    = 365 * 24 * 60 * 60;
             const INITIAL_EMISSION = 1_000_000;
             const hStart     = platformStats.emissionStartTime ?? 0;
             const nowSecs    = Math.floor(Date.now() / 1000);
-            const currentEpoch  = hStart > 0 ? Math.floor((nowSecs - hStart) / SECS_PER_PERIOD) : 0;
+            const yearsElapsed  = hStart > 0 ? Math.floor((nowSecs - hStart) / SECS_PER_YEAR) : 0;
+            const currentEpoch  = yearsElapsed;
             const schedule = Array.from({ length: 6 }, (_, i) => ({
               ep: i,
               emission: INITIAL_EMISSION / Math.pow(2, i),
@@ -1497,7 +1498,7 @@ export default function AdminPanel() {
                     </span>
                   </h3>
                   <p className="text-text-muted text-xs mt-0.5 leading-relaxed">
-                    Polygon has no on-chain halving. Use <span className="text-brand-400 font-mono">Rates → Annual Emission</span> every 4 years to manually apply the halving schedule below.
+                    Polygon has no on-chain halving. Use <span className="text-brand-400 font-mono">Rates → Annual Emission</span> each year to manually apply the halving schedule below.
                   </p>
                 </div>
 
@@ -1508,14 +1509,14 @@ export default function AdminPanel() {
                       <>
                         <p className="font-display font-semibold text-accent-rose mb-1">⚠ Emission Mismatch</p>
                         <p className="text-text-muted">
-                          Epoch {currentEpoch + 1} suggests <span className="text-accent-amber font-mono font-semibold">{suggestedEmission.toLocaleString()} FBiT/year</span>.
+                          Year {currentEpoch + 1} suggests <span className="text-accent-amber font-mono font-semibold">{suggestedEmission.toLocaleString()} FBiT/year</span>.
                           On-chain: <span className="font-mono text-text-secondary">{onChainEmission.toLocaleString()} FBiT/year</span>.
                           Update via <span className="text-brand-400">Rates → Annual Emission</span>.
                         </p>
                       </>
                     ) : (
                       <p className="text-text-muted">
-                        Epoch {currentEpoch + 1} (Year {currentEpoch * 4 + 1}–{currentEpoch * 4 + 4}) · <span className="text-accent-amber font-mono">{onChainEmission.toLocaleString()} FBiT/year</span> ✓
+                        Year {currentEpoch + 1} of schedule · <span className="text-accent-amber font-mono">{onChainEmission.toLocaleString()} FBiT/year</span> ✓
                       </p>
                     )}
                   </div>
@@ -1527,12 +1528,12 @@ export default function AdminPanel() {
 
                 {/* Emission Schedule Table */}
                 <div>
-                  <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-2">Emission Schedule (50% Halving Every 4 Years)</p>
+                  <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-2">Emission Schedule (50% Halving Each Year)</p>
                   <div className="rounded-xl overflow-hidden border border-white/5">
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="bg-surface-800/60 text-text-muted">
-                          <th className="text-left px-3 py-2 font-display">Years</th>
+                          <th className="text-left px-3 py-2 font-display">Year</th>
                           <th className="text-right px-3 py-2 font-display">Annual Emission</th>
                           <th className="text-right px-3 py-2 font-display">Daily Release</th>
                           <th className="text-right px-3 py-2 font-display">Status</th>
@@ -1541,9 +1542,7 @@ export default function AdminPanel() {
                       <tbody>
                         {schedule.map(({ ep, emission, active }) => (
                           <tr key={ep} className={`border-t border-white/5 ${active ? 'bg-accent-amber/5' : ''}`}>
-                            <td className="px-3 py-2 font-mono text-text-secondary">
-                              {ep === 0 ? 'Year 1–4' : `Year ${ep * 4 + 1}–${ep * 4 + 4}`}
-                            </td>
+                            <td className="px-3 py-2 font-mono text-text-secondary">Year {ep + 1}</td>
                             <td className="px-3 py-2 text-right font-mono">
                               <span className={active ? 'text-accent-amber font-bold' : 'text-text-secondary'}>
                                 {emission >= 1000 ? `${(emission / 1000).toFixed(0)}K` : emission.toFixed(0)} FBiT
@@ -1568,7 +1567,7 @@ export default function AdminPanel() {
                 </div>
 
                 <div className="text-xs text-text-muted space-y-1 p-3 rounded-xl bg-surface-800/40 border border-white/5">
-                  <p><span className="text-accent-amber">●</span> Unlike Solana, Polygon halving is a manual admin action — call <span className="font-mono text-brand-400">setAnnualEmission</span> every 4 years.</p>
+                  <p><span className="text-accent-amber">●</span> Unlike Solana, Polygon halving is a manual admin action — call <span className="font-mono text-brand-400">setAnnualEmission</span> each year.</p>
                   <p><span className="text-brand-400">●</span> Reserve runway: <span className="text-text-secondary font-mono">{(platformStats.remainingYears ?? 0)} years</span> remaining at current emission rate.</p>
                   <p><span className="text-accent-cyan">●</span> Max pending rewards across all stakers: <span className="font-mono text-text-secondary">{formatNumber(platformStats.maxPendingRewards ?? 0)} FBiT</span>.</p>
                 </div>
