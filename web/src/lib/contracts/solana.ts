@@ -415,7 +415,7 @@ export async function solanaRegisterUser(referrer?: string): Promise<{ txHash: s
   const [userAccPda] = userPda(owner);
 
   let referrerPubkey: PublicKey | null = null;
-  let referrerAccPda = userAccPda; // fallback (skipped when referrer == None)
+  let referrerAccPda: PublicKey = SystemProgram.programId; // None sentinel for optional account
 
   if (referrer) {
     try {
