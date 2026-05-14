@@ -857,7 +857,10 @@ function BurnEmissionPanel({ stats, network }: { stats: PlatformStats; network: 
         {network === 'solana' && (() => {
           const SECS_PER_YEAR = 1460 * 24 * 60 * 60; // 4-year halving period (matches useContract)
           const hStart = stats.halvingStartTime ?? 0;
-          if (!hStart) return null;
+          // Guard: must be a plausible Unix timestamp (2001–2100). Rejects garbage on-chain values.
+          const MIN_VALID_TS = 1_000_000_000;  // Sep 2001
+          const MAX_VALID_TS = 4_102_444_800;  // Jan 2100
+          if (!hStart || hStart < MIN_VALID_TS || hStart > MAX_VALID_TS) return null;
           const halvingEpoch = stats.halvingEpoch ?? 0;
           const nowSecs   = Math.floor(Date.now() / 1000);
           const secsLeft  = (hStart + (halvingEpoch + 1) * SECS_PER_YEAR) - nowSecs;

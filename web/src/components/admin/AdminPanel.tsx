@@ -1333,8 +1333,11 @@ export default function AdminPanel() {
           {selectedNetwork === 'solana' && (() => {
             const SECS_PER_PERIOD = 1460 * 24 * 60 * 60; // 4-year halving
             const INITIAL_EMISSION = 1_000_000;
+            const MIN_VALID_TS = 1_000_000_000;  // Sep 2001
+            const MAX_VALID_TS = 4_102_444_800;  // Jan 2100
             const epoch           = platformStats.halvingEpoch   ?? 0;
-            const hStart          = platformStats.halvingStartTime ?? 0;
+            const hStartRaw       = platformStats.halvingStartTime ?? 0;
+            const hStart          = (hStartRaw >= MIN_VALID_TS && hStartRaw <= MAX_VALID_TS) ? hStartRaw : 0;
             const nowSecs         = Math.floor(Date.now() / 1000);
             const nextHalvingAt   = hStart > 0 ? hStart + (epoch + 1) * SECS_PER_PERIOD : 0;
             const secsUntil       = nextHalvingAt > 0 ? nextHalvingAt - nowSecs : 0;
