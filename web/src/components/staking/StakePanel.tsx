@@ -307,7 +307,7 @@ export default function StakePanel() {
           </h4>
           <div className="grid grid-cols-3 gap-4 mb-4">
             <div>
-              <p className="text-text-muted text-xs mb-1">Per 12h</p>
+              <p className="text-text-muted text-xs mb-1">Per 6h</p>
               <p className="font-mono text-brand-400 font-semibold">{formatNumber(estimatedRewards.perInterval)}</p>
               <p className="text-text-muted text-[10px]">FBiT / interval</p>
             </div>

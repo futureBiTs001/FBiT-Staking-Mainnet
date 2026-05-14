@@ -463,7 +463,7 @@ export default function Dashboard() {
                         <p className="font-display font-semibold">{formatNumber(stake.amount)} FBiT</p>
                         <p className="text-text-muted text-xs">{period.label} lock · {Math.round(liveApyBps / 100)}% APY (live)</p>
                         <p className="text-text-muted text-xs mt-0.5">
-                          Per 12h: <span className="text-brand-400 font-mono">+{formatNumber(daily, 8)} WFBIT</span>
+                          Per 6h: <span className="text-brand-400 font-mono">+{formatNumber(daily, 8)} WFBIT</span>
                         </p>
                       </div>
                     </div>
@@ -541,10 +541,10 @@ export default function Dashboard() {
         <div className="flex items-start gap-4">
           <div className="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center text-xl shrink-0">⏱</div>
           <div>
-            <h4 className="font-display font-semibold text-sm mb-1">12-Hour Reward Claiming</h4>
+            <h4 className="font-display font-semibold text-sm mb-1">6-Hour Reward Claiming</h4>
             <p className="text-text-muted text-xs leading-relaxed">
               Rewards accrue every second based on your staked amount and APY. Claim once every{' '}
-              <span className="text-brand-400 font-medium">12 hours</span> per stake, or use{' '}
+              <span className="text-brand-400 font-medium">6 hours</span> per stake, or use{' '}
               <span className="text-accent-cyan font-medium">Compound</span> to re-stake earnings and accelerate growth.
             </p>
           </div>
