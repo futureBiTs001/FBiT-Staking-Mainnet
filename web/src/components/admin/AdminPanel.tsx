@@ -1389,7 +1389,7 @@ export default function AdminPanel() {
                         label="Trigger Now"
                         loadingLabel="Triggering…"
                         onClick={handleTriggerHalving}
-                        disabled={false}
+                        disabled={busy('halving')}
                         loading={busy('halving')}
                         variant="amber"
                       />
@@ -1451,7 +1451,7 @@ export default function AdminPanel() {
                       label="Force Trigger"
                       loadingLabel="Triggering…"
                       onClick={handleTriggerHalving}
-                      disabled={false}
+                      disabled={busy('halving')}
                       loading={busy('halving')}
                       variant="amber"
                     />
