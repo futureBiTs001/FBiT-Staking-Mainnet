@@ -1,0 +1,2 @@
+FROM ubuntu:22.04
+COPY target/sbpf-solana-solana/release/fbit_staking.so /build/fbit_staking.so
