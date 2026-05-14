@@ -101,7 +101,7 @@ export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, 
 
 // ===== DAILY CLAIM HELPERS =====
 
-/** Returns true if 12 hours have passed since lastClaimAt */
+/** Returns true if 6 hours have passed since lastClaimAt */
 export const canClaimRewards = (lastClaimAt: number): boolean => {
   const now = Math.floor(Date.now() / 1000);
   return now - lastClaimAt >= CLAIM_COOLDOWN_SECONDS;
