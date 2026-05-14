@@ -116,10 +116,6 @@ export default function AdminPanel() {
     }, 5000);
   };
 
-  const handleFixBump = () => {
-    run('fixBump', () => contract.fixBump(), 'Fix Bump successful! platform.bump is now set to 253. You can now deposit reserve.');
-  };
-
   const RESERVE_MIN = 1;
   const RESERVE_MAX = 800_000_000;
 
@@ -532,30 +528,7 @@ export default function AdminPanel() {
             </div>
           )}
 
-          {/* ── Fix Bump (Solana only — one-time fix for old deployments where bump=0) ── */}
-          {selectedNetwork === 'solana' && platformInitialized === true && (
-            <div className="glass-card border border-accent-amber/30 bg-accent-amber/5 space-y-3">
-              <div className="flex items-start gap-3">
-                <span className="text-2xl">🔧</span>
-                <div>
-                  <h3 className="font-display font-bold text-base text-accent-amber">Fix Platform Bump (One-Time)</h3>
-                  <p className="text-text-muted text-xs mt-1 leading-relaxed">
-                    If <span className="font-semibold text-white">Deposit Reserve</span> fails with <span className="font-mono text-accent-rose">ConstraintSeeds (2006)</span>,
-                    run this first. It sets <span className="font-mono">platform.bump = 253</span> so all subsequent instructions work correctly.
-                    Safe to call even if bump is already correct — it will just confirm it on-chain.
-                  </p>
-                </div>
-              </div>
-              <AdminButton
-                label="Fix Platform Bump"
-                loadingLabel="Fixing bump…"
-                onClick={handleFixBump}
-                disabled={busy('fixBump')}
-                loading={busy('fixBump')}
-                variant="amber"
-              />
-            </div>
-          )}
+          {/* Fix Bump card removed — platform.bump = 253 confirmed on-chain (one-time fix done) */}
 
           {/* ── Auto-Emission Reserve (primary) — Both networks ── */}
           {<div className="glass-card space-y-4 border border-brand-500/20">
