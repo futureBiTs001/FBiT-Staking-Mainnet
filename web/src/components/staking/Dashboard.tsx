@@ -110,7 +110,7 @@ export default function Dashboard() {
   const liveApyBps = platformStats.effectiveAPY || 1000;
 
   // Live display reward — counts smoothly every second for visual feedback.
-  // Actual claimable amount (on-chain, discrete 12h intervals) is used inside handleClaim/handleCompound.
+  // Actual claimable amount (on-chain, discrete 6h intervals) is used inside handleClaim/handleCompound.
   const getLiveDisplay = (s: typeof activeStakes[0]) =>
     calculateLivePendingReward(s.amount, liveApyBps, s.lastClaimAt);
 
@@ -344,6 +344,19 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Blocked account banner */}
+      {userAccount?.isBlocked && (
+        <div className="glass-card border border-accent-rose/40 bg-accent-rose/5 flex items-center gap-3 p-4">
+          <span className="text-accent-rose text-xl shrink-0">🚫</span>
+          <div>
+            <p className="font-display font-semibold text-accent-rose text-sm">Account Blocked</p>
+            <p className="text-text-muted text-xs mt-0.5">
+              Your wallet has been blocked by the platform. Stake, claim, and compound actions are disabled. Contact support if you believe this is an error.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Contract setup notice */}
       <ContractSetupNotice />
 
@@ -491,14 +504,14 @@ export default function Dashboard() {
                       <div className="flex gap-2 flex-wrap">
                         <ActionButton
                           label={claimLoading ? 'Claiming…' : claimable ? 'Claim' : `Claim (${nextClaim})`}
-                          disabled={!claimable || !!anyLoading}
+                          disabled={!claimable || !!anyLoading || !!userAccount?.isBlocked}
                           loading={claimLoading}
                           onClick={() => handleClaim(stake.id)}
                           variant="brand"
                         />
                         <ActionButton
                           label={compoundLoading ? 'Compounding…' : claimable ? 'Compound' : `Compound (${nextClaim})`}
-                          disabled={!claimable || !!anyLoading}
+                          disabled={!claimable || !!anyLoading || !!userAccount?.isBlocked}
                           loading={compoundLoading}
                           onClick={() => handleCompound(stake.id)}
                           variant="cyan"

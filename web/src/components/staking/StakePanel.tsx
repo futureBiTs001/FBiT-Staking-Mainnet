@@ -199,8 +199,21 @@ export default function StakePanel() {
     );
   }
 
+  const isBlocked = walletData?.userAccount?.isBlocked ?? false;
+
   return (
     <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
+      {/* Blocked account banner */}
+      {isBlocked && (
+        <div className="glass-card border border-accent-rose/40 bg-accent-rose/5 flex items-center gap-3 p-4">
+          <span className="text-accent-rose text-xl shrink-0">🚫</span>
+          <div>
+            <p className="font-display font-semibold text-accent-rose text-sm">Account Blocked</p>
+            <p className="text-text-muted text-xs mt-0.5">Your wallet has been blocked. Staking is disabled. Contact support if you believe this is an error.</p>
+          </div>
+        </div>
+      )}
+
       {/* Contract setup notice — hidden when contract is live */}
       <ContractSetupNotice />
 
@@ -342,9 +355,9 @@ export default function StakePanel() {
       <button
         type="button"
         onClick={handleStake}
-        disabled={isStaking || stakeAmount <= 0 || stakeAmount < effectiveMin || stakeAmount > effectiveMax || stakeAmount > tokenBalance}
+        disabled={isBlocked || isStaking || stakeAmount <= 0 || stakeAmount < effectiveMin || stakeAmount > effectiveMax || stakeAmount > tokenBalance}
         className={`w-full py-4 rounded-xl font-display font-bold text-lg transition-all duration-300 ${
-          isStaking || stakeAmount <= 0 || stakeAmount < effectiveMin || stakeAmount > effectiveMax || stakeAmount > tokenBalance
+          isBlocked || isStaking || stakeAmount <= 0 || stakeAmount < effectiveMin || stakeAmount > effectiveMax || stakeAmount > tokenBalance
             ? 'bg-surface-700 text-text-muted cursor-not-allowed'
             : 'btn-primary'
         }`}

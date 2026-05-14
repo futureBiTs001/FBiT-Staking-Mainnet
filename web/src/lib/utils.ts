@@ -61,8 +61,8 @@ export const calculatePendingReward = (
 /**
  * Smooth display-only reward — counts every second so the UI feels live.
  * Uses continuous time (no interval rounding), matching the discrete value
- * exactly at each 12h boundary. Only used for visual display; actual
- * on-chain reward still follows the 12h-interval contract logic.
+ * exactly at each 6h boundary. Only used for visual display; actual
+ * on-chain reward still follows the 6h-interval contract logic.
  */
 export const calculateLivePendingReward = (
   amount: number,
