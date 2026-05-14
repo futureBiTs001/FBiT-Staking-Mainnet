@@ -78,6 +78,7 @@ import {
   solanaTriggerHalving,
   solanaUpdateUserTeamStats,
   solanaSetBatchApy,
+  solanaFixBump,
 } from '@/lib/contracts/solana';
 
 function isPlaceholderAddr(addr: string | undefined): boolean {
@@ -120,7 +121,7 @@ export interface ContractHook {
   togglePause(currentlyPaused: boolean): Promise<{ txHash: string }>;
   /**
    * Update the annual emission that governs PoS APY.
-   * effectiveAPY = clamp(annualEmission × 10000 / totalStaked, 6000, 25000) bps → 60%–250%
+   * effectiveAPY = clamp(annualEmission × 10000 / totalStaked, 1000, 30000) bps → 10%–300%
    */
   setAnnualEmission(annualEmission: number): Promise<{ txHash: string }>;
   /** Update burn percentage on claim/compound. burnBps: 0–5000 (0%–50%). Default 1000 = 10%. */
@@ -137,7 +138,7 @@ export interface ContractHook {
   refundRewardPool(amount: number): Promise<{ txHash: string }>;
   /** Trigger annual base-APY halving. Permissionless — anyone can call once per year. Solana only. */
   triggerHalving(): Promise<{ txHash: string }>;
-  /** Set the fallback base APY BPS (6000–25000). Only active when emission=0. Solana only. */
+  /** Set the fallback base APY BPS (1000–30000). Only active when emission=0. Solana only. */
   setBaseFallbackApy(apyBps: number): Promise<{ txHash: string }>;
   /** Admin crank: set a user's team_size and team_total_staked on-chain. Solana only. */
   updateUserTeamStats(userAddress: string, teamSize: number, teamTotalStaked: number): Promise<{ txHash: string }>;
@@ -149,6 +150,8 @@ export interface ContractHook {
   initializePlatform(rewardRate?: number, referralRewardRate?: number): Promise<{ txHash: string }>;
   /** Check whether the Platform PDA has been initialized on-chain. Solana only. */
   isPlatformInitialized(): Promise<boolean>;
+  /** Fix platform.bump = 0 bug in old deployed binary. Sets bump to canonical value (253). Solana only. */
+  fixBump(): Promise<{ txHash: string }>;
 }
 
 export function useContract(): ContractHook {
@@ -471,6 +474,14 @@ export function useContract(): ContractHook {
     [selectedNetwork]
   );
 
+  const fixBump = useCallback(
+    () => {
+      if (selectedNetwork === 'solana') return solanaFixBump();
+      return Promise.reject(new Error('fixBump is only needed on Solana.'));
+    },
+    [selectedNetwork]
+  );
+
   return {
     isLive,
     isReady,
@@ -500,5 +511,6 @@ export function useContract(): ContractHook {
     emergencyWithdraw,
     initializePlatform,
     isPlatformInitialized,
+    fixBump,
   };
 }

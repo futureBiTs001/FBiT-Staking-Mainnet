@@ -264,6 +264,14 @@ export type FbitStaking = {
         { "name": "caller", "isMut": true, "isSigner": true }
       ],
       "args": []
+    },
+    {
+      "name": "fixBump",
+      "accounts": [
+        { "name": "platform", "isMut": true, "isSigner": false },
+        { "name": "authority", "isMut": false, "isSigner": true }
+      ],
+      "args": []
     }
   ],
   "accounts": [
@@ -639,6 +647,14 @@ export const IDL: FbitStaking = {
       "accounts": [
         { "name": "platform", "isMut": true, "isSigner": false },
         { "name": "caller", "isMut": true, "isSigner": true }
+      ],
+      "args": []
+    },
+    {
+      "name": "fixBump",
+      "accounts": [
+        { "name": "platform", "isMut": true, "isSigner": false },
+        { "name": "authority", "isMut": false, "isSigner": true }
       ],
       "args": []
     }

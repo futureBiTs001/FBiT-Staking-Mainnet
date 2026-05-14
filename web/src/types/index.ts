@@ -59,8 +59,8 @@ export const TEAM_TARGET_TIERS = [
 
 export type TeamTargetTier = typeof TEAM_TARGET_TIERS[number];
 
-// Claim interval in seconds (12 hours)
-export const CLAIM_COOLDOWN_SECONDS = 43200;
+// Claim interval in seconds (6 hours — 4 intervals/day)
+export const CLAIM_COOLDOWN_SECONDS = 21600;
 
 // ===== USER TYPES =====
 export interface UserAccount {
@@ -144,7 +144,7 @@ export interface PlatformStats {
   maxStakePerUser?: number;
   /** Lock period in days — read from contract (Polygon: LOCK_PERIOD, already in days) */
   lockPeriodDays?: number;
-  /** Minimum seconds between claims — read from contract (Polygon: CLAIM_INTERVAL = 43200 = 12h) */
+  /** Minimum seconds between claims — read from contract (Polygon: CLAIM_INTERVAL = 21600 = 6h) */
   claimIntervalSeconds?: number;
   /** Cumulative tokens burned via year-end pool burns (Polygon only) */
   totalYearlyBurned?: number;

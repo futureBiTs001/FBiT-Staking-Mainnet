@@ -20,7 +20,7 @@ export default function StakePanel() {
   const [amount, setAmount] = useState('');
   const [isStaking, setIsStaking] = useState(false);
   const [tokenBalance, setTokenBalance] = useState(0);
-  const [effectiveAPY, setEffectiveAPY] = useState(60); // percent, fetched live from chain (60–250%)
+  const [effectiveAPY, setEffectiveAPY] = useState(10); // percent, fetched live from chain (10%–300%)
 
   // Direct balance fetch — uses chain-specific address so balance always shows correctly
   const fetchTokenBalance = useCallback(async () => {
@@ -73,11 +73,11 @@ export default function StakePanel() {
 
   const estimatedRewards = useMemo(() => {
     const apy = effectiveAPY / 100;
-    const perInterval = (stakeAmount * apy) / 730;
+    const perInterval = (stakeAmount * apy) / 1460;
     return {
       perInterval,
-      daily: perInterval * 2,
-      total: perInterval * 2 * lockDays,
+      daily: perInterval * 4,
+      total: perInterval * 4 * lockDays,
     };
   }, [stakeAmount, effectiveAPY, lockDays]);
 
@@ -292,7 +292,7 @@ export default function StakePanel() {
             <div className="text-right">
               <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-0.5">Current APY</p>
               <p className="font-display font-bold text-brand-400 text-lg">{effectiveAPY}%</p>
-              <p className="text-[10px] text-text-muted">PoS · 60%–250%</p>
+              <p className="text-[10px] text-text-muted">PoS · 10%–300%</p>
               <p className="text-[10px] text-accent-amber">Dynamic PoS · updates live</p>
             </div>
           </div>
@@ -325,7 +325,7 @@ export default function StakePanel() {
           <div className="pt-3 border-t border-white/5 space-y-1.5">
             {[
               ['Lock Period', `${lockDays} Days`],
-              ['APY', `${effectiveAPY}% (PoS, 60%–250%)`],
+              ['APY', `${effectiveAPY}% (PoS, 10%–300%)`],
               ['Network', selectedNetwork === 'solana' ? 'Solana' : 'Polygon'],
               ['Unlock Date', new Date(Date.now() + lockDays * 86400000).toLocaleDateString()],
             ].map(([k, v]) => (

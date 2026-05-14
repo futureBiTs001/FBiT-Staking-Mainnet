@@ -7,13 +7,13 @@ declare_id!("8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp");
 pub const MAX_REFERRAL_LEVELS: usize = 10;
 pub const REFERRAL_PERCENTAGES: [u64; 10] = [25, 50, 125, 150, 200, 325, 350, 425, 550, 800];
 pub const SECONDS_PER_DAY: i64 = 86400;
-pub const CLAIM_INTERVAL: i64 = 43200;           // 12 hours
+pub const CLAIM_INTERVAL: i64 = 21600;           // 6 hours (4 intervals/day)
 pub const LOCK_PERIODS: [u64; 1] = [30];
-pub const DEFAULT_APY: [u64; 1] = [6_000]; // 60% — PoS minimum
+pub const DEFAULT_APY: [u64; 1] = [1_000]; // 10% — PoS minimum
 pub const PLATFORM_FEE_BPS:  u64 = 100;    // 1%
 pub const BURN_BPS:          u64 = 1000;   // 10% burn on every claim/compound
 pub const RENOUNCE_FEE_BPS:  u64 = 2500;  // 25% of gross reward to feeRecipient after renouncement
-pub const MAX_APY_BPS:       u64 = 25_000; // 250% max APY (safety ceiling)
+pub const MAX_APY_BPS:       u64 = 30_000; // 300% max APY (safety ceiling)
 pub const MIN_FUND_LAMPORTS:  u64 = 1_000_000;                    // 1 FBiT  (6 decimals)
 pub const MAX_FUND_LAMPORTS:  u64 = 800_000_000 * 1_000_000;     // 800 M FBiT
 pub const MIN_STAKE_LAMPORTS: u64 = 1_000_000;                    // 1 FBiT minimum per stake
@@ -37,17 +37,17 @@ pub const DEFAULT_TEAM_BONUS_BPS: [u64; 10] = [200, 300, 400, 500, 600, 700, 750
 
 // ===== HELPER =====
 
-/// PoS dynamic APY in BPS: annual_emission / total_staked * 10_000, clamped 6000–50000 (60%–500%).
+/// PoS dynamic APY in BPS: annual_emission / total_staked * 10_000, clamped 1000–30000 (10%–300%).
 /// Falls back to `fallback_apy` when emission or total_staked is 0.
 fn get_effective_apy_bps(platform: &Platform, fallback_apy: u64) -> u64 {
     if platform.annual_emission > 0 && platform.total_staked > 0 {
         let apy = (platform.annual_emission as u128)
             .saturating_mul(10_000)
             / (platform.total_staked as u128);
-        (apy.max(6_000).min(25_000)) as u64
+        (apy.max(1_000).min(30_000)) as u64
     } else {
-        // Fallback is also clamped to PoS range (60%–250%)
-        fallback_apy.max(6_000).min(25_000)
+        // Fallback is also clamped to PoS range (10%–300%)
+        fallback_apy.max(1_000).min(30_000)
     }
 }
 
@@ -484,7 +484,7 @@ pub mod fbit_staking {
         let gross_reward = ctx.accounts.stake_entry.amount
             .checked_mul(effective_apy).unwrap()
             .checked_mul(intervals).unwrap()
-            .checked_div(730 * 10_000).unwrap();
+            .checked_div(1460 * 10_000).unwrap();
 
         require!(gross_reward > 0, StakingError::NoRewardsToClaim);
 
@@ -589,7 +589,7 @@ pub mod fbit_staking {
         let gross_reward = ctx.accounts.stake_entry.amount
             .checked_mul(effective_apy).unwrap()
             .checked_mul(intervals).unwrap()
-            .checked_div(730 * 10_000).unwrap();
+            .checked_div(1460 * 10_000).unwrap();
 
         require!(gross_reward > 0, StakingError::NoRewardsToClaim);
 
@@ -847,7 +847,7 @@ pub mod fbit_staking {
         let now                   = Clock::get()?.unix_timestamp;
         let halving_epoch         = ctx.accounts.platform.halving_epoch;
         let start_time            = ctx.accounts.platform.halving_start_time;
-        let seconds_per_period: i64 = 180 * SECONDS_PER_DAY; // 6-month halving
+        let seconds_per_period: i64 = 1460 * SECONDS_PER_DAY; // 4-year halving
         let next_halving          = start_time + (halving_epoch as i64 + 1) * seconds_per_period;
 
         require!(now >= next_halving, StakingError::HalvingNotDue);
@@ -885,6 +885,19 @@ pub mod fbit_staking {
             team_size,
             team_total_staked,
         });
+        Ok(())
+    }
+
+    /// One-time migration: write the canonical PDA bump into platform.bump.
+    /// The initial deployment omitted p.bump = ctx.bumps.platform in initialize,
+    /// leaving bump=0 in every existing platform account. After this call,
+    /// all `bump = platform.bump` constraints resolve to the correct PDA.
+    pub fn fix_bump(ctx: Context<FixBump>) -> Result<()> {
+        require!(
+            ctx.accounts.authority.key() == ctx.accounts.platform.authority,
+            StakingError::Unauthorized
+        );
+        ctx.accounts.platform.bump = ctx.bumps.platform;
         Ok(())
     }
 }
@@ -1210,6 +1223,15 @@ pub struct AdminUserAction<'info> {
     #[account(mut)]
     pub user_account: Account<'info, UserAccount>,
     pub authority:    Signer<'info>,
+}
+
+/// Used only by fix_bump — uses canonical `bump` (not stored platform.bump) so
+/// the seeds constraint passes even when platform.bump == 0.
+#[derive(Accounts)]
+pub struct FixBump<'info> {
+    #[account(mut, seeds = [b"platform"], bump)]
+    pub platform:  Account<'info, Platform>,
+    pub authority: Signer<'info>,
 }
 
 // ===== EVENTS =====

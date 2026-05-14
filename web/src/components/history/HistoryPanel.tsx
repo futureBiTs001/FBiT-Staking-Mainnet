@@ -318,7 +318,7 @@ export default function HistoryPanel() {
           </div>
           <div>
             <p className="text-text-muted text-xs">Current APY</p>
-            <p className="font-display font-bold text-accent-amber">{Math.round((platformStats.effectiveAPY ?? 6000) / 100)}%</p>
+            <p className="font-display font-bold text-accent-amber">{Math.round((platformStats.effectiveAPY ?? 1000) / 100)}%</p>
           </div>
           <div>
             <p className="text-text-muted text-xs">Burn Rate</p>

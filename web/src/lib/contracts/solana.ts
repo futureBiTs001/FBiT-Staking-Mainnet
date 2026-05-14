@@ -12,12 +12,133 @@
  * Amount parameters are in token units (not lamports).
  */
 
-import { Connection, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY } from '@solana/web3.js';
+import { Connection, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction, TransactionInstruction } from '@solana/web3.js';
 import { AnchorProvider, Program, BN } from '@coral-xyz/anchor';
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { IDL } from './idl';
 import { NETWORK_CONFIG, HELIUS_RPC_URL } from '@/lib/config';
 import type { PlatformStats, StakeEntry, UserAccount, ReferralInfo } from '@/types';
+
+// Anchor discriminators: sha256("account:<Name>")[0..8] and sha256("global:<name>")[0..8]
+// Computed offline — deterministic from names in the deployed program.
+const ACCOUNT_DISCRIMINATORS: Record<string, number[]> = {
+  Platform:    [77,  92, 204,  58, 187,  98,  91,  12],
+  UserAccount: [211,  33, 136,  16, 186, 110, 242, 127],
+  StakeEntry:  [187, 127,   9,  35, 155,  68,  86,  40],
+};
+// Instruction discriminators: sha256("global:<rust_snake_case_name>")[0..8]
+// Old Anchor IDLs show camelCase names but programs use snake_case for hashing.
+const IX_DISCRIMINATORS: Record<string, number[]> = {
+  initialize:            [175, 175, 109,  31,  13, 152, 155, 237],
+  fundRewardPool:        [ 85,  49, 108, 245, 204,  70, 243,   3],
+  refundRewardPool:      [154, 132, 175,  20, 219, 145,  93, 120],
+  depositReserve:        [187,  75, 224,  96, 122, 233, 220, 121],
+  releaseEmission:       [248, 103, 174,  57,  15,  35, 227,  38],
+  registerUser:          [  2, 241, 150, 223,  99, 214, 116,  97],
+  stake:                 [206, 176, 202,  18, 200, 209, 179, 108],
+  claimRewards:          [  4, 144, 132,  71, 116,  23, 151,  80],
+  compoundRewards:       [254, 191, 226, 120,  82, 115,   5,  87],
+  unstake:               [ 90,  95, 107,  42, 205, 124,  50, 225],
+  setRewardRate:         [253, 201, 190,  20,  48,  38, 120,  34],
+  setReferralRewardRate: [ 95,  48, 184,  35, 217, 109, 160, 125],
+  blockUser:             [ 10, 164, 178,   6, 231, 175, 185, 191],
+  unblockUser:           [216, 208, 128,  98,  74, 210,  18, 114],
+  togglePause:           [238, 237, 206,  27, 255,  95, 123, 229],
+  setAnnualEmission:     [ 23, 188,  62,  60, 159,  23, 116, 166],
+  setBurnBps:            [226, 172, 145, 206, 238,  25,  16, 103],
+  setTeamTargetTier:     [ 88, 230, 208,   7,  32, 138, 239,   4],
+  setBatchApy:           [109,  76,  87, 205, 176, 242, 123,  34],
+  renounceOwnership:     [ 19, 143,  91,  79,  34, 168, 174, 125],
+  triggerHalving:        [  2, 170, 148,  87, 175, 253, 173,  80],
+  updateUserTeamStats:   [137, 242, 244, 142, 224,  98, 192, 229],
+  setLockPeriodApy:      [129,  70, 210,  21,  87, 145, 193, 150],
+  fixBump:               [ 55, 162,  45, 211, 135, 185,  66, 103],
+};
+
+/**
+ * Patch an old-format Anchor IDL for compatibility with Anchor 0.32:
+ *  1. "publicKey" type string → "pubkey"       (borsh coder expects lowercase)
+ *  2. isMut/isSigner → writable/signer          (new account descriptor format)
+ *  3. Move account struct defs into idl.types   (0.32 reads types from types[], not accounts[])
+ *  4. Convert idl.accounts to {name, discriminator} (0.32 new account format)
+ *  5. Inject idl.address                         (0.32 reads programId from here)
+ */
+function patchIdl(rawIdl: any, programAddress: string): any {
+  // Step 1 — replace "publicKey" type strings globally
+  const patched = JSON.parse(
+    JSON.stringify(rawIdl).replace(/:"publicKey"/g, ':"pubkey"')
+  );
+
+  // Step 2 — convert instruction account descriptors
+  function fixIxAccounts(accounts: any[]): any[] {
+    return accounts.map((acc: any) => {
+      if (Array.isArray(acc.accounts)) {
+        return { name: acc.name, accounts: fixIxAccounts(acc.accounts) };
+      }
+      const out: any = { name: acc.name };
+      if (acc.isMut    || acc.writable) out.writable = true;
+      if (acc.isSigner || acc.signer)   out.signer   = true;
+      if (acc.optional)                 out.optional  = true;
+      if (acc.address)                  out.address   = acc.address;
+      if (acc.pda)                      out.pda       = acc.pda;
+      if (acc.relations)                out.relations = acc.relations;
+      return out;
+    });
+  }
+  if (patched.instructions) {
+    patched.instructions = patched.instructions.map((ix: any) => {
+      const disc = ix.discriminator ?? IX_DISCRIMINATORS[ix.name] ?? [];
+      if (typeof window !== 'undefined') {
+        console.log(`[patchIdl] ix="${ix.name}" disc=${JSON.stringify(disc)}`);
+      }
+      return {
+        ...ix,
+        accounts: fixIxAccounts(ix.accounts ?? []),
+        // Inject instruction discriminator — required by Anchor 0.32 BorshInstructionCoder
+        discriminator: disc,
+      };
+    });
+  }
+
+  // Steps 3 & 4 — split old accounts[] into types[] + slim accounts[]
+  // Old format: accounts[i] = { name, type: { kind:'struct', fields:[...] } }
+  // New format: accounts[i] = { name, discriminator:[8 bytes] }
+  //             types[i]    = { name, type: { kind:'struct', fields:[...] } }
+  if (Array.isArray(patched.accounts) && patched.accounts.length > 0) {
+    const oldAccounts: any[] = patched.accounts;
+    const existingTypes: any[] = patched.types ?? [];
+
+    const newTypes: any[] = [...existingTypes];
+    const newAccounts: any[] = [];
+
+    for (const acc of oldAccounts) {
+      if (acc.type) {
+        // Old format — extract struct def into types[]
+        newTypes.push({ name: acc.name, type: acc.type });
+        newAccounts.push({
+          name: acc.name,
+          discriminator: ACCOUNT_DISCRIMINATORS[acc.name] ?? [0,0,0,0,0,0,0,0],
+        });
+      } else {
+        // Already new format — keep as-is, just ensure discriminator exists
+        newAccounts.push({
+          ...acc,
+          discriminator: acc.discriminator ?? ACCOUNT_DISCRIMINATORS[acc.name] ?? [0,0,0,0,0,0,0,0],
+        });
+        if (!existingTypes.find((t: any) => t.name === acc.name)) {
+          // No type entry yet — skip (won't be decodable but won't crash)
+        }
+      }
+    }
+
+    patched.accounts = newAccounts;
+    patched.types    = newTypes;
+  }
+
+  // Step 5 — inject program address
+  patched.address = programAddress;
+  return patched;
+}
 
 function getProgramId(): PublicKey {
   const addr = NETWORK_CONFIG.solana.contractAddress;
@@ -68,12 +189,20 @@ function getSolanaWallet(): any {
 
 function getProvider(): AnchorProvider {
   const wallet = getSolanaWallet();
-  const connection = new Connection(NETWORK_CONFIG.solana.rpcUrl, 'confirmed');
-  return new AnchorProvider(connection, wallet, { commitment: 'confirmed' });
+  const connection = new Connection(READ_RPC, 'confirmed');
+  // Re-wrap publicKey using our local @solana/web3.js PublicKey so Anchor 0.32's
+  // internal isPubkey()/_bn check doesn't fail on Phantom's bundled version.
+  const anchorWallet = {
+    publicKey: new PublicKey(wallet.publicKey.toBytes()),
+    signTransaction: (tx: any) => wallet.signTransaction(tx),
+    signAllTransactions: (txs: any[]) => wallet.signAllTransactions(txs),
+  };
+  return new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' });
 }
 
 function getProgram(): Program {
-  return new (Program as any)(IDL as any, getProgramId(), getProvider()) as Program;
+  const idl = patchIdl(IDL, getProgramId().toBase58());
+  return new (Program as any)(idl, getProvider()) as Program;
 }
 
 function getOwner(): PublicKey {
@@ -155,6 +284,13 @@ export async function solanaInitializePlatform(
   const rewardTokenMint = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
   const stakeTokenMint  = new PublicKey(NETWORK_CONFIG.solana.stakeTokenAddress);
 
+  console.log('[initializePlatform] accounts:', {
+    platform:       platPda.toBase58(),
+    authority:      authority.toBase58(),
+    rewardTokenMint: rewardTokenMint.toBase58(),
+    stakeTokenMint:  stakeTokenMint.toBase58(),
+  });
+
   const tx = await (program.methods as any)
     .initialize(new BN(rewardRate), new BN(referralRewardRate))
     .accounts({
@@ -179,9 +315,12 @@ export async function solanaIsPlatformInitialized(): Promise<boolean> {
   try {
     const program = getReadOnlyProgram();
     const [pda]   = platformPda();
-    await (program.account as any).platform.fetch(pda);
+    console.log('[isPlatformInitialized] fetching PDA:', pda.toBase58());
+    const result = await (program.account as any).platform.fetch(pda);
+    console.log('[isPlatformInitialized] fetch OK → true, bump=', result.bump?.toString?.() ?? result.bump);
     return true;
-  } catch {
+  } catch (err: any) {
+    console.warn('[isPlatformInitialized] fetch FAILED → false:', err?.message ?? err);
     return false;
   }
 }
@@ -197,14 +336,14 @@ export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> 
     // Live dynamic APY: annualEmission / totalStaked × 10000 (bps), same formula as on-chain.
     // Falls back to baseApy[0] when emission is zero (admin hasn't funded yet).
     let effectiveAPY = platform.baseApy
-      ? Math.min(25_000, Math.max(6_000, Number(platform.baseApy[0])))
-      : 6_000;
+      ? Math.min(30_000, Math.max(1_000, Number(platform.baseApy[0])))
+      : 1_000;
     if (platform.annualEmission && platform.totalStaked) {
       const emBN = new BN(platform.annualEmission.toString());
       const stBN = new BN(platform.totalStaked.toString());
       if (emBN.gtn(0) && stBN.gtn(0)) {
         const raw = emBN.muln(10_000).div(stBN).toNumber();
-        effectiveAPY = Math.min(25_000, Math.max(6_000, raw));
+        effectiveAPY = Math.min(30_000, Math.max(1_000, raw));
       }
     }
     const halvingEpoch     = platform.halvingEpoch     ? Number(platform.halvingEpoch)     : 0;
@@ -426,22 +565,22 @@ export async function solanaClaimRewards(
       (program.account as any).platform.fetch(pda),
     ]);
     const now = Math.floor(Date.now() / 1000);
-    const intervals = Math.floor((now - entry.lastClaimAt.toNumber()) / 43200);
+    const intervals = Math.floor((now - entry.lastClaimAt.toNumber()) / 21600);
     // Live dynamic APY = emission / totalStaked (same as contract)
-    let liveApy = 6_000;
+    let liveApy = 1_000;
     if (platform.annualEmission && platform.totalStaked) {
       const emBN = new BN(platform.annualEmission.toString());
       const stBN = new BN(platform.totalStaked.toString());
       if (emBN.gtn(0) && stBN.gtn(0)) {
         const raw = emBN.muln(10_000).div(stBN).toNumber();
-        liveApy = Math.min(25_000, Math.max(6_000, raw));
+        liveApy = Math.min(30_000, Math.max(1_000, raw));
       } else {
-        liveApy = Math.min(25_000, Math.max(6_000,
-          platform.baseApy ? Number(platform.baseApy[0]) : 6_000
+        liveApy = Math.min(30_000, Math.max(1_000,
+          platform.baseApy ? Number(platform.baseApy[0]) : 1_000
         ));
       }
     }
-    reward = fromLamports(entry.amount) * liveApy * intervals / (730 * 10_000);
+    reward = fromLamports(entry.amount) * liveApy * intervals / (1460 * 10_000);
   } catch {}
 
   const rewardMint = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
@@ -501,21 +640,21 @@ export async function solanaCompoundRewards(
       (program.account as any).platform.fetch(platPda),
     ]);
     const now = Math.floor(Date.now() / 1000);
-    const intervals = Math.floor((now - entry.lastClaimAt.toNumber()) / 43200);
-    let liveApy = 6_000;
+    const intervals = Math.floor((now - entry.lastClaimAt.toNumber()) / 21600);
+    let liveApy = 1_000;
     if (platform.annualEmission && platform.totalStaked) {
       const emBN = new BN(platform.annualEmission.toString());
       const stBN = new BN(platform.totalStaked.toString());
       if (emBN.gtn(0) && stBN.gtn(0)) {
         const raw = emBN.muln(10_000).div(stBN).toNumber();
-        liveApy = Math.min(25_000, Math.max(6_000, raw));
+        liveApy = Math.min(30_000, Math.max(1_000, raw));
       } else {
-        liveApy = Math.min(25_000, Math.max(6_000,
-          platform.baseApy ? Number(platform.baseApy[0]) : 6_000
+        liveApy = Math.min(30_000, Math.max(1_000,
+          platform.baseApy ? Number(platform.baseApy[0]) : 1_000
         ));
       }
     }
-    reward = fromLamports(entry.amount) * liveApy * intervals / (730 * 10_000);
+    reward = fromLamports(entry.amount) * liveApy * intervals / (1460 * 10_000);
   } catch {}
 
   const rewardMint  = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
@@ -642,28 +781,136 @@ export async function solanaRefundRewardPool(amount: number): Promise<{ txHash: 
   return { txHash: tx };
 }
 
-export async function solanaDepositReserve(amount: number): Promise<{ txHash: string }> {
-  if (amount < 1) throw new Error('Minimum deposit is 1 FBiT');
-  const program   = getProgram();
+/**
+ * One-time fix for deployments where initialize() forgot to store platform.bump.
+ * Calls fix_bump instruction which sets platform.bump = ctx.bumps.platform (canonical 253).
+ * After this, all instructions that use bump = platform.bump will work correctly.
+ * Safe to call multiple times — only changes bump if it is wrong.
+ */
+export async function solanaFixBump(): Promise<{ txHash: string }> {
+  const wallet    = getSolanaWallet();
   const authority = getOwner();
   const [platPda] = platformPda();
+  const programId = getProgramId();
 
-  const rewardMint       = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
+  const disc = Buffer.from(IX_DISCRIMINATORS.fixBump);
+
+  const keys = [
+    { pubkey: platPda,   isSigner: false, isWritable: true },
+    { pubkey: authority, isSigner: true,  isWritable: false },
+  ];
+
+  const instruction = new TransactionInstruction({ keys, programId, data: disc });
+
+  const connection = new Connection(READ_RPC, 'confirmed');
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+  const legacyTx = new Transaction({ feePayer: authority, recentBlockhash: blockhash });
+  legacyTx.add(instruction);
+
+  const signedTx = await wallet.signTransaction(legacyTx);
+
+  let txHash: string;
+  try {
+    txHash = await connection.sendRawTransaction(signedTx.serialize(), {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed',
+    });
+  } catch (sendErr: any) {
+    console.error('[fixBump] sendRawTransaction error:', sendErr?.message ?? sendErr);
+    if (sendErr?.logs) console.error('[fixBump] simulation logs:', sendErr.logs);
+    throw sendErr;
+  }
+
+  await connection.confirmTransaction({ signature: txHash, blockhash, lastValidBlockHeight }, 'confirmed');
+  return { txHash };
+}
+
+export async function solanaDepositReserve(amount: number): Promise<{ txHash: string }> {
+  if (amount < 1) throw new Error('Minimum deposit is 1 FBiT');
+
+  const wallet     = getSolanaWallet();
+  const authority  = getOwner();
+  const [platPda]  = platformPda();
+  const programId  = getProgramId();
+
+  const rewardMint         = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
   const funderTokenAccount = ata(rewardMint, authority);
-  const reserveVault     = getReserveVault();
+  const reserveVault       = getReserveVault();
 
-  const tx = await (program.methods as any)
-    .depositReserve(toLamports(amount))
-    .accounts({
-      platform:            platPda,
-      authority,
-      funderTokenAccount,
-      reserveVault,
-      tokenProgram:        TOKEN_PROGRAM_ID,
-    })
-    .rpc();
+  // Diagnostic: scan raw Platform account bytes for embedded Pubkeys.
+  // This reveals whether the program stores reserve_vault / reward_vault etc. in the Platform struct.
+  try {
+    const conn     = new Connection(READ_RPC, 'confirmed');
+    const platInfo = await conn.getAccountInfo(platPda);
+    if (platInfo) {
+      const bytes = platInfo.data;
+      console.log('[depositReserve] Platform raw bytes len:', bytes.length);
+      const knownKeys: Record<string, string> = {
+        [authority.toBase58()]:                'admin_authority',
+        [rewardMint.toBase58()]:               'fbit_mint',
+        [reserveVault.toBase58()]:             'env_reserve_vault',
+        [ata(rewardMint, platPda).toBase58()]: 'std_ata(fbit,platPda)',
+        [funderTokenAccount.toBase58()]:       'funder_ata',
+      };
+      for (let off = 8; off + 32 <= bytes.length; off++) {
+        try {
+          const key = new PublicKey(Uint8Array.from(bytes.subarray(off, off + 32))).toBase58();
+          if (knownKeys[key]) console.log(`[depositReserve] Platform[${off}] = ${knownKeys[key]}`);
+        } catch { /* skip invalid pubkey bytes */ }
+      }
+    }
+  } catch (diagErr) {
+    console.warn('[depositReserve] diagnostic scan error:', diagErr);
+  }
 
-  return { txHash: tx };
+  // Build instruction manually (bypassing Anchor 0.32 client entirely).
+  // disc = sha256("global:deposit_reserve")[0..8]
+  const disc      = Buffer.from([187, 75, 224, 96, 122, 233, 220, 121]);
+  const amountBuf = toLamports(amount).toArrayLike(Buffer, 'le', 8);
+  const instrData = Buffer.concat([disc, amountBuf]);
+
+  const keys = [
+    { pubkey: platPda,             isSigner: false, isWritable: true  },
+    { pubkey: authority,           isSigner: true,  isWritable: true  },
+    { pubkey: funderTokenAccount,  isSigner: false, isWritable: true  },
+    { pubkey: reserveVault,        isSigner: false, isWritable: true  },
+    { pubkey: TOKEN_PROGRAM_ID,    isSigner: false, isWritable: false },
+  ];
+
+  console.log('[depositReserve] RAW tx accounts:', {
+    platform:           platPda.toBase58(),
+    authority:          authority.toBase58(),
+    funderTokenAccount: funderTokenAccount.toBase58(),
+    reserveVault:       reserveVault.toBase58(),
+    tokenProgram:       TOKEN_PROGRAM_ID.toBase58(),
+    amountLamports:     toLamports(amount).toString(),
+    disc:               Array.from(disc),
+  });
+
+  const instruction = new TransactionInstruction({ keys, programId, data: instrData });
+
+  const connection = new Connection(READ_RPC, 'confirmed');
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+  const legacyTx = new Transaction({ feePayer: authority, recentBlockhash: blockhash });
+  legacyTx.add(instruction);
+
+  const signedTx = await wallet.signTransaction(legacyTx);
+
+  let txHash: string;
+  try {
+    txHash = await connection.sendRawTransaction(signedTx.serialize(), {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed',
+    });
+  } catch (sendErr: any) {
+    // Surface simulation logs so the exact on-chain error is visible in the console
+    console.error('[depositReserve] sendRawTransaction error:', sendErr?.message ?? sendErr);
+    if (sendErr?.logs) console.error('[depositReserve] simulation logs:', sendErr.logs);
+    throw sendErr;
+  }
+
+  await connection.confirmTransaction({ signature: txHash, blockhash, lastValidBlockHeight }, 'confirmed');
+  return { txHash };
 }
 
 export async function solanaReleaseEmission(): Promise<{ txHash: string }> {
@@ -808,7 +1055,7 @@ export async function solanaSetTeamTargetTier(
  * apyBps: basis points (e.g. 6000 = 60%)
  */
 export async function solanaSetBatchApy(apyBps: number): Promise<{ txHash: string }> {
-  if (apyBps < 6_000 || apyBps > 25_000) throw new Error('Base APY must be 6000–25000 BPS (60%–250%)');
+  if (apyBps < 1_000 || apyBps > 30_000) throw new Error('Base APY must be 1000–30000 BPS (10%–300%)');
   const program   = getProgram();
   const owner     = getOwner();
   const [platPda] = platformPda();
@@ -844,14 +1091,14 @@ const READ_RPC = HELIUS_RPC_URL || 'https://api.mainnet-beta.solana.com';
 
 function getReadOnlyProgram(): Program {
   const connection = new Connection(READ_RPC, 'confirmed');
-  // Anchor requires a wallet shape but read ops don't sign anything
   const noopWallet = {
     publicKey: new PublicKey('11111111111111111111111111111111'),
     signTransaction: async (tx: any) => tx,
     signAllTransactions: async (txs: any[]) => txs,
   };
   const provider = new AnchorProvider(connection, noopWallet as any, { commitment: 'confirmed' });
-  return new (Program as any)(IDL as any, getProgramId(), provider) as Program;
+  const idl = patchIdl(IDL, getProgramId().toBase58());
+  return new (Program as any)(idl, provider) as Program;
 }
 
 /**

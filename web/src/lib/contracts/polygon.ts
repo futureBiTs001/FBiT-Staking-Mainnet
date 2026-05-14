@@ -215,7 +215,7 @@ export async function polygonFetchPlatformStats(): Promise<PlatformStats | null>
       contract.MIN_STAKE_AMOUNT(),      // 19
       contract.MAX_STAKE_PER_USER(),    // 20
       contract.LOCK_PERIOD(),           // 21 — returns 30 (days)
-      contract.CLAIM_INTERVAL(),        // 22 — returns 43200 (seconds = 12h)
+      contract.CLAIM_INTERVAL(),        // 22 — returns 21600 (seconds = 6h)
       contract.totalYearlyBurned(),     // 23
       contract.lastYearBurnTime(),      // 24
     ]);
@@ -238,7 +238,7 @@ export async function polygonFetchPlatformStats(): Promise<PlatformStats | null>
       totalBurned:          fromWei(bigVal(6)),
       annualEmission:       fromWei(bigVal(7)),
       burnBps:              Number(bigVal(8, 1000n)),
-      effectiveAPY:         Math.min(25_000, Math.max(6_000, Number(bigVal(9, 6000n)))),
+      effectiveAPY:         Math.min(30_000, Math.max(1_000, Number(bigVal(9, 1000n)))),
       isRenounced:          boolVal(10),
       feeRecipient:         strVal(11),
       totalFeesCollected:   fromWei(bigVal(12)),
@@ -251,7 +251,7 @@ export async function polygonFetchPlatformStats(): Promise<PlatformStats | null>
       minStakeAmount:       fromWei(bigVal(19)),
       maxStakePerUser:      fromWei(bigVal(20)),
       lockPeriodDays:       Number(bigVal(21, 30n)),
-      claimIntervalSeconds: Number(bigVal(22, 43200n)),
+      claimIntervalSeconds: Number(bigVal(22, 21600n)),
       totalYearlyBurned:    fromWei(bigVal(23)),
       lastYearBurnTime:     Number(bigVal(24)),
     };
@@ -342,9 +342,9 @@ export async function polygonGetEffectiveAPY(): Promise<number> {
   try {
     const contract = getReadOnlyStakingContract();
     const raw: bigint = await contract.getEffectiveAPY();
-    return Math.min(25_000, Math.max(6_000, Number(raw))); // BPS: 6000=60%, 25000=250%
+    return Math.min(30_000, Math.max(1_000, Number(raw))); // BPS: 1000=10%, 30000=300%
   } catch {
-    return 6000; // fallback 60% (MIN_APY_BPS)
+    return 1000; // fallback 10% (MIN_APY_BPS)
   }
 }
 

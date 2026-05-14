@@ -82,7 +82,7 @@ export default function AppPage() {
               <span>·</span>
               <span>10-Level Referrals</span>
               <span>·</span>
-              <span>Up to 250% APY</span>
+              <span>Up to 300% APY</span>
             </div>
           </div>
         </div>
