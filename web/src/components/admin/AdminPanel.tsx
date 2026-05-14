@@ -268,6 +268,10 @@ export default function AdminPanel() {
       toast.error(`Minimum annual emission is ${EMISSION_MIN.toLocaleString()} FBiT`);
       return;
     }
+    if (emission > EMISSION_MAX) {
+      toast.error(`Maximum annual emission is ${EMISSION_MAX.toLocaleString()} FBiT`);
+      return;
+    }
     run('annualEmission', () => contract.setAnnualEmission(emission), `Annual emission updated to ${emission.toLocaleString()} FBiT/year`);
   };
 
@@ -1004,7 +1008,8 @@ export default function AdminPanel() {
               disabled={
                 isRenounced ||
                 !annualEmissionValue ||
-                parseFloat(annualEmissionValue) < EMISSION_MIN
+                parseFloat(annualEmissionValue) < EMISSION_MIN ||
+                parseFloat(annualEmissionValue) > EMISSION_MAX
               }
               loading={busy('annualEmission')}
               variant="purple"
