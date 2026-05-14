@@ -1112,7 +1112,7 @@ export default function AdminPanel() {
 
               <div>
                 <label className="text-sm text-text-secondary font-display mb-1 block">
-                  Min Team Staked (tokens)
+                  Min Team Staked <span className="text-accent-amber font-semibold">(FBiT tokens)</span>
                 </label>
                 <input
                   type="number"
@@ -1121,6 +1121,9 @@ export default function AdminPanel() {
                   placeholder="e.g. 50000"
                   className="input-field font-mono"
                 />
+                <p className="text-xs text-text-muted mt-1">
+                  Enter whole FBiT units (e.g. 50000 = 50,000 FBiT). Converted to lamports on-chain automatically.
+                </p>
               </div>
 
               <div>
