@@ -705,6 +705,22 @@ export async function solanaUnstake(stakeId: number): Promise<{ txHash: string }
   const userTokenAcc = ata(stakeMint, owner);
   const stakeVault   = getStakeVault();
 
+  // Pre-flight: check unlock_at before broadcasting
+  try {
+    const entryData: any = await (program.account as any).stakeEntry.fetch(stakeEntryAccPda);
+    const unlockAt = Number(entryData.unlockAt);
+    const now = Math.floor(Date.now() / 1000);
+    if (unlockAt > now) {
+      const secsLeft = unlockAt - now;
+      const daysLeft = Math.ceil(secsLeft / 86400);
+      const unlockDate = new Date(unlockAt * 1000).toLocaleDateString();
+      throw new Error(`Stake is still locked. Unlocks in ${daysLeft} day(s) on ${unlockDate}.`);
+    }
+  } catch (e: any) {
+    if (e.message?.includes('locked')) throw e;
+    // If account fetch fails, let the contract handle it
+  }
+
   // adminStakeAccount = authority's stake token ATA
   let adminStakeAccount = ata(stakeMint, owner); // fallback
   try {
