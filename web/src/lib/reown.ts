@@ -21,11 +21,7 @@ const solanaAdapter = new SolanaAdapter({
 export let appKitModal: ReturnType<typeof createAppKit> | undefined;
 
 if (typeof window !== 'undefined') {
-  // Use actual origin in dev (localhost:3000), production URL otherwise
-  const siteUrl =
-    window.location.hostname === 'localhost'
-      ? window.location.origin
-      : 'https://fbitstaking.app';
+  const siteUrl = window.location.origin;
 
   const config = {
     adapters:       [ethersAdapter, solanaAdapter],

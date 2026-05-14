@@ -165,12 +165,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setWallet]);
 
+  // ── Clear stale WalletConnect sessions from localStorage ────────────────────
+  const clearWcSessions = () => {
+    try {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('wc@') || k.startsWith('W3M') || k.startsWith('@w3m'))
+        .forEach(k => localStorage.removeItem(k));
+    } catch {}
+  };
+
   // ── Main connect entry-point ─────────────────────────────────────────────────
-  // Force 'Connect' view to bypass email/social login (remote config may re-enable them).
   const connect = useCallback(async (_type: WalletType) => {
     if (!appKitModal) throw new Error('WalletConnect is not available. Check your Reown project configuration.');
     isAdminConnectRef.current = false;
     setIsConnecting(true);
+    try { await appKitModal.disconnect(); } catch {}
+    clearWcSessions();
     appKitModal.open({ view: 'Connect' });
   }, []);
 
@@ -179,12 +189,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!appKitModal) throw new Error('WalletConnect is not available. Check your Reown project configuration.');
     isAdminConnectRef.current = true;
     setIsConnecting(true);
+    try { await appKitModal.disconnect(); } catch {}
+    clearWcSessions();
     appKitModal.open({ view: 'Connect' });
   }, []);
 
   // ── Disconnect ───────────────────────────────────────────────────────────────
   const disconnect = useCallback(() => {
-    appKitModal?.disconnect();
+    try { appKitModal?.disconnect(); } catch {}
+    clearWcSessions();
     setAddress(null);
     setSolanaAddress(null);
     setEvmAddress(null);

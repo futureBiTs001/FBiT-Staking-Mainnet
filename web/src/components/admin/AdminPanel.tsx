@@ -941,9 +941,9 @@ export default function AdminPanel() {
                   Pehle kuch tokens stake karo phir emission set karo.
                 </div>
               );
-              const emFor250 = Math.ceil(staked * 2.5);
+              const emFor300 = Math.ceil(staked * 3.0);
               const emFor100 = Math.ceil(staked * 1.0);
-              const emFor60  = Math.ceil(staked * 0.6);
+              const emFor10  = Math.ceil(staked * 0.1);
               return (
                 <div className="p-3 rounded-xl bg-brand-500/5 border border-brand-500/10 space-y-2">
                   <p className="text-xs font-display text-text-secondary font-semibold">
@@ -952,11 +952,11 @@ export default function AdminPanel() {
                   <div className="grid grid-cols-3 gap-2 text-center text-xs">
                     <button
                       type="button"
-                      onClick={() => setAnnualEmissionValue(String(emFor250))}
+                      onClick={() => setAnnualEmissionValue(String(emFor300))}
                       className="p-2 rounded-lg bg-accent-rose/10 border border-accent-rose/20 hover:bg-accent-rose/20 transition-all cursor-pointer"
                     >
                       <p className="font-bold text-accent-rose">300% APY</p>
-                      <p className="font-mono text-text-muted mt-0.5">{emFor250.toLocaleString()}</p>
+                      <p className="font-mono text-text-muted mt-0.5">{emFor300.toLocaleString()}</p>
                       <p className="text-[10px] text-text-muted">FBiT/year</p>
                     </button>
                     <button
@@ -970,11 +970,11 @@ export default function AdminPanel() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setAnnualEmissionValue(String(emFor60))}
+                      onClick={() => setAnnualEmissionValue(String(emFor10))}
                       className="p-2 rounded-lg bg-accent-amber/10 border border-accent-amber/20 hover:bg-accent-amber/20 transition-all cursor-pointer"
                     >
                       <p className="font-bold text-accent-amber">10% APY</p>
-                      <p className="font-mono text-text-muted mt-0.5">{emFor60.toLocaleString()}</p>
+                      <p className="font-mono text-text-muted mt-0.5">{emFor10.toLocaleString()}</p>
                       <p className="text-[10px] text-text-muted">FBiT/year</p>
                     </button>
                   </div>
@@ -1002,15 +1002,15 @@ export default function AdminPanel() {
                 const staked = platformStats.totalStaked ?? 0;
                 if (!annualEmissionValue || isNaN(n) || n <= 0) return null;
                 if (n < EMISSION_MIN) return <p className="text-accent-rose text-xs mt-1">Minimum 10,000 FBiT/year</p>;
-                let previewApy = staked > 0 ? Math.round((n / staked) * 100) : 250;
-                previewApy = Math.min(250, Math.max(60, previewApy));
-                const color = previewApy >= 250 ? 'text-accent-rose' : previewApy <= 60 ? 'text-accent-amber' : 'text-brand-400';
+                let previewApy = staked > 0 ? Math.round((n / staked) * 100) : 300;
+                previewApy = Math.min(300, Math.max(10, previewApy));
+                const color = previewApy >= 300 ? 'text-accent-rose' : previewApy <= 10 ? 'text-accent-amber' : 'text-brand-400';
                 return (
                   <div className="flex items-center gap-2 mt-2 p-2 rounded-lg bg-surface-800/50 border border-white/5 text-xs">
                     <span className="text-text-muted">Preview APY:</span>
                     <span className={`font-mono font-bold ${color}`}>{previewApy}%</span>
-                    {previewApy >= 250 && <span className="text-accent-rose">(MAX cap — emission bahut zyada hai)</span>}
-                    {previewApy <= 60  && <span className="text-accent-amber">(MIN cap — emission kam hai)</span>}
+                    {previewApy >= 300 && <span className="text-accent-rose">(MAX cap — emission bahut zyada hai)</span>}
+                    {previewApy <= 10  && <span className="text-accent-amber">(MIN cap — emission kam hai)</span>}
                   </div>
                 );
               })()}
@@ -1474,12 +1474,11 @@ export default function AdminPanel() {
 
           {/* Halving Schedule — Polygon (client-side display, manual action required) */}
           {selectedNetwork === 'polygon' && (() => {
-            const SECS_PER_YEAR    = 365 * 24 * 60 * 60;
+            const SECS_PER_PERIOD  = 4 * 365 * 24 * 60 * 60; // 4-year halving period
             const INITIAL_EMISSION = 1_000_000;
             const hStart     = platformStats.emissionStartTime ?? 0;
             const nowSecs    = Math.floor(Date.now() / 1000);
-            const yearsElapsed  = hStart > 0 ? Math.floor((nowSecs - hStart) / SECS_PER_YEAR) : 0;
-            const currentEpoch  = yearsElapsed;
+            const currentEpoch  = hStart > 0 ? Math.floor((nowSecs - hStart) / SECS_PER_PERIOD) : 0;
             const schedule = Array.from({ length: 6 }, (_, i) => ({
               ep: i,
               emission: INITIAL_EMISSION / Math.pow(2, i),
@@ -1498,7 +1497,7 @@ export default function AdminPanel() {
                     </span>
                   </h3>
                   <p className="text-text-muted text-xs mt-0.5 leading-relaxed">
-                    Polygon has no on-chain halving. Use <span className="text-brand-400 font-mono">Rates → Annual Emission</span> each year to manually apply the halving schedule below.
+                    Polygon has no on-chain halving. Use <span className="text-brand-400 font-mono">Rates → Annual Emission</span> every 4 years to manually apply the halving schedule below.
                   </p>
                 </div>
 
@@ -1509,14 +1508,14 @@ export default function AdminPanel() {
                       <>
                         <p className="font-display font-semibold text-accent-rose mb-1">⚠ Emission Mismatch</p>
                         <p className="text-text-muted">
-                          Year {currentEpoch + 1} suggests <span className="text-accent-amber font-mono font-semibold">{suggestedEmission.toLocaleString()} FBiT/year</span>.
+                          Epoch {currentEpoch + 1} suggests <span className="text-accent-amber font-mono font-semibold">{suggestedEmission.toLocaleString()} FBiT/year</span>.
                           On-chain: <span className="font-mono text-text-secondary">{onChainEmission.toLocaleString()} FBiT/year</span>.
                           Update via <span className="text-brand-400">Rates → Annual Emission</span>.
                         </p>
                       </>
                     ) : (
                       <p className="text-text-muted">
-                        Year {currentEpoch + 1} of schedule · <span className="text-accent-amber font-mono">{onChainEmission.toLocaleString()} FBiT/year</span> ✓
+                        Epoch {currentEpoch + 1} (Year {currentEpoch * 4 + 1}–{currentEpoch * 4 + 4}) · <span className="text-accent-amber font-mono">{onChainEmission.toLocaleString()} FBiT/year</span> ✓
                       </p>
                     )}
                   </div>
@@ -1528,12 +1527,12 @@ export default function AdminPanel() {
 
                 {/* Emission Schedule Table */}
                 <div>
-                  <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-2">Emission Schedule (50% Halving Each Year)</p>
+                  <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-2">Emission Schedule (50% Halving Every 4 Years)</p>
                   <div className="rounded-xl overflow-hidden border border-white/5">
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="bg-surface-800/60 text-text-muted">
-                          <th className="text-left px-3 py-2 font-display">Year</th>
+                          <th className="text-left px-3 py-2 font-display">Years</th>
                           <th className="text-right px-3 py-2 font-display">Annual Emission</th>
                           <th className="text-right px-3 py-2 font-display">Daily Release</th>
                           <th className="text-right px-3 py-2 font-display">Status</th>
@@ -1542,7 +1541,9 @@ export default function AdminPanel() {
                       <tbody>
                         {schedule.map(({ ep, emission, active }) => (
                           <tr key={ep} className={`border-t border-white/5 ${active ? 'bg-accent-amber/5' : ''}`}>
-                            <td className="px-3 py-2 font-mono text-text-secondary">Year {ep + 1}</td>
+                            <td className="px-3 py-2 font-mono text-text-secondary">
+                              {ep === 0 ? 'Year 1–4' : `Year ${ep * 4 + 1}–${ep * 4 + 4}`}
+                            </td>
                             <td className="px-3 py-2 text-right font-mono">
                               <span className={active ? 'text-accent-amber font-bold' : 'text-text-secondary'}>
                                 {emission >= 1000 ? `${(emission / 1000).toFixed(0)}K` : emission.toFixed(0)} FBiT
@@ -1567,7 +1568,7 @@ export default function AdminPanel() {
                 </div>
 
                 <div className="text-xs text-text-muted space-y-1 p-3 rounded-xl bg-surface-800/40 border border-white/5">
-                  <p><span className="text-accent-amber">●</span> Unlike Solana, Polygon halving is a manual admin action — call <span className="font-mono text-brand-400">setAnnualEmission</span> each year.</p>
+                  <p><span className="text-accent-amber">●</span> Unlike Solana, Polygon halving is a manual admin action — call <span className="font-mono text-brand-400">setAnnualEmission</span> every 4 years.</p>
                   <p><span className="text-brand-400">●</span> Reserve runway: <span className="text-text-secondary font-mono">{(platformStats.remainingYears ?? 0)} years</span> remaining at current emission rate.</p>
                   <p><span className="text-accent-cyan">●</span> Max pending rewards across all stakers: <span className="font-mono text-text-secondary">{formatNumber(platformStats.maxPendingRewards ?? 0)} FBiT</span>.</p>
                 </div>
