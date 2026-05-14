@@ -842,11 +842,12 @@ function BurnEmissionPanel({ stats, network }: { stats: PlatformStats; network: 
         </div>
         {/* Halving countdown — Solana only */}
         {network === 'solana' && (() => {
-          const SECS_PER_YEAR = 180 * 24 * 60 * 60; // 6-month halving period
+          const SECS_PER_YEAR = 1460 * 24 * 60 * 60; // 4-year halving period (matches useContract)
           const hStart = stats.halvingStartTime ?? 0;
           if (!hStart) return null;
+          const halvingEpoch = stats.halvingEpoch ?? 0;
           const nowSecs   = Math.floor(Date.now() / 1000);
-          const secsLeft  = (hStart + SECS_PER_YEAR) - nowSecs;
+          const secsLeft  = (hStart + (halvingEpoch + 1) * SECS_PER_YEAR) - nowSecs;
           const overdue   = secsLeft <= 0;
           const days      = Math.max(0, Math.floor(secsLeft / 86400));
           const label     = overdue ? '⚡ Halving Due!' : `${days}d left`;
