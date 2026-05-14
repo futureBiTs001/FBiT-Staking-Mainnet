@@ -338,8 +338,15 @@ export const useAppStore = create<AppState>()(
         };
 
         // Migrate: old burnBps 25% → 10%
+        // Sanitize: strip invalid halvingStartTime (must be a plausible Unix ts: 2001–2100)
+        const MIN_VALID_TS = 1_000_000_000;
+        const MAX_VALID_TS = 4_102_444_800;
         for (const net of ['solana', 'polygon'] as NetworkType[]) {
           if (networkPlatformStats[net].burnBps === 2500) networkPlatformStats[net].burnBps = 1000;
+          const hst = networkPlatformStats[net].halvingStartTime ?? 0;
+          if (hst && (hst < MIN_VALID_TS || hst > MAX_VALID_TS)) {
+            networkPlatformStats[net].halvingStartTime = 0;
+          }
           // Note: effectiveAPY is refreshed live on every syncPlatformStats — do not reset cached values
         }
 
