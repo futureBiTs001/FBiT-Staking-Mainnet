@@ -240,8 +240,12 @@ export function useContract(): ContractHook {
       stats.halvingStartTime &&
       stats.halvingStartTime > 0
     ) {
-      const nowSecs    = Math.floor(Date.now() / 1000);
-      const halvingDue = nowSecs >= stats.halvingStartTime + SECS_PER_YEAR;
+      const nowSecs     = Math.floor(Date.now() / 1000);
+      const halvingEpoch = stats.halvingEpoch ?? 0;
+      // Next halving is due at halvingStartTime + (epoch+1) complete 4-year periods.
+      // Without the epoch multiplier the condition stays permanently true after the first halving,
+      // causing repeated failed triggerHalving txs that waste the admin's SOL.
+      const halvingDue = nowSecs >= stats.halvingStartTime + (halvingEpoch + 1) * SECS_PER_YEAR;
       if (halvingDue) {
         solanaTriggerHalving()
           .then(() => {

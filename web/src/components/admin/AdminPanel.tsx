@@ -223,6 +223,14 @@ export default function AdminPanel() {
   };
 
   const handleSyncAllTiers = async () => {
+    if (!address || !isAdminAddress(address)) {
+      toast.error('Security check failed: connected wallet is not an admin.');
+      return;
+    }
+    if (!checkRateLimit('admin-syncAllTiers', { maxCalls: 1, windowMs: 120_000 })) {
+      toast.error('Too many sync attempts. Wait 2 minutes.');
+      return;
+    }
     if (!contract.isLive) { toast.error('Contract not configured.'); return; }
     if (platformStats.isRenounced) return;
     setProcessing('syncAllTiers');
