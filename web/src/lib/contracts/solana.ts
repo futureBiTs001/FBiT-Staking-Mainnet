@@ -1437,3 +1437,134 @@ export async function solanaGetOnChainHistory(address: string): Promise<import('
   }
 }
 
+/**
+ * Walk the full referral tree (L1–L10) for a given owner address.
+ * Uses batched getProgramAccounts calls — call on-demand only, not on every poll.
+ * Caps parents searched per level to avoid RPC flood.
+ */
+export async function solanaGetFullReferralTree(
+  ownerAddress: string
+): Promise<import('@/types').ReferralEntry[]> {
+  const programAddr = NETWORK_CONFIG.solana.contractAddress;
+  if (!programAddr || programAddr.toUpperCase().startsWith('YOUR_')) return [];
+  try {
+    const connection = new Connection(READ_RPC, 'confirmed');
+    const programId  = getProgramId();
+    const referrals: import('@/types').ReferralEntry[] = [];
+    // Cycle-detection: never revisit an address
+    const seen = new Set<string>([ownerAddress]);
+    // Limit parents searched per level to cap total RPC calls
+    const MAX_PARENTS = 5;
+
+    let parentAddresses = [ownerAddress];
+
+    for (let level = 1; level <= 10 && parentAddresses.length > 0; level++) {
+      const nextLevel: string[] = [];
+
+      await Promise.allSettled(
+        parentAddresses.slice(0, MAX_PARENTS).map(async (parentAddr) => {
+          try {
+            const accounts = await connection.getProgramAccounts(programId, {
+              filters: [
+                { dataSize: 139 },
+                { memcmp: { offset: 65, bytes: parentAddr } },
+              ],
+            });
+            for (const { account } of accounts.slice(0, 30)) {
+              try {
+                const slice      = Buffer.from(account.data).subarray(8);
+                const refOwner   = new PublicKey(Uint8Array.from(slice.subarray(0, 32))).toBase58();
+                if (seen.has(refOwner)) continue;
+                seen.add(refOwner);
+                const staked       = Number(slice.readBigUInt64LE(32)) / SCALE;
+                const registeredAt = Number(slice.readBigInt64LE(98));
+                referrals.push({ address: refOwner, level, stakedAmount: staked, rewardEarned: 0, registeredAt });
+                nextLevel.push(refOwner);
+              } catch { /* skip malformed */ }
+            }
+          } catch { /* getProgramAccounts failed — skip this parent */ }
+        })
+      );
+
+      parentAddresses = nextLevel;
+    }
+
+    return referrals.sort((a, b) => a.level - b.level || b.stakedAmount - a.stakedAmount);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Scan the user's UserAccount PDA for transactions where someone else staked
+ * and our ATA received a referral reward payout.
+ * Returns TxRecord[] of type 'referral', sorted newest-first.
+ */
+export async function solanaGetReferralOnChainHistory(
+  address: string
+): Promise<import('@/types').TxRecord[]> {
+  const programAddr = NETWORK_CONFIG.solana.contractAddress;
+  if (!programAddr || programAddr.toUpperCase().startsWith('YOUR_')) return [];
+  try {
+    const connection = new Connection(READ_RPC, 'confirmed');
+    const owner      = new PublicKey(address);
+    const [accPda]   = userPda(owner);
+    const rewardMint = NETWORK_CONFIG.solana.rewardTokenAddress;
+
+    // Scan the last 200 signatures touching our UserAccount PDA.
+    // When a referree stakes, our UserAccount PDA is passed as remaining_accounts
+    // so it appears in this signature list — that's how we detect referral events.
+    const sigs = await connection.getSignaturesForAddress(accPda, { limit: 200 });
+    const records: import('@/types').TxRecord[] = [];
+
+    await Promise.allSettled(
+      sigs.map(async (sig) => {
+        if (sig.err) return;
+        try {
+          const tx = await connection.getParsedTransaction(sig.signature, {
+            maxSupportedTransactionVersion: 0,
+            commitment: 'confirmed',
+          });
+          if (!tx) return;
+
+          const logs: string[] = tx.meta?.logMessages ?? [];
+          // Only stake instructions distribute referral rewards
+          if (!logs.some(l => l.includes('Instruction: Stake'))) return;
+
+          // The fee-payer of the transaction is the staker
+          const msg    = tx.transaction.message as any;
+          const payer: string = msg.accountKeys?.[0]?.pubkey?.toBase58?.() ?? '';
+          // Skip our own stake transactions — only other wallets staking triggers referral pay
+          if (!payer || payer === address) return;
+
+          // Measure change in our reward-mint ATA balance
+          const preAmt  = (tx.meta?.preTokenBalances  ?? [])
+            .find(b => b.mint === rewardMint && b.owner === address)
+            ?.uiTokenAmount.uiAmount ?? 0;
+          const postAmt = (tx.meta?.postTokenBalances ?? [])
+            .find(b => b.mint === rewardMint && b.owner === address)
+            ?.uiTokenAmount.uiAmount ?? 0;
+
+          const diff = postAmt - preAmt;
+          if (diff <= 0) return; // no referral credit in this tx
+
+          records.push({
+            id:        `sol-ref-${sig.signature}`,
+            type:      'referral',
+            label:     `Referral reward — ${payer.slice(0, 6)}...${payer.slice(-4)} staked`,
+            amount:    diff,
+            txHash:    sig.signature,
+            timestamp: (sig.blockTime ?? 0) * 1000,
+            status:    'success',
+            network:   'solana',
+          });
+        } catch { /* skip individual parse failures */ }
+      })
+    );
+
+    return records.sort((a, b) => b.timestamp - a.timestamp);
+  } catch {
+    return [];
+  }
+}
+
