@@ -269,7 +269,7 @@ pub mod fbit_staking {
             require!(ref_key != ctx.accounts.owner.key(), StakingError::SelfReferral);
             // Verify the supplied referrer_account PDA belongs to the stated referrer pubkey
             require!(
-                ctx.accounts.referrer_account.owner == ref_key,
+                ctx.accounts.referrer_account.as_ref().map(|a| a.owner) == Some(ref_key),
                 StakingError::ReferrerMismatch
             );
         }
@@ -288,13 +288,11 @@ pub mod fbit_staking {
         user.stake_count            = 0;
         user.bump                   = ctx.bumps.user_account;
 
-        if referrer.is_some() && ctx.accounts.referrer_account.owner != Pubkey::default() {
-            ctx.accounts.referrer_account.referral_count =
-                ctx.accounts.referrer_account.referral_count.checked_add(1).unwrap();
+        if let (Some(_), Some(ref_acc)) = (referrer, ctx.accounts.referrer_account.as_mut()) {
+            ref_acc.referral_count = ref_acc.referral_count.checked_add(1).unwrap();
             // team_size of the direct referrer is incremented; deeper levels updated via
             // update_user_team_stats (admin/crank) after on-chain events are indexed
-            ctx.accounts.referrer_account.team_size =
-                ctx.accounts.referrer_account.team_size.checked_add(1).unwrap();
+            ref_acc.team_size = ref_acc.team_size.checked_add(1).unwrap();
         }
         ctx.accounts.platform.total_users =
             ctx.accounts.platform.total_users.checked_add(1).unwrap();
@@ -1056,7 +1054,7 @@ pub struct RegisterUser<'info> {
         seeds = [b"user", owner.key().as_ref()], bump)]
     pub user_account:     Account<'info, UserAccount>,
     #[account(mut)]
-    pub referrer_account: Account<'info, UserAccount>,
+    pub referrer_account: Option<Account<'info, UserAccount>>,
     #[account(mut)]
     pub owner:            Signer<'info>,
     pub system_program:   Program<'info, System>,

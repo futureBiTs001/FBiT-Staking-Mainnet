@@ -60,7 +60,7 @@ export function useSolanaStaking() {
         referrerKey = new PublicKey(referrer);
         [referrerPDA] = getUserPDA(referrerKey);
       } else {
-        [referrerPDA] = getUserPDA(owner);
+        referrerPDA = SystemProgram.programId; // None sentinel for optional account
       }
 
       const tx = await program.methods.registerUser(referrerKey).accounts({
