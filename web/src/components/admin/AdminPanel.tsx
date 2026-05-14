@@ -116,6 +116,10 @@ export default function AdminPanel() {
     }, 5000);
   };
 
+  const handleFixBump = () => {
+    run('fixBump', () => contract.fixBump(), 'Fix Bump successful! platform.bump is now set to 253. You can now deposit reserve.');
+  };
+
   const RESERVE_MIN = 1;
   const RESERVE_MAX = 800_000_000;
 
@@ -264,11 +268,11 @@ export default function AdminPanel() {
   };
 
   const handleTriggerHalving = () =>
-    run('halving', () => contract.triggerHalving(), 'Annual halving triggered — base APY halved');
+    run('halving', () => contract.triggerHalving(), '4-year halving triggered — base APY halved');
 
   const handleSetBaseFallbackApy = () => {
     const bps = parseInt(baseFallbackApyBps, 10);
-    if (isNaN(bps) || bps < 6000 || bps > 25000) { toast.error('Base APY BPS must be 6000–25000 (60%–250%)'); return; }
+    if (isNaN(bps) || bps < 1000 || bps > 30000) { toast.error('Base APY BPS must be 1000–30000 (10%–300%)'); return; }
     run('baseFallbackApy', () => contract.setBaseFallbackApy(bps), `Base fallback APY set to ${bps / 100}%`);
   };
 
@@ -465,7 +469,7 @@ export default function AdminPanel() {
             { label: 'Reserve',   value: formatNumber(platformStats.totalReserve ?? 0),                              color: 'text-brand-400' },
           ] : []),
           { label: 'Reward Pool',  value: formatNumber(platformStats.rewardPoolBalance),                              color: 'text-accent-cyan' },
-          { label: 'Current APY',  value: `${Math.round((platformStats.effectiveAPY ?? 6000) / 100)}%`,             color: 'text-accent-amber' },
+          { label: 'Current APY',  value: `${Math.round((platformStats.effectiveAPY ?? 1000) / 100)}%`,             color: 'text-accent-amber' },
           { label: 'Total Burned 🔥', value: formatNumber(platformStats.totalBurned ?? 0, 8),                        color: 'text-accent-rose' },
         ].map(({ label, value, color }) => (
           <div key={label} className="glass-card text-center p-4">
@@ -525,6 +529,31 @@ export default function AdminPanel() {
           {selectedNetwork === 'solana' && platformInitialized === null && (
             <div className="glass-card border border-white/10 py-3 text-center text-text-muted text-sm animate-pulse">
               Checking platform status…
+            </div>
+          )}
+
+          {/* ── Fix Bump (Solana only — one-time fix for old deployments where bump=0) ── */}
+          {selectedNetwork === 'solana' && platformInitialized === true && (
+            <div className="glass-card border border-accent-amber/30 bg-accent-amber/5 space-y-3">
+              <div className="flex items-start gap-3">
+                <span className="text-2xl">🔧</span>
+                <div>
+                  <h3 className="font-display font-bold text-base text-accent-amber">Fix Platform Bump (One-Time)</h3>
+                  <p className="text-text-muted text-xs mt-1 leading-relaxed">
+                    If <span className="font-semibold text-white">Deposit Reserve</span> fails with <span className="font-mono text-accent-rose">ConstraintSeeds (2006)</span>,
+                    run this first. It sets <span className="font-mono">platform.bump = 253</span> so all subsequent instructions work correctly.
+                    Safe to call even if bump is already correct — it will just confirm it on-chain.
+                  </p>
+                </div>
+              </div>
+              <AdminButton
+                label="Fix Platform Bump"
+                loadingLabel="Fixing bump…"
+                onClick={handleFixBump}
+                disabled={busy('fixBump')}
+                loading={busy('fixBump')}
+                variant="amber"
+              />
             </div>
           )}
 
@@ -872,7 +901,7 @@ export default function AdminPanel() {
             <h3 className="font-display font-semibold text-lg">Annual Emission (PoS APY)</h3>
             <p className="text-text-muted text-xs -mt-2">
               Total FBiT distributed to stakers per year. APY auto-adjusts:
-              <span className="text-brand-400 font-mono"> APY = emission ÷ totalStaked</span>, clamped between <span className="text-brand-400">60%</span> and <span className="text-brand-400">250%</span>.
+              <span className="text-brand-400 font-mono"> APY = emission ÷ totalStaked</span>, clamped between <span className="text-brand-400">10%</span> and <span className="text-brand-400">300%</span>.
               More stakers → APY girta hai. Fewer stakers → APY badhta hai.
             </p>
 
@@ -891,14 +920,14 @@ export default function AdminPanel() {
               <div className="p-3 rounded-xl bg-surface-800/50 border border-white/5">
                 <p className="text-text-muted text-[10px] font-display uppercase tracking-wider mb-1">Current APY</p>
                 <p className={`font-mono font-bold text-sm ${
-                  (platformStats.effectiveAPY ?? 0) >= 25000 ? 'text-accent-rose' :
-                  (platformStats.effectiveAPY ?? 0) <= 6000  ? 'text-accent-amber' : 'text-brand-400'
+                  (platformStats.effectiveAPY ?? 0) >= 30000 ? 'text-accent-rose' :
+                  (platformStats.effectiveAPY ?? 0) <= 1000  ? 'text-accent-amber' : 'text-brand-400'
                 }`}>
-                  {Math.round((platformStats.effectiveAPY ?? 6000) / 100)}%
+                  {Math.round((platformStats.effectiveAPY ?? 1000) / 100)}%
                 </p>
                 <p className="text-text-muted text-[10px]">
-                  {(platformStats.effectiveAPY ?? 0) >= 25000 ? '⚠ MAX cap' :
-                   (platformStats.effectiveAPY ?? 0) <= 6000  ? '⚠ MIN cap' : '✓ Dynamic'}
+                  {(platformStats.effectiveAPY ?? 0) >= 30000 ? '⚠ MAX cap' :
+                   (platformStats.effectiveAPY ?? 0) <= 1000  ? '⚠ MIN cap' : '✓ Dynamic'}
                 </p>
               </div>
             </div>
@@ -926,7 +955,7 @@ export default function AdminPanel() {
                       onClick={() => setAnnualEmissionValue(String(emFor250))}
                       className="p-2 rounded-lg bg-accent-rose/10 border border-accent-rose/20 hover:bg-accent-rose/20 transition-all cursor-pointer"
                     >
-                      <p className="font-bold text-accent-rose">250% APY</p>
+                      <p className="font-bold text-accent-rose">300% APY</p>
                       <p className="font-mono text-text-muted mt-0.5">{emFor250.toLocaleString()}</p>
                       <p className="text-[10px] text-text-muted">FBiT/year</p>
                     </button>
@@ -944,7 +973,7 @@ export default function AdminPanel() {
                       onClick={() => setAnnualEmissionValue(String(emFor60))}
                       className="p-2 rounded-lg bg-accent-amber/10 border border-accent-amber/20 hover:bg-accent-amber/20 transition-all cursor-pointer"
                     >
-                      <p className="font-bold text-accent-amber">60% APY</p>
+                      <p className="font-bold text-accent-amber">10% APY</p>
                       <p className="font-mono text-text-muted mt-0.5">{emFor60.toLocaleString()}</p>
                       <p className="text-[10px] text-text-muted">FBiT/year</p>
                     </button>
@@ -1007,20 +1036,20 @@ export default function AdminPanel() {
               <p className="text-text-muted text-xs -mt-2">
                 Fallback APY used <em>only when annual emission is not configured</em>.
                 Once emission is set, PoS APY (emission ÷ totalStaked) overrides this automatically.
-                Range: <span className="text-brand-400">60% – 250%</span> (6000–25000 BPS).
+                Range: <span className="text-brand-400">10% – 300%</span> (1000–30000 BPS).
               </p>
               <div className="p-3 rounded-xl bg-brand-500/5 border border-brand-500/20 text-xs text-text-muted">
-                Current base APY: <span className="text-accent-cyan font-mono">{Math.round((platformStats.effectiveAPY ?? 6000) / 100)}%</span> (effective — may be overridden by PoS emission)
+                Current base APY: <span className="text-accent-cyan font-mono">{Math.round((platformStats.effectiveAPY ?? 1000) / 100)}%</span> (effective — may be overridden by PoS emission)
               </div>
               <div>
-                <label className="text-sm text-text-secondary font-display mb-1 block">New Base APY (BPS — 6000 = 60%, 25000 = 250%)</label>
+                <label className="text-sm text-text-secondary font-display mb-1 block">New Base APY (BPS — 1000 = 10%, 30000 = 300%)</label>
                 <input
                   type="number"
-                  min="6000"
-                  max="25000"
+                  min="1000"
+                  max="30000"
                   value={baseFallbackApyBps}
                   onChange={(e) => setBaseFallbackApyBps(e.target.value)}
-                  placeholder="e.g. 25000 = 250%"
+                  placeholder="e.g. 30000 = 300%"
                   className="input-field font-mono"
                 />
               </div>
@@ -1028,7 +1057,7 @@ export default function AdminPanel() {
                 label="Set Base Fallback APY"
                 loadingLabel="Setting…"
                 onClick={handleSetBaseFallbackApy}
-                disabled={isRenounced || baseFallbackApyBps === '' || parseInt(baseFallbackApyBps) < 6000 || parseInt(baseFallbackApyBps) > 25000}
+                disabled={isRenounced || baseFallbackApyBps === '' || parseInt(baseFallbackApyBps) < 1000 || parseInt(baseFallbackApyBps) > 30000}
                 loading={busy('baseFallbackApy')}
                 variant="cyan"
               />
@@ -1313,12 +1342,12 @@ export default function AdminPanel() {
 
           {/* Halving Mechanism — Solana only, permissionless */}
           {selectedNetwork === 'solana' && (() => {
-            const SECS_PER_PERIOD = 180 * 24 * 60 * 60; // 6-month halving
+            const SECS_PER_PERIOD = 1460 * 24 * 60 * 60; // 4-year halving
             const INITIAL_EMISSION = 1_000_000;
             const epoch           = platformStats.halvingEpoch   ?? 0;
             const hStart          = platformStats.halvingStartTime ?? 0;
             const nowSecs         = Math.floor(Date.now() / 1000);
-            const nextHalvingAt   = hStart > 0 ? hStart + SECS_PER_PERIOD : 0;
+            const nextHalvingAt   = hStart > 0 ? hStart + (epoch + 1) * SECS_PER_PERIOD : 0;
             const secsUntil       = nextHalvingAt > 0 ? nextHalvingAt - nowSecs : 0;
             const halvingDue      = secsUntil <= 0 && hStart > 0;
 
@@ -1349,7 +1378,7 @@ export default function AdminPanel() {
                       </span>
                     </h3>
                     <p className="text-text-muted text-xs mt-0.5">
-                      Reward emission halves every 6 months — 50% cut each cycle. Permissionless (auto-triggered by platform).
+                      Reward emission halves every 4 years — 50% cut each cycle. Permissionless (auto-triggered by platform).
                     </p>
                   </div>
                 </div>
@@ -1381,7 +1410,7 @@ export default function AdminPanel() {
 
                 {/* Emission Schedule */}
                 <div>
-                  <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-2">Emission Schedule (50% Halving Each 6 Months)</p>
+                  <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-2">Emission Schedule (50% Halving Every 4 Years)</p>
                   <div className="rounded-xl overflow-hidden border border-white/5">
                     <table className="w-full text-xs">
                       <thead>
@@ -1395,7 +1424,7 @@ export default function AdminPanel() {
                       <tbody>
                         {schedule.map(({ epoch: ep, emission, active }) => (
                           <tr key={ep} className={`border-t border-white/5 ${active ? 'bg-accent-amber/5' : ''}`}>
-                            <td className="px-3 py-2 font-mono text-text-secondary">Period {ep + 1} (6M)</td>
+                            <td className="px-3 py-2 font-mono text-text-secondary">Year {ep === 0 ? '1–4' : `${ep * 4 + 1}–${ep * 4 + 4}`}</td>
                             <td className="px-3 py-2 text-right font-mono">
                               <span className={active ? 'text-accent-amber font-bold' : 'text-text-secondary'}>
                                 {emission >= 1000 ? `${(emission / 1000).toFixed(0)}K` : emission.toFixed(0)} FBiT/yr
@@ -1420,9 +1449,9 @@ export default function AdminPanel() {
                 </div>
 
                 <div className="text-xs text-text-muted space-y-1 p-3 rounded-xl bg-surface-800/40 border border-white/5">
-                  <p><span className="text-accent-amber">●</span> Auto-triggered by the platform when 6 months elapses — no admin action needed.</p>
+                  <p><span className="text-accent-amber">●</span> Auto-triggered by the platform when 4 years elapses — no admin action needed.</p>
                   <p><span className="text-brand-400">●</span> Emission halves by 50% on every trigger — APY adjusts dynamically in real time.</p>
-                  <p><span className="text-accent-rose">●</span> Contract enforces the 180-day time lock — early calls revert automatically.</p>
+                  <p><span className="text-accent-rose">●</span> Contract enforces the 1460-day time lock — early calls revert automatically.</p>
                 </div>
 
                 {/* Manual trigger (always available for non-overdue state as backup) */}

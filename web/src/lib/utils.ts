@@ -53,9 +53,9 @@ export const calculatePendingReward = (
   lastClaimAt: number
 ): number => {
   const now = Math.floor(Date.now() / 1000);
-  // Match contract: reward accrues per completed 12h interval
-  const intervals = Math.floor((now - lastClaimAt) / 43200);
-  return (amount * (apy / 10000) * intervals) / 730;
+  // Match contract: reward accrues per completed 6h interval (4 per day)
+  const intervals = Math.floor((now - lastClaimAt) / 21600);
+  return (amount * (apy / 10000) * intervals) / 1460;
 };
 
 /**
@@ -124,10 +124,10 @@ export const getNextClaimLabel = (lastClaimAt: number): string => {
   return `${m}m`;
 };
 
-/** Reward per 12-hour interval for a given stake */
+/** Reward per 6-hour interval for a given stake */
 export const getDailyReward = (amount: number, apy: number): number => {
-  // Returns per-interval (12h) reward — used for display as "per interval"
-  return (amount * (apy / 10000)) / 730;
+  // Returns per-interval (6h) reward — used for display as "per interval"
+  return (amount * (apy / 10000)) / 1460;
 };
 
 // ===== TEAM TARGET BONUS HELPERS =====

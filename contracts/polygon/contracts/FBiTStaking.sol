@@ -44,7 +44,7 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
 
     uint256 public constant MAX_REFERRAL_LEVELS = 10;
     uint256 public constant SECONDS_PER_DAY     = 86400;
-    uint256 public constant CLAIM_INTERVAL      = 43200;   // 12 hours
+    uint256 public constant CLAIM_INTERVAL      = 21600;   // 6 hours (4 intervals/day)
     uint256 public constant BASIS_POINTS        = 10_000;
     uint256 public constant PLATFORM_FEE_BPS    = 100;     // 1 %
     /// @notice APY floor: 60 % in basis points
@@ -763,7 +763,7 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
      *      Uses totalStaked as if every token has been earning since lastYearBurnTime (year start).
      *      This over-estimates slightly (some stakers joined mid-year or already claimed),
      *      making the protection conservative — we protect a bit MORE than the true owed amount.
-     *      Cap at 730 intervals = one full year of 12-hour intervals.
+     *      Cap at 1460 intervals = one full year of 6-hour intervals.
      */
     function _maxPendingRewards() internal view returns (uint256) {
         if (totalStaked == 0) return 0;
@@ -772,9 +772,9 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
         uint256 elapsed      = block.timestamp - refTime;
         uint256 maxIntervals = elapsed / CLAIM_INTERVAL;
         if (maxIntervals == 0) return 0;
-        if (maxIntervals > 730) maxIntervals = 730;
+        if (maxIntervals > 1460) maxIntervals = 1460;
         uint256 effectiveApy = getEffectiveAPY();
-        return (totalStaked * effectiveApy * maxIntervals) / (730 * BASIS_POINTS);
+        return (totalStaked * effectiveApy * maxIntervals) / (1460 * BASIS_POINTS);
     }
 
     /**
@@ -790,7 +790,7 @@ contract FBiTStaking is Ownable, ReentrancyGuard, Pausable {
         // Use APY locked at stake time — predictable returns for the user.
         // Falls back to live APY only for legacy stakes where apy was not stored.
         uint256 effectiveApy = entry.apy > 0 ? entry.apy : getEffectiveAPY();
-        return (entry.amount * effectiveApy * intervals) / (730 * BASIS_POINTS);
+        return (entry.amount * effectiveApy * intervals) / (1460 * BASIS_POINTS);
     }
 
     function _getTeamBonusBps(address _user) internal view returns (uint256) {

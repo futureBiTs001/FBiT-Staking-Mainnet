@@ -107,7 +107,7 @@ export default function Dashboard() {
     });
   const totalUserStaked = activeStakes.reduce((a, s) => a + s.amount, 0);
   // Always use live platform APY for reward display — APY is dynamic (not locked at stake time)
-  const liveApyBps = platformStats.effectiveAPY || 6000;
+  const liveApyBps = platformStats.effectiveAPY || 1000;
 
   // Live display reward — counts smoothly every second for visual feedback.
   // Actual claimable amount (on-chain, discrete 12h intervals) is used inside handleClaim/handleCompound.
@@ -330,12 +330,12 @@ export default function Dashboard() {
         </div>
         <h2 className="font-display text-2xl sm:text-3xl font-bold mb-3">Welcome to Future Bit (FBiT) Staking Mainnet</h2>
         <p className="text-text-secondary max-w-md mb-8">
-          Connect your wallet to stake FBiT tokens, earn rewards up to 250% APY, and build your referral network.
+          Connect your wallet to stake FBiT tokens, earn rewards up to 300% APY, and build your referral network.
         </p>
         <div className="flex flex-wrap justify-center gap-3">
           <div className="glass-card text-center py-3 px-6">
-            <div className="text-brand-400 font-display font-bold text-lg">{Math.round((platformStats.effectiveAPY || 6000) / 100)}%</div>
-            <div className="text-text-muted text-xs mt-0.5">{LOCK_PERIOD.label} · PoS · 60%–250%</div>
+            <div className="text-brand-400 font-display font-bold text-lg">{Math.round((platformStats.effectiveAPY || 1000) / 100)}%</div>
+            <div className="text-text-muted text-xs mt-0.5">{LOCK_PERIOD.label} · PoS · 10%–300%</div>
           </div>
         </div>
       </div>
@@ -352,7 +352,7 @@ export default function Dashboard() {
         <StatCard label="Total Value Locked"   value={`${formatNumber(platformStats.totalStaked)} FBiT`} icon="◈" accent="brand" />
         <StatCard label="Total Users"          value={formatNumber(platformStats.totalUsers, 0)}          icon="◎" accent="purple" />
         <StatCard label="Reward Pool"          value={`${formatNumber(platformStats.rewardPoolBalance)} FBiT`} icon="⬡" accent="cyan" />
-        <StatCard label="Current APY"          value={`${Math.round((platformStats.effectiveAPY || 6000) / 100)}%`} icon="%" accent="amber" />
+        <StatCard label="Current APY"          value={`${Math.round((platformStats.effectiveAPY || 1000) / 100)}%`} icon="%" accent="amber" />
       </div>
 
       {/* User Stats */}
@@ -800,7 +800,7 @@ function TeamTargetBonusCard({ teamTotalStaked, teamSize, onChainBonusBps }: { t
 }
 
 function BurnEmissionPanel({ stats, network }: { stats: PlatformStats; network: string }) {
-  const posApy = Math.round((stats.effectiveAPY || 6000) / 100);
+  const posApy = Math.round((stats.effectiveAPY || 1000) / 100);
   const feeRate = (stats.burnBps ?? 1000) / 100;
   const hasNetworkExtra = network === 'solana' || (network === 'polygon' && stats.remainingYears !== undefined);
   const colClass = stats.isRenounced
@@ -882,7 +882,7 @@ function BurnEmissionPanel({ stats, network }: { stats: PlatformStats; network: 
           <p className="font-display font-bold text-lg sm:text-xl text-accent-cyan">
             {posApy}%
           </p>
-          <p className="text-text-secondary text-xs mt-0.5">PoS · 60%–250% range</p>
+          <p className="text-text-secondary text-xs mt-0.5">PoS · 10%–300% range</p>
         </div>
       </div>
     </div>
