@@ -1301,7 +1301,7 @@ export async function solanaGetReferralInfo(ownerAddress: string): Promise<Refer
 
       const accounts = await connection.getProgramAccounts(programId, {
         filters: [
-          { dataSize: 139 },   // USER_ACCOUNT_SPACE (8 disc + 131 fields)
+          { dataSize: 152 },   // USER_ACCOUNT_SPACE = 152 (8 disc + 131 fields + 13 padding)
           // Match accounts where the referrer Option<Pubkey> = Some(owner):
           // offset 65 skips the discriminator (8) + fields before referrer (56) + Option tag byte (1)
           { memcmp: { offset: 65, bytes: owner.toBase58() } },
@@ -1330,7 +1330,7 @@ export async function solanaGetReferralInfo(ownerAddress: string): Promise<Refer
     } catch { /* getProgramAccounts failed — return without referral list */ }
 
     return {
-      totalReferrals,
+      totalReferrals:       Math.max(totalReferrals, referrals.length),
       totalReferralRewards,
       referralLink: '',
       referrals,

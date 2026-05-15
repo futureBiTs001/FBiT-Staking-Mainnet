@@ -422,8 +422,9 @@ pub mod fbit_staking {
                             .map_err(|_| error!(StakingError::Unauthorized))?
                     };
                     updated.team_total_staked = updated.team_total_staked.saturating_add(staked_amount);
-                    // On first stake: increment direct referrer's referral_count and team_size
-                    if level == 0 && ctx.accounts.user_account.stake_count == 0 {
+                    // On first stake: stake_count was already incremented to 1 before this loop,
+                    // so stake_count == 1 means this is the user's very first stake.
+                    if level == 0 && ctx.accounts.user_account.stake_count == 1 {
                         updated.referral_count = updated.referral_count.saturating_add(1);
                         updated.team_size      = updated.team_size.saturating_add(1);
                     }
