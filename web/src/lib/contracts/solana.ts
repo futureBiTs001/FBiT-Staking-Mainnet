@@ -409,45 +409,69 @@ export async function solanaIsRegistered(owner: PublicKey): Promise<boolean> {
 }
 
 export async function solanaRegisterUser(referrer?: string): Promise<{ txHash: string }> {
-  const program  = getProgram();
-  const owner    = getOwner();
+  const wallet    = getSolanaWallet();
+  const program   = getProgram();
+  const owner     = getOwner();
   const [platPda] = platformPda();
   const [userAccPda] = userPda(owner);
+  const programId = getProgramId();
 
   let referrerPubkey: PublicKey | null = null;
-  let referrerAccPda: PublicKey = SystemProgram.programId; // None sentinel for optional account
 
   if (referrer) {
     try {
       referrerPubkey = new PublicKey(referrer);
-      // Client-side self-referral guard (on-chain also enforces error 6015)
       if (referrerPubkey.equals(owner)) throw new Error('Cannot use your own wallet as referrer.');
-      // Only use the referrer's PDA if they are already registered on-chain.
-      // Passing an uninitialized PDA causes AccountNotInitialized (3012) even with Option<Account>.
       const referrerRegistered = await solanaIsRegistered(referrerPubkey);
-      if (referrerRegistered) {
-        [referrerAccPda] = userPda(referrerPubkey);
-      } else {
-        referrerPubkey = null; // not registered — proceed without referrer
+      if (!referrerRegistered) {
+        throw new Error('Referrer wallet is not yet registered on the platform. Please use a valid referral link.');
       }
     } catch (err: any) {
-      if (err?.message?.includes('referrer')) throw err;
-      referrerPubkey = null; // invalid address — proceed without referrer
+      throw err;
+    }
+  } else {
+    // No referrer — only admin can register without one.
+    try {
+      const platformData: any = await (program.account as any).platform.fetch(platPda);
+      const isAdmin = owner.equals(new PublicKey(platformData.authority.toString()));
+      if (!isAdmin) {
+        throw new Error('A referral link is required to register. Please open the site from a valid referral link.');
+      }
+    } catch (err: any) {
+      if (err?.message?.includes('referral link') || err?.message?.includes('required to register')) throw err;
     }
   }
 
-  const tx = await (program.methods as any)
-    .registerUser(referrerPubkey)
-    .accounts({
-      platform:       platPda,
-      userAccount:    userAccPda,
-      referrerAccount: referrerAccPda,
-      owner,
-      systemProgram:  SystemProgram.programId,
-    })
-    .rpc();
+  // Build instruction manually — Anchor 0.32 client issues; program has 4 fixed accounts.
+  const disc = Buffer.from(IX_DISCRIMINATORS.registerUser);
+  // Borsh encode referrer: Option<Pubkey> → [0] for None, [1, ...32 bytes] for Some
+  const refArg = referrerPubkey
+    ? Buffer.concat([Buffer.from([1]), Buffer.from(referrerPubkey.toBytes())])
+    : Buffer.from([0]);
+  const data = Buffer.concat([disc, refArg]);
 
-  return { txHash: tx };
+  const keys = [
+    { pubkey: platPda,                 isSigner: false, isWritable: true  },
+    { pubkey: userAccPda,              isSigner: false, isWritable: true  },
+    { pubkey: owner,                   isSigner: true,  isWritable: true  },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ];
+
+  const instruction = new TransactionInstruction({ keys, programId, data });
+
+  const connection = new Connection(READ_RPC, 'confirmed');
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+  const legacyTx = new Transaction({ feePayer: owner, recentBlockhash: blockhash });
+  legacyTx.add(instruction);
+
+  const signedTx = await wallet.signTransaction(legacyTx);
+  const txHash = await connection.sendRawTransaction(signedTx.serialize(), {
+    skipPreflight: false,
+    preflightCommitment: 'confirmed',
+  });
+  await connection.confirmTransaction({ signature: txHash, blockhash, lastValidBlockHeight }, 'confirmed');
+
+  return { txHash };
 }
 
 export async function solanaStake(

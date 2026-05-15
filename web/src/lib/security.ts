@@ -154,6 +154,9 @@ export function sanitizeErrorMessage(err: unknown): string {
   if (raw.includes('Cooldown') || raw.includes('cooldown') || raw.includes('claim interval') || raw.includes('Claim interval')) return 'Claim cooldown not met — please wait until the 6h interval has passed.';
   if (raw.includes('Insufficient reward') || raw.includes('insufficient reward')) return 'Reward pool has insufficient balance. Please try again later.';
   if (raw.includes('User is blocked') || raw.includes('user is blocked')) return 'This wallet has been blocked from claiming.';
+  if (raw.includes('referral link is required') || raw.includes('required to register')) return raw;
+  if (raw.includes('Referrer wallet is not yet registered')) return raw;
+  if (raw.includes('A valid referrer is required') || raw.includes('ReferrerRequired')) return 'A referral link is required to register. Please open the site from a valid referral link.';
   if (raw.includes('No reward') || raw.includes('no reward') || raw.includes('Nothing to claim')) return 'No claimable reward yet. Rewards accrue every 6 hours.';
   if (raw.includes('Paused') || raw.includes('paused') || raw.includes('pausable')) return 'The staking contract is paused. Please try again later.';
 
