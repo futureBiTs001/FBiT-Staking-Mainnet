@@ -577,6 +577,36 @@ export async function solanaStake(
   return { txHash: tx, stakedAt: stakeId };
 }
 
+// Returns a releaseEmission TransactionInstruction if the reserve has ≥1 FBiT
+// ready to release right now, otherwise null. Used to bundle release into the
+// same transaction as claim/compound so no extra wallet popup is needed.
+async function buildReleaseIxIfReady(program: any): Promise<import('@solana/web3.js').TransactionInstruction | null> {
+  try {
+    const [platPda]    = platformPda();
+    const platform: any = await (program.account as any).platform.fetch(platPda);
+    const annual    = platform.annualEmission  ? Number(new BN(platform.annualEmission.toString()))  : 0;
+    const reserve   = platform.totalReserve    ? Number(new BN(platform.totalReserve.toString()))    : 0;
+    const released  = platform.totalEmissionReleased ? Number(new BN(platform.totalEmissionReleased.toString())) : 0;
+    const start     = platform.emissionStartTime ? Number(platform.emissionStartTime) : 0;
+    if (annual === 0 || reserve === 0 || start === 0) return null;
+    const elapsed    = Math.max(0, Math.floor(Date.now() / 1000) - start);
+    const accrued    = annual * (elapsed / (365 * 24 * 3600));
+    const releasable = Math.max(0, Math.min(reserve, accrued - released));
+    if (releasable < SCALE) return null;
+    return await (program.methods as any)
+      .releaseEmission()
+      .accounts({
+        platform:     platPda,
+        reserveVault: getReserveVault(),
+        rewardVault:  getRewardVault(),
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .instruction();
+  } catch {
+    return null;
+  }
+}
+
 export async function solanaClaimRewards(
   stakeId: number | string,
   _stakedAt: number
@@ -634,7 +664,10 @@ export async function solanaClaimRewards(
     }
   } catch {}
 
-  // IDL requires stakeEntryId (u64) = the stake_id used as PDA seed
+  // Bundle releaseEmission as a pre-instruction so reward pool is topped up
+  // in the same transaction — no extra wallet popup needed.
+  const releaseIx = await buildReleaseIxIfReady(program);
+
   const tx = await (program.methods as any)
     .claimRewards(new BN(Number(stakeId)))
     .accounts({
@@ -649,6 +682,7 @@ export async function solanaClaimRewards(
       owner,
       tokenProgram:               TOKEN_PROGRAM_ID,
     })
+    .preInstructions(releaseIx ? [releaseIx] : [])
     .rpc();
 
   return { txHash: tx, reward };
@@ -707,6 +741,8 @@ export async function solanaCompoundRewards(
     }
   } catch {}
 
+  const releaseIx = await buildReleaseIxIfReady(program);
+
   const tx = await (program.methods as any)
     .compoundRewards()
     .accounts({
@@ -720,6 +756,7 @@ export async function solanaCompoundRewards(
       owner,
       tokenProgram:              TOKEN_PROGRAM_ID,
     })
+    .preInstructions(releaseIx ? [releaseIx] : [])
     .rpc();
 
   return { txHash: tx, reward };
