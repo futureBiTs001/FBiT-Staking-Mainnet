@@ -1271,6 +1271,42 @@ export async function solanaGetUserAccount(ownerAddress: string): Promise<UserAc
   }
 }
 
+// Referral reward basis points per level (mirrors REFERRAL_PERCENTAGES in lib.rs)
+const REFERRAL_LEVEL_BPS = [25, 50, 125, 150, 200, 325, 350, 425, 550, 800] as const;
+const MAX_REFERRAL_DEPTH   = 10;
+const MAX_REFERRAL_ENTRIES = 100;
+
+// Returns addresses of all UserAccounts whose referrer == parentAddress (one level down).
+// UserAccount data layout (offsets into raw account data including 8-byte discriminator):
+//   data[8..39]  = owner Pubkey
+//   data[40..47] = total_staked u64
+//   data[64]     = referrer Option tag (0=None, 1=Some)
+//   data[65..96] = referrer Pubkey (when Some) ← memcmp at offset 65
+//   data[106..113] = registered_at i64
+async function solanaGetDirectReferrals(
+  connection: Connection,
+  programId: PublicKey,
+  parentAddress: string
+): Promise<Array<{ address: string; stakedAmount: number; registeredAt: number }>> {
+  const accounts = await connection.getProgramAccounts(programId, {
+    filters: [
+      { dataSize: 152 },
+      { memcmp: { offset: 65, bytes: parentAddress } },
+    ],
+  });
+  const results: Array<{ address: string; stakedAmount: number; registeredAt: number }> = [];
+  for (const { account } of accounts) {
+    try {
+      const slice = Buffer.from(account.data).subarray(8);
+      const address      = new PublicKey(Uint8Array.from(slice.subarray(0, 32))).toBase58();
+      const stakedAmount = Number(slice.readBigUInt64LE(32)) / SCALE;
+      const registeredAt = Number(slice.readBigInt64LE(98));
+      results.push({ address, stakedAmount, registeredAt });
+    } catch { /* skip malformed */ }
+  }
+  return results;
+}
+
 export async function solanaGetReferralInfo(ownerAddress: string): Promise<ReferralInfo | null> {
   try {
     const program    = getReadOnlyProgram();
@@ -1280,52 +1316,40 @@ export async function solanaGetReferralInfo(ownerAddress: string): Promise<Refer
     const totalReferrals       = acc.referralCount.toNumber();
     const totalReferralRewards = fromLamports(acc.totalReferralRewards);
 
-    // Fetch Level-1 referrals: scan all UserAccount PDAs whose `referrer` == owner.
-    // UserAccount layout (after 8-byte discriminator, all offsets are into raw data):
-    //   owner:                  Pubkey  → data[8]–data[39]   (32 bytes)
-    //   total_staked:           u64     → data[40]–data[47]
-    //   total_rewards_earned:   u64     → data[48]–data[55]
-    //   total_referral_rewards: u64     → data[56]–data[63]
-    //   referrer:               Option<Pubkey> → data[64]–data[96]
-    //     • data[64]      = 0 (None) | 1 (Some)
-    //     • data[65]–[96] = pubkey when Some  ← memcmp target
-    //   referral_count:         u64     → data[97]–data[104]
-    //   is_blocked:             bool    → data[105]
-    //   registered_at:          i64     → data[106]–data[113]  (slice[98]–slice[105])
-    //   team_size:              u64     → data[114]–data[121]  (slice[106]–slice[113])
-    //   team_total_staked:      u64     → data[122]–data[129]  (slice[114]–slice[121])
     const referrals: import('@/types').ReferralEntry[] = [];
     try {
       const connection = new Connection(READ_RPC, 'confirmed');
       const programId  = getProgramId();
+      const seen       = new Set<string>([ownerAddress]);
 
-      const accounts = await connection.getProgramAccounts(programId, {
-        filters: [
-          { dataSize: 152 },   // USER_ACCOUNT_SPACE = 152 (8 disc + 131 fields + 13 padding)
-          // Match accounts where the referrer Option<Pubkey> = Some(owner):
-          // offset 65 skips the discriminator (8) + fields before referrer (56) + Option tag byte (1)
-          { memcmp: { offset: 65, bytes: owner.toBase58() } },
-        ],
-      });
+      let parentAddresses: string[] = [ownerAddress];
 
-      for (const { account } of accounts.slice(0, 50)) {
-        try {
-          const data  = account.data;
-          const slice = Buffer.from(data).subarray(8); // strip 8-byte Anchor discriminator
-          // Parse owner pubkey (slice[0]–slice[31])
-          const refOwner = new PublicKey(Uint8Array.from(slice.subarray(0, 32))).toBase58();
-          // Parse total_staked (slice[32]–slice[39])
-          const staked = Number(slice.readBigUInt64LE(32)) / SCALE;
-          // Parse registered_at (slice[98]–slice[105])
-          const registeredAt = Number(slice.readBigInt64LE(98));
-          referrals.push({
-            address:      refOwner,
-            level:        1,
-            stakedAmount: staked,
-            rewardEarned: 0,
-            registeredAt,
-          });
-        } catch { /* skip malformed accounts */ }
+      for (let lvl = 1; lvl <= MAX_REFERRAL_DEPTH && referrals.length < MAX_REFERRAL_ENTRIES; lvl++) {
+        const childAddresses: string[] = [];
+        const levelBps = REFERRAL_LEVEL_BPS[lvl - 1];
+
+        await Promise.allSettled(
+          parentAddresses.map(async (parentAddr) => {
+            const children = await solanaGetDirectReferrals(connection, programId, parentAddr);
+            for (const child of children) {
+              if (seen.has(child.address)) continue;
+              seen.add(child.address);
+              childAddresses.push(child.address);
+              if (referrals.length < MAX_REFERRAL_ENTRIES) {
+                referrals.push({
+                  address:      child.address,
+                  level:        lvl,
+                  stakedAmount: child.stakedAmount,
+                  rewardEarned: (child.stakedAmount * levelBps) / 10_000,
+                  registeredAt: child.registeredAt,
+                });
+              }
+            }
+          })
+        );
+
+        if (childAddresses.length === 0) break;
+        parentAddresses = childAddresses;
       }
     } catch { /* getProgramAccounts failed — return without referral list */ }
 
