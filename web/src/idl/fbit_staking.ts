@@ -321,8 +321,8 @@ export type FbitStaking = {
           { "name": "registeredAt", "type": "i64" },
           { "name": "teamSize", "type": "u64" },
           { "name": "teamTotalStaked", "type": "u64" },
-          { "name": "bump", "type": "u8" },
-          { "name": "stakeCount", "type": "u64" }
+          { "name": "stakeCount", "type": "u64" },
+          { "name": "bump", "type": "u8" }
         ]
       }
     },
@@ -705,8 +705,8 @@ export const IDL: FbitStaking = {
           { "name": "registeredAt", "type": "i64" },
           { "name": "teamSize", "type": "u64" },
           { "name": "teamTotalStaked", "type": "u64" },
-          { "name": "bump", "type": "u8" },
-          { "name": "stakeCount", "type": "u64" }
+          { "name": "stakeCount", "type": "u64" },
+          { "name": "bump", "type": "u8" }
         ]
       }
     },
