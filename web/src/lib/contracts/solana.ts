@@ -1497,7 +1497,7 @@ export async function solanaGetFullReferralTree(
           try {
             const accounts = await connection.getProgramAccounts(programId, {
               filters: [
-                { dataSize: 139 },
+                { dataSize: 152 },
                 { memcmp: { offset: 65, bytes: parentAddr } },
               ],
             });
