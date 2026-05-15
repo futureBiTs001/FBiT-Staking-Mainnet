@@ -45,9 +45,9 @@ export const REFERRAL_LEVELS = [
 // Tier 1 (Bronze)  : 50 K tokens → +2 %
 // Tier 10 (Titan)  : 1 B tokens  → +10 %
 export const TEAM_TARGET_TIERS = [
-  { tier: 1,  label: 'Bronze',   bonusPercentage: 2,   bonusBps: 200,  minTeamStaked: 200_000,          color: 'amber'   },
-  { tier: 2,  label: 'Silver',   bonusPercentage: 3,   bonusBps: 300,  minTeamStaked: 350_000,         color: 'slate'   },
-  { tier: 3,  label: 'Gold',     bonusPercentage: 4,   bonusBps: 400,  minTeamStaked: 500_000,         color: 'yellow'  },
+  { tier: 1,  label: 'Bronze',   bonusPercentage: 2,   bonusBps: 200,  minTeamStaked: 50_000,           color: 'amber'   },
+  { tier: 2,  label: 'Silver',   bonusPercentage: 3,   bonusBps: 300,  minTeamStaked: 150_000,          color: 'slate'   },
+  { tier: 3,  label: 'Gold',     bonusPercentage: 4,   bonusBps: 400,  minTeamStaked: 500_000,          color: 'yellow'  },
   { tier: 4,  label: 'Platinum', bonusPercentage: 5,   bonusBps: 500,  minTeamStaked: 1_000_000,       color: 'cyan'    },
   { tier: 5,  label: 'Diamond',  bonusPercentage: 6,   bonusBps: 600,  minTeamStaked: 5_000_000,       color: 'purple'  },
   { tier: 6,  label: 'Ruby',     bonusPercentage: 7,   bonusBps: 700,  minTeamStaked: 10_000_000,      color: 'rose'    },

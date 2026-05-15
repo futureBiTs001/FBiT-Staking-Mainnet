@@ -380,7 +380,7 @@ export default function Dashboard() {
           <p className="stat-value text-xl sm:text-2xl md:text-3xl tabular-nums">
             {formatNumber(totalPending, 8)}
           </p>
-          <p className="text-text-secondary text-xs mt-1">WFBIT Accruing</p>
+          <p className="text-text-secondary text-xs mt-1">{selectedNetwork === 'polygon' ? 'WFBIT' : 'FBiT'} Accruing</p>
         </div>
         <div className="glass-card">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Total Claimed</p>
@@ -476,7 +476,7 @@ export default function Dashboard() {
                         <p className="font-display font-semibold">{formatNumber(stake.amount)} FBiT</p>
                         <p className="text-text-muted text-xs">{period.label} lock · {Math.round(liveApyBps / 100)}% APY (live)</p>
                         <p className="text-text-muted text-xs mt-0.5">
-                          Per 6h: <span className="text-brand-400 font-mono">+{formatNumber(daily, 8)} WFBIT</span>
+                          Per 6h: <span className="text-brand-400 font-mono">+{formatNumber(daily, 8)} {selectedNetwork === 'polygon' ? 'WFBIT' : 'FBiT'}</span>
                         </p>
                       </div>
                     </div>
@@ -488,7 +488,7 @@ export default function Dashboard() {
                         <div className="flex items-center gap-1.5 sm:justify-end">
                           <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse shrink-0" />
                           <p className="text-brand-400 font-mono text-sm font-semibold tabular-nums">
-                            +{formatNumber(pending, 8)} WFBIT
+                            +{formatNumber(pending, 8)} {selectedNetwork === 'polygon' ? 'WFBIT' : 'FBiT'}
                           </p>
                         </div>
                         {claimable ? (
