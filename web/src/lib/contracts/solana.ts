@@ -78,7 +78,7 @@ function patchIdl(rawIdl: any, programAddress: string): any {
       const out: any = { name: acc.name };
       if (acc.isMut    || acc.writable) out.writable = true;
       if (acc.isSigner || acc.signer)   out.signer   = true;
-      if (acc.optional)                 out.optional  = true;
+      if (acc.optional || acc.isOptional) out.optional  = true;
       if (acc.address)                  out.address   = acc.address;
       if (acc.pda)                      out.pda       = acc.pda;
       if (acc.relations)                out.relations = acc.relations;
@@ -422,7 +422,14 @@ export async function solanaRegisterUser(referrer?: string): Promise<{ txHash: s
       referrerPubkey = new PublicKey(referrer);
       // Client-side self-referral guard (on-chain also enforces error 6015)
       if (referrerPubkey.equals(owner)) throw new Error('Cannot use your own wallet as referrer.');
-      [referrerAccPda] = userPda(referrerPubkey);
+      // Only use the referrer's PDA if they are already registered on-chain.
+      // Passing an uninitialized PDA causes AccountNotInitialized (3012) even with Option<Account>.
+      const referrerRegistered = await solanaIsRegistered(referrerPubkey);
+      if (referrerRegistered) {
+        [referrerAccPda] = userPda(referrerPubkey);
+      } else {
+        referrerPubkey = null; // not registered — proceed without referrer
+      }
     } catch (err: any) {
       if (err?.message?.includes('referrer')) throw err;
       referrerPubkey = null; // invalid address — proceed without referrer
