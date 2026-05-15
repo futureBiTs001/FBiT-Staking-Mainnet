@@ -264,14 +264,14 @@ pub mod fbit_staking {
 
     pub fn register_user(ctx: Context<RegisterUser>, referrer: Option<Pubkey>) -> Result<()> {
         require!(!ctx.accounts.platform.is_paused, StakingError::PlatformPaused);
-        // Prevent self-referral
+
+        // Non-admin users MUST supply a referrer pubkey.
+        let is_admin = ctx.accounts.owner.key() == ctx.accounts.platform.authority;
+        let has_referrer = referrer.is_some();
+        require!(has_referrer || is_admin, StakingError::ReferrerRequired);
+
         if let Some(ref_key) = referrer {
             require!(ref_key != ctx.accounts.owner.key(), StakingError::SelfReferral);
-            // Verify the supplied referrer_account PDA belongs to the stated referrer pubkey
-            require!(
-                ctx.accounts.referrer_account.as_ref().map(|a| a.owner) == Some(ref_key),
-                StakingError::ReferrerMismatch
-            );
         }
 
         let user = &mut ctx.accounts.user_account;
@@ -288,12 +288,6 @@ pub mod fbit_staking {
         user.stake_count            = 0;
         user.bump                   = ctx.bumps.user_account;
 
-        if let (Some(_), Some(ref_acc)) = (referrer, ctx.accounts.referrer_account.as_mut()) {
-            ref_acc.referral_count = ref_acc.referral_count.checked_add(1).unwrap();
-            // team_size of the direct referrer is incremented; deeper levels updated via
-            // update_user_team_stats (admin/crank) after on-chain events are indexed
-            ref_acc.team_size = ref_acc.team_size.checked_add(1).unwrap();
-        }
         ctx.accounts.platform.total_users =
             ctx.accounts.platform.total_users.checked_add(1).unwrap();
 
@@ -428,6 +422,11 @@ pub mod fbit_staking {
                             .map_err(|_| error!(StakingError::Unauthorized))?
                     };
                     updated.team_total_staked = updated.team_total_staked.saturating_add(staked_amount);
+                    // On first stake: increment direct referrer's referral_count and team_size
+                    if level == 0 && ctx.accounts.user_account.stake_count == 0 {
+                        updated.referral_count = updated.referral_count.saturating_add(1);
+                        updated.team_size      = updated.team_size.saturating_add(1);
+                    }
                     if can_pay {
                         updated.total_referral_rewards = updated.total_referral_rewards
                             .checked_add(ref_reward).unwrap();
@@ -1049,15 +1048,13 @@ pub struct ReleaseEmission<'info> {
 #[derive(Accounts)]
 pub struct RegisterUser<'info> {
     #[account(mut, seeds = [b"platform"], bump = platform.bump)]
-    pub platform:         Account<'info, Platform>,
+    pub platform:     Account<'info, Platform>,
     #[account(init, payer = owner, space = USER_ACCOUNT_SPACE,
         seeds = [b"user", owner.key().as_ref()], bump)]
-    pub user_account:     Account<'info, UserAccount>,
+    pub user_account: Account<'info, UserAccount>,
     #[account(mut)]
-    pub referrer_account: Option<Account<'info, UserAccount>>,
-    #[account(mut)]
-    pub owner:            Signer<'info>,
-    pub system_program:   Program<'info, System>,
+    pub owner:        Signer<'info>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -1297,4 +1294,5 @@ pub enum StakingError {
     #[msg("Stake amount is below minimum (1 FBiT)")]      BelowMinStake,
     #[msg("Stake amount exceeds maximum (500M FBiT)")]    AboveMaxStake,
     #[msg("Invalid referral token account")]               InvalidReferralATA,
+    #[msg("A valid referrer is required to register")]     ReferrerRequired,
 }
