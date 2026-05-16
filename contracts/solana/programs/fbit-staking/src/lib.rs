@@ -392,8 +392,14 @@ pub mod fbit_staking {
                     }
                 };
 
+                // Verify the account matches the expected referrer BEFORE advancing the chain.
+                // Updating cur_referrer first would allow a wrong-but-program-owned account to
+                // poison the chain and skip legitimate ancestors above it.
+                if user_owner != expected_key {
+                    cur_referrer = next_ref;
+                    continue;
+                }
                 cur_referrer = next_ref;
-                if user_owner != expected_key { continue; }
 
                 let level_bps  = REFERRAL_PERCENTAGES[level];
                 let ref_reward = staked_amount.checked_mul(level_bps).unwrap().checked_div(10_000).unwrap();
@@ -479,10 +485,14 @@ pub mod fbit_staking {
             &ctx.accounts.platform,
             ctx.accounts.platform.base_apy[ctx.accounts.stake_entry.lock_period_index as usize],
         );
-        let gross_reward = ctx.accounts.stake_entry.amount
-            .checked_mul(effective_apy).unwrap()
-            .checked_mul(intervals).unwrap()
-            .checked_div(1460 * 10_000).unwrap();
+        // Use u128 to avoid overflow: amount (≤5e14) * apy (≤30000) * intervals can exceed u64::MAX.
+        let gross_reward: u64 = {
+            let r = (ctx.accounts.stake_entry.amount as u128)
+                .checked_mul(effective_apy as u128).unwrap()
+                .checked_mul(intervals as u128).unwrap()
+                .checked_div(1460u128 * 10_000).unwrap();
+            r.min(u64::MAX as u128) as u64
+        };
 
         require!(gross_reward > 0, StakingError::NoRewardsToClaim);
 
@@ -584,10 +594,14 @@ pub mod fbit_staking {
             &ctx.accounts.platform,
             ctx.accounts.platform.base_apy[ctx.accounts.stake_entry.lock_period_index as usize],
         );
-        let gross_reward = ctx.accounts.stake_entry.amount
-            .checked_mul(effective_apy).unwrap()
-            .checked_mul(intervals).unwrap()
-            .checked_div(1460 * 10_000).unwrap();
+        // Use u128 to avoid overflow: amount (≤5e14) * apy (≤30000) * intervals can exceed u64::MAX.
+        let gross_reward: u64 = {
+            let r = (ctx.accounts.stake_entry.amount as u128)
+                .checked_mul(effective_apy as u128).unwrap()
+                .checked_mul(intervals as u128).unwrap()
+                .checked_div(1460u128 * 10_000).unwrap();
+            r.min(u64::MAX as u128) as u64
+        };
 
         require!(gross_reward > 0, StakingError::NoRewardsToClaim);
 
@@ -1270,7 +1284,7 @@ pub enum StakingError {
     #[msg("Stake is not active")]                         StakeNotActive,
     #[msg("No rewards to claim")]                         NoRewardsToClaim,
     #[msg("Insufficient reward pool")]                    InsufficientRewardPool,
-    #[msg("Claim too early - wait 12 hours")]             ClaimTooEarly,
+    #[msg("Claim too early - wait 6 hours")]              ClaimTooEarly,
     #[msg("User is blocked")]                             UserBlocked,
     #[msg("Overflow error")]                              OverflowError,
     #[msg("Invalid admin fee account")]                   InvalidAdminAccount,
