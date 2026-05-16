@@ -52,8 +52,8 @@ FBiT Staking is a fully on-chain staking DApp where users lock FBiT tokens for *
 
 ### Step 1 — Connect Wallet
 Users connect their wallet via **Reown (WalletConnect)**:
-- **Solana**: Phantom, Solflare, or any Reown-compatible Solana wallet
-- **Polygon**: MetaMask or any WalletConnect-compatible EVM wallet
+- **Solana**: Phantom, Solflare, or Binance Web3 Wallet (Solana account)
+- **Polygon**: MetaMask, Binance Web3 Wallet, or any WalletConnect-compatible EVM wallet
 
 ### Step 2 — Register with a Referral Link (Optional)
 Before staking, a user can click a referral link (`?ref=<address>`). This stores the referrer on-chain and credits all 10 levels of the referral chain when the user stakes.
@@ -727,7 +727,7 @@ npm start
 | Solana SDK | `@solana/web3.js`, `@solana/spl-token`, `@coral-xyz/anchor` |
 | Polygon SDK | `ethers.js` v6 |
 | Wallet Connection | Reown AppKit (formerly WalletConnect) |
-| Supported Wallets | Phantom, Solflare (Solana) · MetaMask, WalletConnect (Polygon) |
+| Supported Wallets | Phantom, Solflare, Binance Web3 Wallet (Solana) · MetaMask, Binance Web3 Wallet, WalletConnect (Polygon) |
 | Toast Notifications | `react-hot-toast` |
 | Deployment | Vercel / any Node.js host |
 
@@ -753,9 +753,24 @@ CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu
 ```
 [View on Solana Explorer](https://explorer.solana.com/address/CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu)
 
+### FBiT Staking Program — Solana Mainnet
+```
+8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp
+```
+[View on Solana Explorer](https://explorer.solana.com/address/8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp)
+
 ---
 
 ## 17. Changelog
+
+### v1.6 — May 2026
+
+- **Binance Web3 Wallet support** — Binance wallet now works on both Solana and Polygon networks via Reown WalletConnect
+- **3-layer Solana wallet resolution** — `getSolanaWallet()` now uses AppKit's `subscribeProviders` provider first, then address-matched browser extension, then legacy fallback — prevents Phantom from intercepting WalletConnect sessions
+- **Connected address tracking** — `subscribeAccount` in Reown tracks the connected Solana address to verify extension wallets match the user's chosen account
+- **New Vercel deployment** — Migrated to fresh project at [stake-futurebit.vercel.app](https://stake-futurebit.vercel.app) with all 18 environment variables configured
+- **WalletConnect fix** — Resolved "WalletConnect is not available" error caused by missing `NEXT_PUBLIC_REOWN_PROJECT_ID` on Vercel
+- **Binance wallet featured** — Added Binance Web3 Wallet to `featuredWalletIds` in Reown modal for quick discovery
 
 ### v1.5 — May 2026
 
