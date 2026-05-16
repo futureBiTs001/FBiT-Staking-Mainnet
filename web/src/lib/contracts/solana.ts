@@ -1295,6 +1295,19 @@ export async function solanaGetUserAccount(ownerAddress: string): Promise<UserAc
     const owner = new PublicKey(ownerAddress);
     const [pda] = userPda(owner);
     const acc = await (program.account as any).userAccount.fetch(pda);
+    const teamTotalStaked = acc.teamTotalStaked ? fromLamports(acc.teamTotalStaked) : 0;
+
+    // Derive current team bonus tier from teamTotalStaked using the same constants as the contract.
+    // DEFAULT_TEAM_BONUS_BPS matches TEAM_TARGET_TIERS.bonusBps — iterate from highest tier down.
+    const { TEAM_TARGET_TIERS: tiers } = await import('@/types');
+    let currentTierBonusBps = 0;
+    for (let i = tiers.length - 1; i >= 0; i--) {
+      if (teamTotalStaked >= tiers[i].minTeamStaked) {
+        currentTierBonusBps = tiers[i].bonusBps;
+        break;
+      }
+    }
+
     return {
       address:              ownerAddress,
       totalStaked:          fromLamports(acc.totalStaked),
@@ -1303,9 +1316,10 @@ export async function solanaGetUserAccount(ownerAddress: string): Promise<UserAc
       referrer:             acc.referrer ? acc.referrer.toBase58() : null,
       referralCount:        acc.referralCount.toNumber(),
       teamSize:             acc.teamSize    ? acc.teamSize.toNumber()          : 0,
-      teamTotalStaked:      acc.teamTotalStaked ? fromLamports(acc.teamTotalStaked) : 0,
+      teamTotalStaked,
       isBlocked:            acc.isBlocked,
       registeredAt:         acc.registeredAt.toNumber(),
+      currentTierBonusBps,
     };
   } catch {
     return null;

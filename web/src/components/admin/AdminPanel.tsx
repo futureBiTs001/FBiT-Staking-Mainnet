@@ -1352,10 +1352,14 @@ export default function AdminPanel() {
                 ? `${daysUntil}d ${hoursUntil}h ${minsUntil}m`
                 : 'Not started';
 
-            // Show 5 epochs in schedule table
+            // Back-calculate the epoch-0 emission from current on-chain value + halving epoch
+            const currentEmission = platformStats.annualEmission > 0 ? platformStats.annualEmission : INITIAL_EMISSION;
+            const initialEmission = currentEmission * Math.pow(2, epoch);
+
+            // Show 6 epochs in schedule table
             const schedule = Array.from({ length: 6 }, (_, i) => ({
               epoch: i,
-              emission: INITIAL_EMISSION / Math.pow(2, i),
+              emission: initialEmission / Math.pow(2, i),
               active: i === epoch,
             }));
 
