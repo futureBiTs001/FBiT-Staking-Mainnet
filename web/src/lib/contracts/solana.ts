@@ -16,7 +16,7 @@ import { Connection, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction, 
 import { AnchorProvider, Program, BN } from '@coral-xyz/anchor';
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { IDL } from './idl';
-import { NETWORK_CONFIG, HELIUS_RPC_URL } from '@/lib/config';
+import { NETWORK_CONFIG } from '@/lib/config';
 import type { PlatformStats, StakeEntry, UserAccount, ReferralInfo } from '@/types';
 
 // Anchor discriminators: sha256("account:<Name>")[0..8] and sha256("global:<name>")[0..8]
@@ -148,6 +148,37 @@ function getProgramId(): PublicKey {
 const DECIMALS   = 6;
 const SCALE      = 10 ** DECIMALS;
 
+// Referral commission percentages in BPS — mirrors the contract's REFERRAL_PERCENTAGES.
+// Index 0 = Level 1 (direct), index 9 = Level 10.
+const REFERRAL_BPS = [25, 50, 125, 150, 200, 325, 350, 425, 550, 800] as const;
+
+// Cache for program.account.userAccount.all() — expires after 2 minutes.
+// Shared across all callers (bfsReferralTree + solanaGetReferralInfo) so a
+// burst of concurrent polls only hits the RPC once.
+let _allUserAccountsCache: { data: any[]; ts: number } | null = null;
+const ALL_ACCOUNTS_CACHE_MS = 120_000;
+let _allUserAccountsInflight: Promise<any[]> | null = null;
+
+async function getAllUserAccounts(): Promise<any[]> {
+  const now = Date.now();
+  if (_allUserAccountsCache && now - _allUserAccountsCache.ts < ALL_ACCOUNTS_CACHE_MS) {
+    return _allUserAccountsCache.data;
+  }
+  // Deduplicate concurrent fetches — if one is already in flight, wait for it.
+  if (_allUserAccountsInflight) return _allUserAccountsInflight;
+  const program = getReadOnlyProgram();
+  const inflight: Promise<any[]> = (program.account as any).userAccount.all().then((data: any[]) => {
+    _allUserAccountsCache = { data, ts: Date.now() };
+    _allUserAccountsInflight = null;
+    return data;
+  }).catch((err: unknown) => {
+    _allUserAccountsInflight = null;
+    throw err;
+  });
+  _allUserAccountsInflight = inflight;
+  return inflight;
+}
+
 function toLamports(amount: number): BN {
   return new BN(Math.floor(amount * SCALE));
 }
@@ -189,7 +220,7 @@ function getSolanaWallet(): any {
 
 function getProvider(): AnchorProvider {
   const wallet = getSolanaWallet();
-  const connection = new Connection(READ_RPC, 'confirmed');
+  const connection = getRpcConnection();
   // Re-wrap publicKey using our local @solana/web3.js PublicKey so Anchor 0.32's
   // internal isPubkey()/_bn check doesn't fail on Phantom's bundled version.
   const anchorWallet = {
@@ -365,6 +396,19 @@ export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> 
       releasableEmission = Math.max(0, Math.min(totalReserve, released - totalEmissionReleased));
     }
 
+    // Build on-chain team tier config — merges static labels/colors with live minStaked/bonusBps
+    const { TEAM_TARGET_TIERS: STATIC_TIERS } = await import('@/types');
+    let teamTiers: import('@/types').PlatformStats['teamTiers'] = undefined;
+    if (platform.teamTierMinStaked && platform.teamTierBonusBps) {
+      teamTiers = STATIC_TIERS.map((t, i) => {
+        const rawMin = platform.teamTierMinStaked[i];
+        const rawBps = platform.teamTierBonusBps[i];
+        const minTeamStaked = rawMin != null ? fromLamports(rawMin) : t.minTeamStaked;
+        const bonusBps      = rawBps != null ? Number(rawBps)       : t.bonusBps;
+        return { tier: t.tier, label: t.label, color: t.color, minTeamStaked, bonusBps, bonusPercentage: bonusBps / 100 };
+      });
+    }
+
     return {
       totalStaked,
       totalUsers:            platform.totalUsers ? Number(platform.totalUsers.toString()) : 0,
@@ -385,6 +429,7 @@ export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> 
       releasableEmission,
       halvingEpoch,
       halvingStartTime,
+      teamTiers,
     };
   } catch {
     return null;
@@ -431,14 +476,12 @@ export async function solanaRegisterUser(referrer?: string): Promise<{ txHash: s
     }
   } else {
     // No referrer — only admin can register without one.
-    try {
-      const platformData: any = await (program.account as any).platform.fetch(platPda);
-      const isAdmin = owner.equals(new PublicKey(platformData.authority.toString()));
-      if (!isAdmin) {
-        throw new Error('A referral link is required to register. Please open the site from a valid referral link.');
-      }
-    } catch (err: any) {
-      if (err?.message?.includes('referral link') || err?.message?.includes('required to register')) throw err;
+    // Rethrow all errors so a network failure never silently allows non-admin
+    // registration without a referrer.
+    const platformData: any = await (program.account as any).platform.fetch(platPda);
+    const isAdmin = owner.equals(new PublicKey(platformData.authority.toString()));
+    if (!isAdmin) {
+      throw new Error('A referral link is required to register. Please open the site from a valid referral link.');
     }
   }
 
@@ -459,7 +502,7 @@ export async function solanaRegisterUser(referrer?: string): Promise<{ txHash: s
 
   const instruction = new TransactionInstruction({ keys, programId, data });
 
-  const connection = new Connection(READ_RPC, 'confirmed');
+  const connection = getRpcConnection();
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
   const legacyTx = new Transaction({ feePayer: owner, recentBlockhash: blockhash });
   legacyTx.add(instruction);
@@ -890,7 +933,7 @@ export async function solanaFixBump(): Promise<{ txHash: string }> {
 
   const instruction = new TransactionInstruction({ keys, programId, data: disc });
 
-  const connection = new Connection(READ_RPC, 'confirmed');
+  const connection = getRpcConnection();
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
   const legacyTx = new Transaction({ feePayer: authority, recentBlockhash: blockhash });
   legacyTx.add(instruction);
@@ -928,7 +971,7 @@ export async function solanaDepositReserve(amount: number): Promise<{ txHash: st
   // Diagnostic: scan raw Platform account bytes for embedded Pubkeys.
   // This reveals whether the program stores reserve_vault / reward_vault etc. in the Platform struct.
   try {
-    const conn     = new Connection(READ_RPC, 'confirmed');
+    const conn     = getRpcConnection();
     const platInfo = await conn.getAccountInfo(platPda);
     if (platInfo) {
       const bytes = platInfo.data;
@@ -977,7 +1020,7 @@ export async function solanaDepositReserve(amount: number): Promise<{ txHash: st
 
   const instruction = new TransactionInstruction({ keys, programId, data: instrData });
 
-  const connection = new Connection(READ_RPC, 'confirmed');
+  const connection = getRpcConnection();
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
   const legacyTx = new Transaction({ feePayer: authority, recentBlockhash: blockhash });
   legacyTx.add(instruction);
@@ -1175,10 +1218,32 @@ export async function solanaRenounceOwnership(): Promise<{ txHash: string }> {
 
 /** Returns a read-only Anchor program instance (no wallet signer required). */
 // Helius is preferred when configured; falls back to Solana Foundation mainnet-beta.
-const READ_RPC = HELIUS_RPC_URL || 'https://api.mainnet-beta.solana.com';
+const READ_RPC = 'https://solana-rpc.publicnode.com';
+
+// Concurrency limiter — prevents 429s on the Helius free tier (10 RPS cap).
+// Queues excess requests rather than firing them simultaneously.
+const _RPC_MAX = 5;
+let _rpcInFlight = 0;
+const _rpcQueue: Array<() => void> = [];
+
+function rpcFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return new Promise<Response>((resolve, reject) => {
+    const run = (): void => {
+      _rpcInFlight++;
+      fetch(input, init)
+        .then(resolve, reject)
+        .finally(() => { _rpcInFlight--; _rpcQueue.shift()?.(); });
+    };
+    _rpcInFlight < _RPC_MAX ? run() : _rpcQueue.push(run);
+  });
+}
+
+function getRpcConnection(): Connection {
+  return new Connection(READ_RPC, { commitment: 'confirmed', fetch: rpcFetch });
+}
 
 function getReadOnlyProgram(): Program {
-  const connection = new Connection(READ_RPC, 'confirmed');
+  const connection = getRpcConnection();
   const noopWallet = {
     publicKey: new PublicKey('11111111111111111111111111111111'),
     signTransaction: async (tx: any) => tx,
@@ -1232,7 +1297,7 @@ async function rpcCall(endpoint: string, method: string, params: unknown[]): Pro
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8_000);
   try {
-    const res = await fetch(endpoint, {
+    const res = await rpcFetch(endpoint, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
@@ -1271,10 +1336,9 @@ export async function solanaGetTokenBalance(ownerAddress: string): Promise<numbe
   const ataAddress = ata(mint, owner).toBase58();
 
   const endpoints = [
-    READ_RPC,                               // Helius if configured, else mainnet-beta
+    READ_RPC,                               // publicnode (primary)
     'https://api.mainnet-beta.solana.com',  // Solana Foundation fallback
     NETWORK_CONFIG.solana.rpcUrl,           // custom RPC from env (deduped if same as above)
-    'https://solana-rpc.publicnode.com',    // last resort
   ].filter((u, i, a) => u && a.indexOf(u) === i);
 
   for (const rpc of endpoints) {
@@ -1297,14 +1361,29 @@ export async function solanaGetUserAccount(ownerAddress: string): Promise<UserAc
     const acc = await (program.account as any).userAccount.fetch(pda);
     const teamTotalStaked = acc.teamTotalStaked ? fromLamports(acc.teamTotalStaked) : 0;
 
-    // Derive current team bonus tier from teamTotalStaked using the same constants as the contract.
-    // DEFAULT_TEAM_BONUS_BPS matches TEAM_TARGET_TIERS.bonusBps — iterate from highest tier down.
-    const { TEAM_TARGET_TIERS: tiers } = await import('@/types');
+    // Derive current team bonus tier from the on-chain platform data (teamTierMinStaked/teamTierBonusBps).
+    // Falls back to the hardcoded TEAM_TARGET_TIERS constants when the platform fetch fails.
     let currentTierBonusBps = 0;
-    for (let i = tiers.length - 1; i >= 0; i--) {
-      if (teamTotalStaked >= tiers[i].minTeamStaked) {
-        currentTierBonusBps = tiers[i].bonusBps;
-        break;
+    try {
+      const [platPda] = platformPda();
+      const platform: any = await (getReadOnlyProgram().account as any).platform.fetch(platPda);
+      if (platform.teamTierMinStaked && platform.teamTierBonusBps) {
+        for (let i = platform.teamTierMinStaked.length - 1; i >= 0; i--) {
+          if (platform.teamTierMinStaked[i] != null && teamTotalStaked >= fromLamports(platform.teamTierMinStaked[i])) {
+            currentTierBonusBps = Number(platform.teamTierBonusBps[i]);
+            break;
+          }
+        }
+      } else {
+        const { TEAM_TARGET_TIERS: tiers } = await import('@/types');
+        for (let i = tiers.length - 1; i >= 0; i--) {
+          if (teamTotalStaked >= tiers[i].minTeamStaked) { currentTierBonusBps = tiers[i].bonusBps; break; }
+        }
+      }
+    } catch {
+      const { TEAM_TARGET_TIERS: tiers } = await import('@/types');
+      for (let i = tiers.length - 1; i >= 0; i--) {
+        if (teamTotalStaked >= tiers[i].minTeamStaked) { currentTierBonusBps = tiers[i].bonusBps; break; }
       }
     }
 
@@ -1326,6 +1405,56 @@ export async function solanaGetUserAccount(ownerAddress: string): Promise<UserAc
   }
 }
 
+// Shared BFS helper: fetches all UserAccount PDAs once, builds a referrer→children
+// map, then walks L1–L10 from ownerAddress. Returns all ReferralEntry records.
+async function bfsReferralTree(ownerAddress: string): Promise<import('@/types').ReferralEntry[]> {
+  // Use cached/deduped fetch — avoids hammering RPC when multiple components poll.
+  const allDecoded: any[] = await getAllUserAccounts();
+
+  // Build referrerKey → [{address, staked, registeredAt}] map
+  type ChildMeta = { address: string; staked: number; registeredAt: number };
+  const referrerMap = new Map<string, ChildMeta[]>();
+
+  for (const item of allDecoded) {
+    try {
+      const ref: PublicKey | null = item.account.referrer ?? null;
+      if (!ref) continue;
+      const referrerKey  = ref.toBase58();
+      const ownerKey     = item.account.owner.toBase58();
+      const staked       = fromLamports(item.account.totalStaked);
+      const registeredAt = item.account.registeredAt?.toNumber?.() ?? 0;
+      if (!referrerMap.has(referrerKey)) referrerMap.set(referrerKey, []);
+      referrerMap.get(referrerKey)!.push({ address: ownerKey, staked, registeredAt });
+    } catch { /* skip malformed */ }
+  }
+
+  // BFS from ownerAddress through up to 10 levels
+  const result: import('@/types').ReferralEntry[] = [];
+  const seen = new Set<string>([ownerAddress]);
+  let currentLevel: string[] = [ownerAddress];
+
+  for (let level = 1; level <= 10 && currentLevel.length > 0; level++) {
+    const nextLevel: string[] = [];
+    for (const parentKey of currentLevel) {
+      for (const child of referrerMap.get(parentKey) ?? []) {
+        if (seen.has(child.address)) continue;
+        seen.add(child.address);
+        nextLevel.push(child.address);
+        result.push({
+          address:      child.address,
+          level,
+          stakedAmount: child.staked,
+          rewardEarned: child.staked * REFERRAL_BPS[level - 1] / 10_000,
+          registeredAt: child.registeredAt,
+        });
+      }
+    }
+    currentLevel = nextLevel;
+  }
+
+  return result;
+}
+
 export async function solanaGetReferralInfo(ownerAddress: string): Promise<ReferralInfo | null> {
   try {
     const program    = getReadOnlyProgram();
@@ -1335,57 +1464,75 @@ export async function solanaGetReferralInfo(ownerAddress: string): Promise<Refer
     const totalReferrals       = acc.referralCount.toNumber();
     const totalReferralRewards = fromLamports(acc.totalReferralRewards);
 
-    // Fetch Level-1 referrals: scan all UserAccount PDAs whose `referrer` == owner.
-    // UserAccount layout (after 8-byte discriminator, all offsets are into raw data):
-    //   owner:                  Pubkey  → data[8]–data[39]   (32 bytes)
-    //   total_staked:           u64     → data[40]–data[47]
-    //   total_rewards_earned:   u64     → data[48]–data[55]
-    //   total_referral_rewards: u64     → data[56]–data[63]
-    //   referrer:               Option<Pubkey> → data[64]–data[96]
-    //     • data[64]      = 0 (None) | 1 (Some)
-    //     • data[65]–[96] = pubkey when Some  ← memcmp target
-    //   referral_count:         u64     → data[97]–data[104]
-    //   is_blocked:             bool    → data[105]
-    //   registered_at:          i64     → data[106]–data[113]  (slice[98]–slice[105])
-    //   team_size:              u64     → data[114]–data[121]  (slice[106]–slice[113])
-    //   team_total_staked:      u64     → data[122]–data[129]  (slice[114]–slice[121])
-    const referrals: import('@/types').ReferralEntry[] = [];
+    // Fetch all UserAccount PDAs once via Anchor's own decoder — avoids hardcoded
+    // byte offsets (the deployed account is 152 bytes; the IDL predicted 139).
+    // Run BFS inline so the auto-poll already returns all L1–L10 levels.
+    const connection = getRpcConnection();
+    const programId  = getProgramId();
+    let referrals: import('@/types').ReferralEntry[] = [];
     try {
-      const connection = new Connection(READ_RPC, 'confirmed');
-      const programId  = getProgramId();
+      const allDecoded: any[] = await getAllUserAccounts();
 
-      const accounts = await connection.getProgramAccounts(programId, {
-        filters: [
-          { dataSize: 152 },   // USER_ACCOUNT_SPACE = 152 (8 disc + 131 fields + 13 padding)
-          // Match accounts where the referrer Option<Pubkey> = Some(owner):
-          // offset 65 skips the discriminator (8) + fields before referrer (56) + Option tag byte (1)
-          { memcmp: { offset: 65, bytes: owner.toBase58() } },
-        ],
-      });
-
-      for (const { account } of accounts.slice(0, 50)) {
+      // Build referrerKey → [{address, staked, registeredAt}] map from decoded data
+      type ChildMeta = { address: string; staked: number; registeredAt: number };
+      const referrerMap = new Map<string, ChildMeta[]>();
+      for (const item of allDecoded) {
         try {
-          const data  = account.data;
-          const slice = Buffer.from(data).subarray(8); // strip 8-byte Anchor discriminator
-          // Parse owner pubkey (slice[0]–slice[31])
-          const refOwner = new PublicKey(Uint8Array.from(slice.subarray(0, 32))).toBase58();
-          // Parse total_staked (slice[32]–slice[39])
-          const staked = Number(slice.readBigUInt64LE(32)) / SCALE;
-          // Parse registered_at (slice[98]–slice[105])
-          const registeredAt = Number(slice.readBigInt64LE(98));
-          referrals.push({
-            address:      refOwner,
-            level:        1,
-            stakedAmount: staked,
-            rewardEarned: 0,
-            registeredAt,
-          });
-        } catch { /* skip malformed accounts */ }
+          const ref: PublicKey | null = item.account.referrer ?? null;
+          if (!ref) continue;
+          const referrerKey  = ref.toBase58();
+          const ownerKey     = item.account.owner.toBase58();
+          const staked       = fromLamports(item.account.totalStaked);
+          const registeredAt = item.account.registeredAt?.toNumber?.() ?? 0;
+          if (!referrerMap.has(referrerKey)) referrerMap.set(referrerKey, []);
+          referrerMap.get(referrerKey)!.push({ address: ownerKey, staked, registeredAt });
+        } catch { /* skip */ }
       }
-    } catch { /* getProgramAccounts failed — return without referral list */ }
 
+      // BFS from ownerAddress through up to 10 levels
+      const seen = new Set<string>([ownerAddress]);
+      let currentLevel: string[] = [ownerAddress];
+      for (let level = 1; level <= 10 && currentLevel.length > 0; level++) {
+        const nextLevel: string[] = [];
+        for (const parentKey of currentLevel) {
+          for (const child of referrerMap.get(parentKey) ?? []) {
+            if (seen.has(child.address)) continue;
+            seen.add(child.address);
+            nextLevel.push(child.address);
+            referrals.push({
+              address:      child.address,
+              level,
+              stakedAmount: child.staked,
+              rewardEarned: child.staked * REFERRAL_BPS[level - 1] / 10_000,
+              registeredAt: child.registeredAt,
+            });
+          }
+        }
+        currentLevel = nextLevel;
+      }
+    } catch {
+      // Fallback: memcmp L1-only scan if Anchor all() fails
+      const rawL1 = await connection.getProgramAccounts(programId, {
+        filters: [{ memcmp: { offset: 65, bytes: owner.toBase58() } }],
+      });
+      const userAccDisc = Buffer.from(ACCOUNT_DISCRIMINATORS.UserAccount);
+      referrals = rawL1.flatMap(({ account }) => {
+        try {
+          const raw = Buffer.from(account.data);
+          if (!raw.subarray(0, 8).equals(userAccDisc)) return [];
+          const slice = raw.subarray(8);
+          const childKey     = new PublicKey(Uint8Array.from(slice.subarray(0, 32))).toBase58();
+          const staked       = Number(slice.readBigUInt64LE(32)) / SCALE;
+          const registeredAt = Number(slice.readBigInt64LE(98));
+          return [{ address: childKey, level: 1, stakedAmount: staked, rewardEarned: 0, registeredAt }];
+        } catch { return []; }
+      });
+    }
+
+    // Direct referrals = L1 only; totalReferrals is the on-chain count or scan count
+    const directCount = referrals.filter(r => r.level === 1).length;
     return {
-      totalReferrals:       Math.max(totalReferrals, referrals.length),
+      totalReferrals:       Math.max(totalReferrals, directCount),
       totalReferralRewards,
       referralLink: '',
       referrals,
@@ -1394,6 +1541,14 @@ export async function solanaGetReferralInfo(ownerAddress: string): Promise<Refer
   } catch {
     return null;
   }
+}
+
+/**
+ * Full multi-level referral tree for a wallet (L1–L10).
+ * Uses a single getProgramAccounts call + BFS — no N+1 queries.
+ */
+export async function solanaGetFullReferralTree(ownerAddress: string): Promise<import('@/types').ReferralEntry[]> {
+  return bfsReferralTree(ownerAddress);
 }
 
 /**
@@ -1452,7 +1607,7 @@ export async function solanaGetOnChainHistory(address: string): Promise<import('
   if (!programAddr || programAddr.toUpperCase().startsWith('YOUR_')) return [];
 
   try {
-    const connection = new Connection(READ_RPC, 'confirmed');
+    const connection = getRpcConnection();
     const owner = new PublicKey(address);
     const [userAccPda] = userPda(owner);
 
@@ -1481,18 +1636,33 @@ export async function solanaGetOnChainHistory(address: string): Promise<import('
           }
           if (!type) return;
 
-          // Try to read token balance delta for the user's stake ATA
+          // Determine the token amount involved in this tx.
           let amount = 0;
           const preBalances  = tx.meta?.preTokenBalances  ?? [];
           const postBalances = tx.meta?.postTokenBalances ?? [];
-          const stakeMint = NETWORK_CONFIG.solana.stakeTokenAddress;
+          const stakeMint  = NETWORK_CONFIG.solana.stakeTokenAddress;
+          const rewardMint = NETWORK_CONFIG.solana.rewardTokenAddress || stakeMint;
 
-          const pre  = preBalances.find(b  => b.mint === stakeMint && b.owner === address);
-          const post = postBalances.find(b => b.mint === stakeMint && b.owner === address);
-          if (pre && post) {
-            const diff = (post.uiTokenAmount.uiAmount ?? 0) - (pre.uiTokenAmount.uiAmount ?? 0);
-            amount = Math.abs(diff);
+          if (type === 'stake' || type === 'unstake') {
+            // Stake/unstake: user's stake-token wallet ATA changes
+            const pre  = preBalances.find(b => b.mint === stakeMint && b.owner === address);
+            const post = postBalances.find(b => b.mint === stakeMint && b.owner === address);
+            amount = Math.abs((post?.uiTokenAmount?.uiAmount ?? 0) - (pre?.uiTokenAmount?.uiAmount ?? 0));
+          } else if (type === 'claim') {
+            // Claim: reward_vault → user's reward-token ATA.
+            // Pre-balance may be missing (ATA created on first claim) — treat as 0.
+            const pre  = preBalances.find(b => b.mint === rewardMint && b.owner === address);
+            const post = postBalances.find(b => b.mint === rewardMint && b.owner === address);
+            amount = Math.max(0, (post?.uiTokenAmount?.uiAmount ?? 0) - (pre?.uiTokenAmount?.uiAmount ?? 0));
+            // If reward mint = stake mint and nothing found, try stake mint explicitly
+            if (amount === 0 && rewardMint !== stakeMint) {
+              const preS  = preBalances.find(b => b.mint === stakeMint && b.owner === address);
+              const postS = postBalances.find(b => b.mint === stakeMint && b.owner === address);
+              amount = Math.max(0, (postS?.uiTokenAmount?.uiAmount ?? 0) - (preS?.uiTokenAmount?.uiAmount ?? 0));
+            }
           }
+          // compound: no token reaches user wallet — amount stays 0;
+          // the compound_amount is pure on-chain accounting (stake_entry.amount += compound_amount).
 
           const labelMap: Record<string, string> = {
             stake:    'Staked FBiT on Solana',
@@ -1524,64 +1694,6 @@ export async function solanaGetOnChainHistory(address: string): Promise<import('
 }
 
 /**
- * Walk the full referral tree (L1–L10) for a given owner address.
- * Uses batched getProgramAccounts calls — call on-demand only, not on every poll.
- * Caps parents searched per level to avoid RPC flood.
- */
-export async function solanaGetFullReferralTree(
-  ownerAddress: string
-): Promise<import('@/types').ReferralEntry[]> {
-  const programAddr = NETWORK_CONFIG.solana.contractAddress;
-  if (!programAddr || programAddr.toUpperCase().startsWith('YOUR_')) return [];
-  try {
-    const connection = new Connection(READ_RPC, 'confirmed');
-    const programId  = getProgramId();
-    const referrals: import('@/types').ReferralEntry[] = [];
-    // Cycle-detection: never revisit an address
-    const seen = new Set<string>([ownerAddress]);
-    // Limit parents searched per level to cap total RPC calls
-    const MAX_PARENTS = 5;
-
-    let parentAddresses = [ownerAddress];
-
-    for (let level = 1; level <= 10 && parentAddresses.length > 0; level++) {
-      const nextLevel: string[] = [];
-
-      await Promise.allSettled(
-        parentAddresses.slice(0, MAX_PARENTS).map(async (parentAddr) => {
-          try {
-            const accounts = await connection.getProgramAccounts(programId, {
-              filters: [
-                { dataSize: 152 },
-                { memcmp: { offset: 65, bytes: parentAddr } },
-              ],
-            });
-            for (const { account } of accounts.slice(0, 30)) {
-              try {
-                const slice      = Buffer.from(account.data).subarray(8);
-                const refOwner   = new PublicKey(Uint8Array.from(slice.subarray(0, 32))).toBase58();
-                if (seen.has(refOwner)) continue;
-                seen.add(refOwner);
-                const staked       = Number(slice.readBigUInt64LE(32)) / SCALE;
-                const registeredAt = Number(slice.readBigInt64LE(98));
-                referrals.push({ address: refOwner, level, stakedAmount: staked, rewardEarned: 0, registeredAt });
-                nextLevel.push(refOwner);
-              } catch { /* skip malformed */ }
-            }
-          } catch { /* getProgramAccounts failed — skip this parent */ }
-        })
-      );
-
-      parentAddresses = nextLevel;
-    }
-
-    return referrals.sort((a, b) => a.level - b.level || b.stakedAmount - a.stakedAmount);
-  } catch {
-    return [];
-  }
-}
-
-/**
  * Scan the user's UserAccount PDA for transactions where someone else staked
  * and our ATA received a referral reward payout.
  * Returns TxRecord[] of type 'referral', sorted newest-first.
@@ -1591,11 +1703,12 @@ export async function solanaGetReferralOnChainHistory(
 ): Promise<import('@/types').TxRecord[]> {
   const programAddr = NETWORK_CONFIG.solana.contractAddress;
   if (!programAddr || programAddr.toUpperCase().startsWith('YOUR_')) return [];
+  const rewardMint = NETWORK_CONFIG.solana.rewardTokenAddress;
+  if (!rewardMint || rewardMint.toUpperCase().startsWith('YOUR_')) return [];
   try {
-    const connection = new Connection(READ_RPC, 'confirmed');
+    const connection = getRpcConnection();
     const owner      = new PublicKey(address);
     const [accPda]   = userPda(owner);
-    const rewardMint = NETWORK_CONFIG.solana.rewardTokenAddress;
 
     // Scan the last 200 signatures touching our UserAccount PDA.
     // When a referree stakes, our UserAccount PDA is passed as remaining_accounts
@@ -1603,50 +1716,57 @@ export async function solanaGetReferralOnChainHistory(
     const sigs = await connection.getSignaturesForAddress(accPda, { limit: 200 });
     const records: import('@/types').TxRecord[] = [];
 
-    await Promise.allSettled(
-      sigs.map(async (sig) => {
-        if (sig.err) return;
-        try {
-          const tx = await connection.getParsedTransaction(sig.signature, {
-            maxSupportedTransactionVersion: 0,
-            commitment: 'confirmed',
-          });
-          if (!tx) return;
+    // Process in batches of 10 to avoid RPC rate limits on concurrent calls.
+    const BATCH = 10;
+    for (let i = 0; i < sigs.length; i += BATCH) {
+      await Promise.allSettled(
+        sigs.slice(i, i + BATCH).map(async (sig) => {
+          if (sig.err) return;
+          try {
+            const tx = await connection.getParsedTransaction(sig.signature, {
+              maxSupportedTransactionVersion: 0,
+              commitment: 'confirmed',
+            });
+            if (!tx) return;
 
-          const logs: string[] = tx.meta?.logMessages ?? [];
-          // Only stake instructions distribute referral rewards
-          if (!logs.some(l => l.includes('Instruction: Stake'))) return;
+            const logs: string[] = tx.meta?.logMessages ?? [];
+            // Only stake instructions distribute referral rewards
+            if (!logs.some(l => l.includes('Instruction: Stake'))) return;
 
-          // The fee-payer of the transaction is the staker
-          const msg    = tx.transaction.message as any;
-          const payer: string = msg.accountKeys?.[0]?.pubkey?.toBase58?.() ?? '';
-          // Skip our own stake transactions — only other wallets staking triggers referral pay
-          if (!payer || payer === address) return;
+            // The fee-payer of the transaction is the staker
+            const msg    = tx.transaction.message as any;
+            const payerPubkey = msg.accountKeys?.[0]?.pubkey;
+            const payer: string = typeof payerPubkey === 'string'
+              ? payerPubkey
+              : payerPubkey?.toBase58?.() ?? '';
+            // Skip our own stake transactions — only other wallets staking triggers referral pay
+            if (!payer || payer === address) return;
 
-          // Measure change in our reward-mint ATA balance
-          const preAmt  = (tx.meta?.preTokenBalances  ?? [])
-            .find(b => b.mint === rewardMint && b.owner === address)
-            ?.uiTokenAmount.uiAmount ?? 0;
-          const postAmt = (tx.meta?.postTokenBalances ?? [])
-            .find(b => b.mint === rewardMint && b.owner === address)
-            ?.uiTokenAmount.uiAmount ?? 0;
+            // Measure change in our reward-mint ATA balance
+            const preAmt  = (tx.meta?.preTokenBalances  ?? [])
+              .find(b => b.mint === rewardMint && b.owner === address)
+              ?.uiTokenAmount.uiAmount ?? 0;
+            const postAmt = (tx.meta?.postTokenBalances ?? [])
+              .find(b => b.mint === rewardMint && b.owner === address)
+              ?.uiTokenAmount.uiAmount ?? 0;
 
-          const diff = postAmt - preAmt;
-          if (diff <= 0) return; // no referral credit in this tx
+            const diff = postAmt - preAmt;
+            if (diff <= 0) return; // no referral credit in this tx
 
-          records.push({
-            id:        `sol-ref-${sig.signature}`,
-            type:      'referral',
-            label:     `Referral reward — ${payer.slice(0, 6)}...${payer.slice(-4)} staked`,
-            amount:    diff,
-            txHash:    sig.signature,
-            timestamp: (sig.blockTime ?? 0) * 1000,
-            status:    'success',
-            network:   'solana',
-          });
-        } catch { /* skip individual parse failures */ }
-      })
-    );
+            records.push({
+              id:        `sol-ref-${sig.signature}`,
+              type:      'referral',
+              label:     `Referral reward — ${payer.slice(0, 6)}...${payer.slice(-4)} staked`,
+              amount:    diff,
+              txHash:    sig.signature,
+              timestamp: (sig.blockTime ?? 0) * 1000,
+              status:    'success',
+              network:   'solana',
+            });
+          } catch { /* skip individual parse failures */ }
+        })
+      );
+    }
 
     return records.sort((a, b) => b.timestamp - a.timestamp);
   } catch {

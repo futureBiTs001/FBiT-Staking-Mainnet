@@ -34,10 +34,13 @@ export default function AdminPanel() {
   // Burn BPS management state
   const [burnBpsValue, setBurnBpsValue] = useState('');
 
+  // Live on-chain tiers (populated by syncPlatformStats) — fallback to static constants
+  const liveTiers = (platformStats.teamTiers as typeof TEAM_TARGET_TIERS | undefined) ?? TEAM_TARGET_TIERS;
+
   // Team Target Tier management state — pre-filled from Tier 1 defaults
   const [tierIndex,        setTierIndex]        = useState('0');
-  const [tierMinStaked,    setTierMinStaked]    = useState(String(TEAM_TARGET_TIERS[0].minTeamStaked));
-  const [tierBonusBps,     setTierBonusBps]     = useState(String(TEAM_TARGET_TIERS[0].bonusBps));
+  const [tierMinStaked,    setTierMinStaked]    = useState(String(liveTiers[0].minTeamStaked));
+  const [tierBonusBps,     setTierBonusBps]     = useState(String(liveTiers[0].bonusBps));
 
   // Base fallback APY (Solana only — used when emission = 0)
   const [baseFallbackApyBps, setBaseFallbackApyBps] = useState('');
@@ -77,7 +80,9 @@ export default function AdminPanel() {
       if (!contract.isLive || !onChainFn) throw new Error('Contract not configured. Set up your deployment addresses to execute on-chain admin transactions.');
       const result = await onChainFn();
       const txHash = result.txHash;
+      // Sync immediately, then again after 2 s to catch any RPC propagation delay
       contract.syncPlatformStats().catch(() => {});
+      setTimeout(() => { contract.syncPlatformStats().catch(() => {}); }, 2000);
       addTransaction({
         id: Date.now().toString(),
         type: 'admin',
@@ -249,6 +254,8 @@ export default function AdminPanel() {
     setProcessing(null);
     if (successCount === TEAM_TARGET_TIERS.length) {
       toast.success(`All ${TEAM_TARGET_TIERS.length} tiers synced to contract!`);
+      // Re-fetch after delay so Admin Panel table shows updated on-chain values
+      setTimeout(() => { contract.syncPlatformStats().catch(() => {}); }, 2000);
     }
   };
 
@@ -1072,15 +1079,15 @@ export default function AdminPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {TEAM_TARGET_TIERS.map((tier) => (
-                    <tr key={tier.tier} className="border-b border-white/5 last:border-0">
-                      <td className="py-2 pr-4 text-text-muted">{tier.tier}</td>
-                      <td className="py-2 pr-4 font-display font-medium text-text-primary">{tier.label}</td>
+                  {liveTiers.map((tier, i) => (
+                    <tr key={i} className="border-b border-white/5 last:border-0">
+                      <td className="py-2 pr-4 text-text-muted">{i + 1}</td>
+                      <td className="py-2 pr-4 font-display font-medium text-text-primary">{TEAM_TARGET_TIERS[i]?.label ?? `Tier ${i + 1}`}</td>
                       <td className="py-2 pr-4 text-right text-text-secondary">
-                        {tier.minTeamStaked.toLocaleString()}
+                        {Number(tier.minTeamStaked).toLocaleString()}
                       </td>
                       <td className="py-2 text-right text-brand-400 font-semibold">
-                        +{tier.bonusPercentage}%
+                        +{(Number(tier.bonusBps) / 100).toFixed(1)}%
                       </td>
                     </tr>
                   ))}
@@ -1107,7 +1114,7 @@ export default function AdminPanel() {
                   onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                     const idx = parseInt(e.target.value);
                     setTierIndex(e.target.value);
-                    const t = TEAM_TARGET_TIERS[idx];
+                    const t = liveTiers[idx];
                     if (t) {
                       setTierMinStaked(String(t.minTeamStaked));
                       setTierBonusBps(String(t.bonusBps));
@@ -1115,9 +1122,9 @@ export default function AdminPanel() {
                   }}
                   className="input-field font-mono"
                 >
-                  {TEAM_TARGET_TIERS.map((t, i) => (
+                  {liveTiers.map((t, i) => (
                     <option key={i} value={String(i)}>
-                      {i}: {t.label} (+{t.bonusPercentage}%)
+                      {i}: {TEAM_TARGET_TIERS[i]?.label ?? `Tier ${i + 1}`} (+{(Number(t.bonusBps) / 100).toFixed(1)}%)
                     </option>
                   ))}
                 </select>
@@ -1190,6 +1197,7 @@ export default function AdminPanel() {
                 </div>
               ))}
             </div>
+            <p className="text-xs text-text-muted">Above values will be synced to contract. Current on-chain values shown in the table above.</p>
             <AdminButton
               label="Sync All Tiers to Contract"
               loadingLabel="Syncing tiers… (10 transactions)"

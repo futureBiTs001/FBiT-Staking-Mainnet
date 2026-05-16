@@ -85,7 +85,7 @@ export default function Dashboard() {
     const id = setInterval(() => {
       void contract.syncPlatformStats().catch(() => {});
       void contract.syncUserData().catch(() => {});
-    }, 30_000);
+    }, 60_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, selectedNetwork]);
@@ -98,6 +98,11 @@ export default function Dashboard() {
   const userAccount = walletData?.userAccount ?? null;
   const referralInfo = walletData?.referralInfo ?? null;
   const transactions = walletData?.transactions ?? [];
+
+  // team_size on-chain is only updated when remaining_accounts are passed at stake time.
+  // Use BFS network count as fallback so Dashboard matches ReferralPanel.
+  const networkTotal = referralInfo?.referrals.length ?? 0;
+  const effectiveTeamSize = Math.max(userAccount?.teamSize ?? 0, networkTotal);
 
   const activeStakes = stakes
     .filter(s => s.isActive)
@@ -417,7 +422,7 @@ export default function Dashboard() {
         <div className="glass-card col-span-2 md:col-span-1 border border-brand-500/10 bg-linear-to-br from-brand-500/5 to-transparent">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Team Size</p>
           <p className="font-display font-bold text-2xl sm:text-3xl text-brand-400">
-            {userAccount?.teamSize ?? 0}
+            {effectiveTeamSize}
           </p>
           <p className="text-text-secondary text-xs mt-1">Members in your network</p>
         </div>
@@ -545,8 +550,9 @@ export default function Dashboard() {
       {/* Team Target Bonus */}
       <TeamTargetBonusCard
         teamTotalStaked={userAccount?.teamTotalStaked ?? 0}
-        teamSize={userAccount?.teamSize ?? 0}
+        teamSize={effectiveTeamSize}
         onChainBonusBps={userAccount?.currentTierBonusBps}
+        liveTiers={platformStats.teamTiers as typeof TEAM_TARGET_TIERS[number][] | undefined}
       />
 
       {/* Daily Claim Info */}
@@ -655,18 +661,19 @@ function ActionButton({
 
 // ─── Team Target Bonus Card ────────────────────────────────────────────────────
 
-function TeamTargetBonusCard({ teamTotalStaked, teamSize, onChainBonusBps }: { teamTotalStaked: number; teamSize: number; onChainBonusBps?: number }) {
-  // Find current and next tier
+function TeamTargetBonusCard({ teamTotalStaked, teamSize, onChainBonusBps, liveTiers }: { teamTotalStaked: number; teamSize: number; onChainBonusBps?: number; liveTiers?: typeof TEAM_TARGET_TIERS[number][] }) {
+  const tiers = liveTiers ?? TEAM_TARGET_TIERS;
+  // Find current and next tier using on-chain values when available
   const activeTierIndex = (() => {
-    for (let i = TEAM_TARGET_TIERS.length - 1; i >= 0; i--) {
-      if (teamTotalStaked >= TEAM_TARGET_TIERS[i].minTeamStaked) return i;
+    for (let i = tiers.length - 1; i >= 0; i--) {
+      if (teamTotalStaked >= tiers[i].minTeamStaked) return i;
     }
     return -1;
   })();
 
-  const activeTier = activeTierIndex >= 0 ? TEAM_TARGET_TIERS[activeTierIndex] : null;
-  const nextTier   = activeTierIndex < TEAM_TARGET_TIERS.length - 1
-    ? TEAM_TARGET_TIERS[activeTierIndex + 1]
+  const activeTier = activeTierIndex >= 0 ? tiers[activeTierIndex] : null;
+  const nextTier   = activeTierIndex < tiers.length - 1
+    ? tiers[activeTierIndex + 1]
     : null;
 
   const progress = nextTier
@@ -787,7 +794,7 @@ function TeamTargetBonusCard({ teamTotalStaked, teamSize, onChainBonusBps }: { t
 
       {/* All 10 tiers grid */}
       <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
-        {TEAM_TARGET_TIERS.map((tier) => {
+        {tiers.map((tier) => {
           const isActive  = activeTierIndex >= tier.tier - 1;
           const isCurrent = activeTierIndex === tier.tier - 1;
           return (

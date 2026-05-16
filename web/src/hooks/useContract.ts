@@ -156,7 +156,7 @@ export interface ContractHook {
 
 export function useContract(): ContractHook {
   const { address, solanaAddress, evmAddress } = useWallet();
-  const { selectedNetwork, updatePlatformStats, loadOnChainData, isAdmin } = useAppStore();
+  const { selectedNetwork, updatePlatformStats, loadOnChainData } = useAppStore();
 
   // Resolve the chain-specific address for the selected network
   const chainAddress = selectedNetwork === 'solana'
@@ -220,7 +220,7 @@ export function useContract(): ContractHook {
 
   // ── Sync ──────────────────────────────────────────────────────────────────
 
-  const SECS_PER_YEAR = 1460 * 24 * 60 * 60; // 4-year halving period for Solana
+  const SECS_PER_HALVING_PERIOD = 1460 * 24 * 60 * 60; // 4 years (1460 days) per halving cycle
 
   const syncPlatformStats = useCallback(async () => {
     const stats =
@@ -231,21 +231,15 @@ export function useContract(): ContractHook {
 
     updatePlatformStats(stats);
 
-    // Auto-release emission and auto-trigger halving — admin wallet only
-    // (permissionless on-chain, but tx fees come from caller's SOL)
-    if (selectedNetwork === 'solana' && chainAddress && isAdmin) {
-      // Auto-release: fire whenever there is accrued emission waiting in the reserve
-      if ((stats.releasableEmission ?? 0) >= 1) {
-        solanaReleaseEmission()
-          .then(() => solanaFetchPlatformStats().then(fresh => { if (fresh) updatePlatformStats(fresh); }))
-          .catch(() => { /* nothing to release yet, or already released — safe to ignore */ });
-      }
+    // Emission release is bundled as a pre-instruction inside every claim/compound
+    // transaction — no separate background trigger needed or wanted here.
 
-      // Auto-halving: fire once per 4-year epoch
+    // Auto-halving only: permissionless, fires at most once per 4-year cycle, no wallet popup
+    if (selectedNetwork === 'solana' && chainAddress) {
       if (stats.halvingStartTime && stats.halvingStartTime > 0) {
         const nowSecs      = Math.floor(Date.now() / 1000);
         const halvingEpoch = stats.halvingEpoch ?? 0;
-        const halvingDue   = nowSecs >= stats.halvingStartTime + (halvingEpoch + 1) * SECS_PER_YEAR;
+        const halvingDue   = nowSecs >= stats.halvingStartTime + (halvingEpoch + 1) * SECS_PER_HALVING_PERIOD;
         if (halvingDue) {
           solanaTriggerHalving()
             .then(() => solanaFetchPlatformStats().then(fresh => { if (fresh) updatePlatformStats(fresh); }))

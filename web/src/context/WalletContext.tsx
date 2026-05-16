@@ -103,6 +103,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Track the previously connected address so we can detect wallet switches
+  const prevAddressRef = useRef<string | null>(null);
+
   // ── Reown / WalletConnect subscriptions ─────────────────────────────────────
   useEffect(() => {
     if (!appKitModal) return;
@@ -121,6 +124,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           });
           return;
         }
+
+        // When a different wallet connects, clear any localStorage referrer so
+        // stale referrers from a previous user's session are not inherited.
+        if (prevAddressRef.current && prevAddressRef.current !== account.address) {
+          setSolanaReferrerState(null);
+          setPolygonReferrerState(null);
+          try {
+            localStorage.removeItem('fbit-referrer-solana');
+            localStorage.removeItem('fbit-referrer-polygon');
+          } catch {}
+        }
+        prevAddressRef.current = account.address;
 
         setAddress(account.address);
         setWallet(account.address);

@@ -200,20 +200,50 @@ export default function HistoryPanel() {
   }, [onChainTxs, localTxs]);
 
   // ── Summary stats ────────────────────────────────────────────────────────────
-  // userAccount.totalStaked is the most reliable on-chain source (same API path as referral/claim data)
+  const isSolana = selectedNetwork === 'solana';
+
+  // Total staked: prefer on-chain userAccount, fallback to stake entries, then tx sum
   const _accountStaked = walletData?.userAccount?.totalStaked;
   const totalStaked = (typeof _accountStaked === 'number' && !Number.isNaN(_accountStaked))
     ? _accountStaked
     : (allStakes.length > 0
       ? allStakes.reduce((a, s) => a + s.amount, 0)
       : transactions.filter(t => t.type === 'stake').reduce((a, t) => a + t.amount, 0));
+
   const totalUnstaked = allStakes.length > 0
     ? allStakes.filter(s => !s.isActive).reduce((a, s) => a + s.amount, 0)
     : transactions.filter(t => t.type === 'unstake').reduce((a, t) => a + t.amount, 0);
-  const totalClaimed   = transactions.filter(t => t.type === 'claim').reduce((a, t) => a + t.amount, 0);
-  const totalCompound  = transactions.filter(t => t.type === 'compound').reduce((a, t) => a + t.amount, 0);
-  const totalReferral  = transactions.filter(t => t.type === 'referral').reduce((a, t) => a + t.amount, 0);
-  const totalTeamBonus = transactions.filter(t => t.type === 'team_bonus').reduce((a, t) => a + t.amount, 0);
+
+  // ── Solana: on-chain authoritative sources ────────────────────────────────
+  // stake_entry.total_claimed is updated ONLY by claim_rewards (not compound_rewards).
+  // user_account.total_rewards_earned = claimed_to_wallet + compounded (both).
+  // Therefore: compound_total = total_rewards_earned − sum(stake_entry.total_claimed).
+  const onChainTotalRewards = walletData?.userAccount?.totalRewardsEarned ?? 0;
+
+  // sum stake entries' totalClaimed (= tokens actually sent to user's wallet)
+  const stakeEntriesClaimedSum = allStakes.reduce((a, s) => a + (s.totalClaimed ?? 0), 0);
+
+  // totalClaimed: prefer stake-entry sum for Solana (authoritative), else tx-based
+  const totalClaimed = isSolana && stakeEntriesClaimedSum > 0
+    ? stakeEntriesClaimedSum
+    : transactions.filter(t => t.type === 'claim').reduce((a, t) => a + t.amount, 0);
+
+  // totalCompound: for Solana = totalRewardsEarned − claimedToWallet (compound never moves tokens to user)
+  const totalCompound = isSolana && onChainTotalRewards > 0
+    ? Math.max(0, onChainTotalRewards - totalClaimed)
+    : transactions.filter(t => t.type === 'compound').reduce((a, t) => a + t.amount, 0);
+
+  const totalReferral = transactions.filter(t => t.type === 'referral').reduce((a, t) => a + t.amount, 0);
+
+  // Team Bonus: on Solana it is baked into claim/compound — no separate tx type.
+  // Show amount ≈ totalRewardsEarned × current_tier_bonus_bps / (10000 + bonus_bps) as approximation.
+  const tierBonusBps  = walletData?.userAccount?.currentTierBonusBps ?? 0;
+  const solanaTeamBonusEstimate = tierBonusBps > 0 && onChainTotalRewards > 0
+    ? onChainTotalRewards * tierBonusBps / (10000 + tierBonusBps)
+    : 0;
+  const totalTeamBonus = isSolana
+    ? solanaTeamBonusEstimate
+    : transactions.filter(t => t.type === 'team_bonus').reduce((a, t) => a + t.amount, 0);
 
   // Count per type for badges
   const countByType = useMemo(() => {
@@ -296,12 +326,12 @@ export default function HistoryPanel() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <SummaryCard label="Total Staked"    value={formatNumber(totalStaked, 8)}    sub="FBiT staked"           color="text-brand-400" />
-        <SummaryCard label="Total Unstaked"  value={formatNumber(totalUnstaked, 8)}  sub="FBiT withdrawn"        color="text-accent-rose" />
-        <SummaryCard label="Total Claimed"   value={formatNumber(totalClaimed, 8)}   sub="FBiT rewards claimed"  color="text-accent-cyan" />
-        <SummaryCard label="Total Compound"  value={formatNumber(totalCompound, 8)}  sub="FBiT re-staked"        color="text-accent-purple" />
-        <SummaryCard label="Referral Earned" value={formatNumber(onChainReferralEarned, 8)} sub="FBiT from referrals" color="text-accent-amber" />
-        <SummaryCard label="Team Bonus"      value={formatNumber(totalTeamBonus, 8)} sub="FBiT bonus rewards"    color="text-emerald-400" />
+        <SummaryCard label="Total Staked"    value={formatNumber(totalStaked, 8)}    sub="FBiT staked"                                                color="text-brand-400" />
+        <SummaryCard label="Total Unstaked"  value={formatNumber(totalUnstaked, 8)}  sub="FBiT withdrawn"                                             color="text-accent-rose" />
+        <SummaryCard label="Total Claimed"   value={formatNumber(totalClaimed, 8)}   sub={isSolana ? 'FBiT sent to wallet' : 'FBiT rewards claimed'}  color="text-accent-cyan" />
+        <SummaryCard label="Total Compound"  value={formatNumber(totalCompound, 8)}  sub={isSolana ? 'FBiT auto-restaked' : 'FBiT re-staked'}         color="text-accent-purple" />
+        <SummaryCard label="Referral Earned" value={formatNumber(onChainReferralEarned, 8)} sub="FBiT from referrals"                                 color="text-accent-amber" />
+        <SummaryCard label="Team Bonus"      value={tierBonusBps > 0 && isSolana ? `~${formatNumber(totalTeamBonus, 4)}` : formatNumber(totalTeamBonus, 8)} sub={isSolana && tierBonusBps > 0 ? `Auto-applied (+${(tierBonusBps / 100).toFixed(1)}%)` : 'FBiT bonus rewards'} color="text-emerald-400" />
       </div>
 
       {/* Platform snapshot */}
