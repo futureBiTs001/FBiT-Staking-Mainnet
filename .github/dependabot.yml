@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+    ignore:
+      # bigint-buffer (GHSA-3gc7-fjrx-p6mg) — no patched version exists upstream.
+      # Fix requires @solana/spl-token to drop this dependency. Tracking upstream:
+      # https://github.com/solana-labs/solana-program-library/issues
+      - dependency-name: "bigint-buffer"
+        update-types: ["version-update:semver-patch"]
+
+      # postcss bundled inside Next.js (GHSA-qx2v-qp2m-jg93) — cannot be overridden
+      # via package.json since it lives in next/node_modules. Fix requires a Next.js
+      # release with updated internal postcss. Tracking: https://github.com/vercel/next.js
+      - dependency-name: "postcss"
+        update-types: ["version-update:semver-patch"]
