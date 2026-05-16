@@ -578,12 +578,12 @@ export async function solanaStake(
 }
 
 // Returns a releaseEmission TransactionInstruction if the reserve has ≥1 FBiT
-// ready to release right now, otherwise null. Used to bundle release into the
-// same transaction as claim/compound so no extra wallet popup is needed.
-async function buildReleaseIxIfReady(program: any): Promise<import('@solana/web3.js').TransactionInstruction | null> {
+// ready to release right now, otherwise null. Accepts already-fetched platform
+// data to avoid an extra RPC call (pass null to fetch internally as fallback).
+async function buildReleaseIxIfReady(program: any, platformData?: any): Promise<import('@solana/web3.js').TransactionInstruction | null> {
   try {
-    const [platPda]    = platformPda();
-    const platform: any = await (program.account as any).platform.fetch(platPda);
+    const [platPda] = platformPda();
+    const platform: any = platformData ?? await (program.account as any).platform.fetch(platPda);
     const annual    = platform.annualEmission  ? Number(new BN(platform.annualEmission.toString()))  : 0;
     const reserve   = platform.totalReserve    ? Number(new BN(platform.totalReserve.toString()))    : 0;
     const released  = platform.totalEmissionReleased ? Number(new BN(platform.totalEmissionReleased.toString())) : 0;
@@ -652,21 +652,23 @@ export async function solanaClaimRewards(
   const [pda] = platformPda();
   let adminRewardAccount = userTokenAcc; // fallback: pass user's ATA (unused when renounced)
   let feeRecipientTokenAccount = userTokenAcc; // fallback (unused when NOT renounced)
+  let fetchedPlatform: any = null;
   try {
-    const platform: any = await (program.account as any).platform.fetch(pda);
-    if (platform.isRenounced && platform.feeRecipient) {
-      const feeRecipientKey = new PublicKey(platform.feeRecipient.toString());
+    fetchedPlatform = await (program.account as any).platform.fetch(pda);
+    if (fetchedPlatform.isRenounced && fetchedPlatform.feeRecipient) {
+      const feeRecipientKey = new PublicKey(fetchedPlatform.feeRecipient.toString());
       feeRecipientTokenAccount = ata(rewardMint, feeRecipientKey);
-      adminRewardAccount       = feeRecipientTokenAccount; // pass something valid for the constraint
+      adminRewardAccount       = feeRecipientTokenAccount;
     } else {
-      const authorityKey = new PublicKey(platform.authority.toString());
+      const authorityKey = new PublicKey(fetchedPlatform.authority.toString());
       adminRewardAccount = ata(rewardMint, authorityKey);
     }
   } catch {}
 
   // Bundle releaseEmission as a pre-instruction so reward pool is topped up
   // in the same transaction — no extra wallet popup needed.
-  const releaseIx = await buildReleaseIxIfReady(program);
+  // Pass already-fetched platform to avoid an extra RPC call that could fail silently.
+  const releaseIx = await buildReleaseIxIfReady(program, fetchedPlatform);
 
   const tx = await (program.methods as any)
     .claimRewards(new BN(Number(stakeId)))
@@ -729,19 +731,21 @@ export async function solanaCompoundRewards(
   const [pda] = platformPda();
   let adminRewardAccount        = ata(rewardMint, owner); // fallback
   let feeRecipientTokenAccount  = ata(rewardMint, owner); // fallback
+  let fetchedPlatform: any = null;
   try {
-    const platform: any = await (program.account as any).platform.fetch(pda);
-    if (platform.isRenounced && platform.feeRecipient) {
-      const feeRecipientKey = new PublicKey(platform.feeRecipient.toString());
+    fetchedPlatform = await (program.account as any).platform.fetch(pda);
+    if (fetchedPlatform.isRenounced && fetchedPlatform.feeRecipient) {
+      const feeRecipientKey = new PublicKey(fetchedPlatform.feeRecipient.toString());
       feeRecipientTokenAccount = ata(rewardMint, feeRecipientKey);
       adminRewardAccount       = feeRecipientTokenAccount;
     } else {
-      const authorityKey = new PublicKey(platform.authority.toString());
+      const authorityKey = new PublicKey(fetchedPlatform.authority.toString());
       adminRewardAccount = ata(rewardMint, authorityKey);
     }
   } catch {}
 
-  const releaseIx = await buildReleaseIxIfReady(program);
+  // Pass already-fetched platform to avoid an extra RPC call that could fail silently.
+  const releaseIx = await buildReleaseIxIfReady(program, fetchedPlatform);
 
   const tx = await (program.methods as any)
     .compoundRewards()
