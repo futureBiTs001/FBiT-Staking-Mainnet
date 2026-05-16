@@ -35,6 +35,12 @@ pub const DEFAULT_TEAM_MIN_STAKED: [u64; 10] = [
 ];
 pub const DEFAULT_TEAM_BONUS_BPS: [u64; 10] = [200, 300, 400, 500, 600, 700, 750, 850, 900, 1000];
 
+// Default per-level referral percentages in BPS (same as the original constants).
+// Stored on Platform so admin can update them without redeploying the contract.
+pub const DEFAULT_REFERRAL_PERCENTAGES: [u64; 10] = [25, 50, 125, 150, 200, 325, 350, 425, 550, 800];
+// Maximum total referral BPS across all 10 levels combined (safety ceiling: 50% of staked amount).
+pub const MAX_TOTAL_REFERRAL_BPS: u64 = 5_000;
+
 // ===== HELPER =====
 
 /// PoS dynamic APY in BPS: annual_emission / total_staked * 10_000, clamped 1000–30000 (10%–300%).
@@ -105,6 +111,8 @@ pub mod fbit_staking {
         // Settable emission & burn rate
         p.annual_emission = 0;
         p.burn_bps        = BURN_BPS; // default 10%
+        // Per-level referral percentages (updatable by admin)
+        p.referral_percentages = DEFAULT_REFERRAL_PERCENTAGES;
         Ok(())
     }
 
@@ -401,7 +409,12 @@ pub mod fbit_staking {
                 }
                 cur_referrer = next_ref;
 
-                let level_bps  = REFERRAL_PERCENTAGES[level];
+                // Use stored per-level %; fall back to compile-time constant for legacy accounts (field = 0).
+                let level_bps  = if ctx.accounts.platform.referral_percentages[level] > 0 {
+                    ctx.accounts.platform.referral_percentages[level]
+                } else {
+                    REFERRAL_PERCENTAGES[level]
+                };
                 let ref_reward = staked_amount.checked_mul(level_bps).unwrap().checked_div(10_000).unwrap();
                 let can_pay    = !is_blocked && ref_reward > 0 && ctx.accounts.platform.reward_pool_balance >= ref_reward;
 
@@ -760,6 +773,17 @@ pub mod fbit_staking {
         Ok(())
     }
 
+    /// Admin: update per-level referral percentages (in BPS).
+    /// Total across all 10 levels must not exceed MAX_TOTAL_REFERRAL_BPS (50%).
+    pub fn set_referral_percentages(ctx: Context<AdminAction>, percentages: [u64; 10]) -> Result<()> {
+        require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
+        let total: u64 = percentages.iter().sum();
+        require!(total <= MAX_TOTAL_REFERRAL_BPS, StakingError::ReferralPercentagesTooHigh);
+        ctx.accounts.platform.referral_percentages = percentages;
+        emit!(ReferralPercentagesUpdated { percentages });
+        Ok(())
+    }
+
     pub fn set_reward_rate(ctx: Context<AdminAction>, new_rate: u64) -> Result<()> {
         require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
         ctx.accounts.platform.reward_rate = new_rate;
@@ -944,9 +968,10 @@ pub struct Platform {
     pub emission_start_time:     i64,
     pub annual_emission:         u64,
     pub burn_bps:                u64,
+    // ── v3 field (reads as [0;10] from existing accounts; falls back to compile-time const) ──
+    pub referral_percentages:    [u64; 10],
 }
-// space: 427 (existing) + 7 new fields * 8 bytes = 427 + 56 = 483
-// Use 600 for future-proof safety padding
+// space: 483 (v2 fields) + 80 (referral_percentages [u64;10]) = 563 — fits in 600
 pub const PLATFORM_SPACE: usize = 600;
 
 #[account]
@@ -1270,7 +1295,8 @@ pub struct FixBump<'info> {
 #[event] pub struct TokensBurned           { pub user: Pubkey, pub burn_amount: u64, pub total_burned: u64 }
 #[event] pub struct HalvingTriggered       { pub triggered_by: Pubkey, pub halving_epoch: u64, pub timestamp: i64 }
 #[event] pub struct OwnershipRenounced     { pub former_owner: Pubkey, pub timestamp: i64 }
-#[event] pub struct RenounceFeeCollected   { pub recipient: Pubkey, pub claimant: Pubkey, pub fee_amount: u64, pub total_fees_collected: u64 }
+#[event] pub struct RenounceFeeCollected       { pub recipient: Pubkey, pub claimant: Pubkey, pub fee_amount: u64, pub total_fees_collected: u64 }
+#[event] pub struct ReferralPercentagesUpdated { pub percentages: [u64; 10] }
 
 // ===== ERRORS =====
 
@@ -1310,4 +1336,5 @@ pub enum StakingError {
     #[msg("Stake amount exceeds maximum (500M FBiT)")]    AboveMaxStake,
     #[msg("Invalid referral token account")]               InvalidReferralATA,
     #[msg("A valid referrer is required to register")]     ReferrerRequired,
+    #[msg("Total referral BPS exceeds 50% maximum")]       ReferralPercentagesTooHigh,
 }

@@ -29,6 +29,10 @@ export default function AdminPanel() {
   const [activeSection, setActiveSection] = useState<'pool' | 'rates' | 'users' | 'tiers' | 'platform'>('pool');
   const [renounceConfirm, setRenounceConfirm] = useState(false);
 
+  // Per-level referral percentages state (10 levels, default values in BPS)
+  const DEFAULT_REF_PCT = [25, 50, 125, 150, 200, 325, 350, 425, 550, 800];
+  const [refPct, setRefPct] = useState<number[]>(DEFAULT_REF_PCT);
+
   // Annual emission management state
   const [annualEmissionValue, setAnnualEmissionValue] = useState('');
   // Burn BPS management state
@@ -165,6 +169,17 @@ export default function AdminPanel() {
     const n = parseInt(referralRate, 10);
     if (!n || n <= 0) return;
     run('referralRate', () => contract.setReferralRewardRate(n), `Referral rate updated to ${n / 100}%`);
+  };
+
+  const handleSetReferralPercentages = () => {
+    const total = refPct.reduce((s, v) => s + v, 0);
+    if (total > 5000) { toast.error(`Total BPS (${total}) exceeds 5000 (50%) limit.`); return; }
+    if (refPct.some((v) => v < 0)) { toast.error('BPS values cannot be negative.'); return; }
+    run(
+      'refPct',
+      () => contract.setReferralPercentages(refPct as [number,number,number,number,number,number,number,number,number,number]),
+      `Referral % updated (total: ${(total / 100).toFixed(2)}%)`
+    );
   };
 
   const handleBlock = () => {
@@ -854,6 +869,58 @@ export default function AdminPanel() {
               variant="cyan"
             />
           </div>
+
+          {/* Per-level referral percentages — Solana only */}
+          {selectedNetwork === 'solana' && (
+            <div className="glass-card space-y-4">
+              <h3 className="font-display font-semibold text-lg">Referral Level Percentages</h3>
+              <p className="text-text-muted text-xs -mt-2">
+                Set reward % for each of the 10 referral levels (in BPS — 100&nbsp;=&nbsp;1%).
+                Total must be ≤ 5000 (50%). Current total:{' '}
+                <span className="text-accent-cyan font-mono">
+                  {refPct.reduce((s, v) => s + v, 0)} BPS ({(refPct.reduce((s, v) => s + v, 0) / 100).toFixed(2)}%)
+                </span>
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {refPct.map((val, i) => (
+                  <div key={i}>
+                    <label
+                      htmlFor={`refPct-${i}`}
+                      className="text-xs text-text-secondary font-display mb-1 block"
+                    >
+                      L{i + 1} BPS
+                    </label>
+                    <input
+                      id={`refPct-${i}`}
+                      type="number"
+                      min={0}
+                      max={5000}
+                      value={val}
+                      placeholder="0"
+                      title={`Level ${i + 1} referral percentage in basis points`}
+                      onChange={(e) => {
+                        const next = [...refPct];
+                        next[i] = Math.max(0, parseInt(e.target.value) || 0);
+                        setRefPct(next);
+                      }}
+                      className="input-field font-mono text-sm w-full"
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-text-muted text-xs">
+                Default: L1=25, L2=50, L3=125, L4=150, L5=200, L6=325, L7=350, L8=425, L9=550, L10=800
+              </p>
+              <AdminButton
+                label="Update Referral Levels"
+                loadingLabel="Updating…"
+                onClick={handleSetReferralPercentages}
+                disabled={isRenounced || refPct.reduce((s, v) => s + v, 0) > 5000}
+                loading={busy('refPct')}
+                variant="cyan"
+              />
+            </div>
+          )}
 
           {/* Burn BPS update — both networks */}
           {<div className="glass-card space-y-4">

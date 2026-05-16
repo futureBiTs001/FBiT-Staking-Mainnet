@@ -47,8 +47,9 @@ const IX_DISCRIMINATORS: Record<string, number[]> = {
   togglePause:           [238, 237, 206,  27, 255,  95, 123, 229],
   setAnnualEmission:     [ 23, 188,  62,  60, 159,  23, 116, 166],
   setBurnBps:            [226, 172, 145, 206, 238,  25,  16, 103],
-  setTeamTargetTier:     [ 88, 230, 208,   7,  32, 138, 239,   4],
-  setBatchApy:           [109,  76,  87, 205, 176, 242, 123,  34],
+  setTeamTargetTier:          [ 88, 230, 208,   7,  32, 138, 239,   4],
+  setReferralPercentages:     [230,  34, 112, 247,  80, 147, 223,  93],
+  setBatchApy:                [109,  76,  87, 205, 176, 242, 123,  34],
   renounceOwnership:     [ 19, 143,  91,  79,  34, 168, 174, 125],
   triggerHalving:        [  2, 170, 148,  87, 175, 253, 173,  80],
   updateUserTeamStats:   [137, 242, 244, 142, 224,  98, 192, 229],
@@ -1128,6 +1129,18 @@ export async function solanaSetReferralRewardRate(rate: number): Promise<{ txHas
   const owner    = getOwner();
   const [platPda] = platformPda();
   const tx = await (program.methods as any).setReferralRewardRate(new BN(rate))
+    .accounts({ platform: platPda, authority: owner }).rpc();
+  return { txHash: tx };
+}
+
+export async function solanaSetReferralPercentages(
+  percentages: [number, number, number, number, number, number, number, number, number, number]
+): Promise<{ txHash: string }> {
+  const program   = getProgram();
+  const owner     = getOwner();
+  const [platPda] = platformPda();
+  const bpsValues = percentages.map((p) => new BN(p));
+  const tx = await (program.methods as any).setReferralPercentages(bpsValues)
     .accounts({ platform: platPda, authority: owner }).rpc();
   return { txHash: tx };
 }
