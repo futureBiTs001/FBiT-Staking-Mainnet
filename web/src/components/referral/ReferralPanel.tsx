@@ -25,7 +25,7 @@ function ProgressBar({ pct, className }: { pct: number; className: string }) {
   return <div ref={ref} className={`h-full rounded-full transition-all duration-500 ${className}`} />;
 }
 
-const POLL_INTERVAL_MS = 30_000;
+const POLL_INTERVAL_MS = 60_000;
 
 const LEVEL_COLORS: Record<number, string> = {
   1:  'bg-brand-500/10 text-brand-400 border-brand-500/20',
@@ -57,14 +57,18 @@ export default function ReferralPanel() {
   const [isFetchingChain, setIsFetchingChain]     = useState(false);
   const [hasFetchedChain, setHasFetchedChain]     = useState(false);
 
-  const syncReferralData = useCallback(async () => {
-    if (!address) return;
+  const syncReferralData = useCallback(async (): Promise<boolean> => {
+    if (!address) return false;
     setIsRefreshing(true);
     try {
       await contract.syncUserData();
       setLastSyncAt(new Date());
-    } catch {}
-    setIsRefreshing(false);
+      setIsRefreshing(false);
+      return true;
+    } catch {
+      setIsRefreshing(false);
+      return false;
+    }
   }, [address, contract]);
 
   // Initial sync + auto-poll every 30s (lightweight — L1 only)
@@ -73,8 +77,7 @@ export default function ReferralPanel() {
     void syncReferralData();
     const id = setInterval(() => syncReferralData(), POLL_INTERVAL_MS);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, selectedNetwork]);
+  }, [address, selectedNetwork, syncReferralData]);
 
   const walletData      = getWalletData();
   const referralInfo    = walletData?.referralInfo;
@@ -100,13 +103,14 @@ export default function ReferralPanel() {
 
     setIsFetchingChain(true);
     try {
+      let anySucceeded = false;
       if (selectedNetwork === 'solana' && solAddr) {
         const [histRes, treeRes] = await Promise.allSettled([
           import('@/lib/contracts/solana').then(m => m.solanaGetReferralOnChainHistory(solAddr)),
           import('@/lib/contracts/solana').then(m => m.solanaGetFullReferralTree(solAddr)),
         ]);
-        if (histRes.status === 'fulfilled') setOnChainRefHistory(histRes.value);
-        if (treeRes.status === 'fulfilled') setFullReferralTree(treeRes.value);
+        if (histRes.status === 'fulfilled') { setOnChainRefHistory(histRes.value); anySucceeded = true; }
+        if (treeRes.status === 'fulfilled') { setFullReferralTree(treeRes.value);  anySucceeded = true; }
       } else if (selectedNetwork === 'polygon' && polyAddr) {
         // Polygon: on-chain history from HistoryPanel function (re-use same approach)
         const histRes = await import('@/lib/contracts/polygon')
@@ -114,17 +118,23 @@ export default function ReferralPanel() {
           .then(all => all.filter((t: TxRecord) => t.type === 'referral'))
           .catch(() => [] as TxRecord[]);
         setOnChainRefHistory(histRes);
+        anySucceeded = true;
       }
-      setHasFetchedChain(true);
-      toast.success('On-chain referral data loaded');
+      if (anySucceeded) {
+        setHasFetchedChain(true);
+        toast.success('On-chain referral data loaded');
+      } else {
+        toast.error('Failed to load on-chain referral data — please try again');
+      }
     } catch {
-      toast.error('Failed to load on-chain referral data');
+      toast.error('Unexpected error loading referral data');
     } finally {
       setIsFetchingChain(false);
     }
   }, [address, solanaAddress, evmAddress, selectedNetwork]);
 
-  // Referral tree to display: full (if fetched) or L1 fallback
+  // Referral tree: auto-poll now returns all L1–L10 levels via BFS.
+  // fullReferralTree (manual "Refresh from Chain") overrides only when fetched and non-empty.
   const displayedTree: ReferralEntry[] = useMemo(() => {
     if (hasFetchedChain && fullReferralTree.length > 0) return fullReferralTree;
     return (referralInfo?.referrals ?? []).map(r => ({ ...r, level: r.level || 1 }));
@@ -150,17 +160,30 @@ export default function ReferralPanel() {
     return merged.sort((a, b) => b.timestamp - a.timestamp);
   }, [onChainRefHistory, localRefTxs]);
 
-  const currentTier = getTeamTargetTier(teamSizeVal, teamTotalStaked);
-  const nextTier    = getNextTeamTargetTier(teamSizeVal, teamTotalStaked);
-
   const chainAddress = selectedNetwork === 'solana'
     ? (solanaAddress ?? (address && !address.startsWith('0x') ? address : null))
     : (evmAddress   ?? (address && address.startsWith('0x')   ? address : null));
   const referralLink    = chainAddress ? generateReferralLink(chainAddress) : '';
-  const totalReferrals  = referralInfo?.totalReferrals ?? 0;
-  const totalRewards    = userAccount?.totalReferralRewards ?? referralInfo?.totalReferralRewards ?? 0;
+  const myReferrer      = userAccount?.referrer ?? null;
+  const totalReferrals  = referralInfo?.totalReferrals ?? 0;    // L1 direct count
+  const networkTotal    = referralInfo?.referrals.length ?? 0;  // all-level count
+  // Calculated commission = sum of (stakedAmount × level%) across all referrals.
+  // This mirrors the contract's REFERRAL_PERCENTAGES and is the amount A earns
+  // from each referral's staked tokens. Falls back to on-chain totalReferralRewards.
+  const calculatedCommission = displayedTree.reduce((s, r) => s + r.rewardEarned, 0);
+  const totalRewards    = calculatedCommission > 0
+    ? calculatedCommission
+    : (userAccount?.totalReferralRewards ?? referralInfo?.totalReferralRewards ?? 0);
   const activeReferrals = referralInfo?.referrals.filter(r => r.stakedAmount > 0).length ?? 0;
-  const teamSize        = teamSizeVal;
+  // Use BFS network count as fallback when on-chain team_size is 0.
+  // team_size is only updated inside the referral loop (requires remaining_accounts at stake time);
+  // if that was missed for early stakes, BFS gives the correct count.
+  const teamSize        = Math.max(teamSizeVal, networkTotal);
+
+  const liveTiers = useAppStore(s => s.platformStats.teamTiers) as typeof TEAM_TARGET_TIERS[number][] | undefined;
+  const activeTierList = liveTiers ?? TEAM_TARGET_TIERS;
+  const currentTier = getTeamTargetTier(teamSize, teamTotalStaked, liveTiers);
+  const nextTier    = getNextTeamTargetTier(teamSize, teamTotalStaked, liveTiers);
 
   const handleCopy = async () => {
     const ok = await copyToClipboard(referralLink);
@@ -172,8 +195,9 @@ export default function ReferralPanel() {
   };
 
   const handleRefresh = async () => {
-    await syncReferralData();
-    toast.success('Referral data refreshed!');
+    const ok = await syncReferralData();
+    if (ok) toast.success('Referral data refreshed!');
+    else toast.error('Failed to refresh — check your connection');
   };
 
   if (!address) {
@@ -235,19 +259,46 @@ export default function ReferralPanel() {
         </p>
       </div>
 
+      {/* Referred-by banner — only shown when we know who registered this wallet */}
+      {myReferrer && (
+        <div className="glass-card flex items-center gap-3 py-3 px-4 border border-accent-purple/20 bg-accent-purple/5">
+          <span className="text-accent-purple text-lg shrink-0">◈</span>
+          <div className="min-w-0">
+            <p className="text-[10px] font-display uppercase tracking-wider text-text-muted">Referred by</p>
+            <p className="font-mono text-xs text-text-primary truncate" title={myReferrer}>{myReferrer}</p>
+          </div>
+        </div>
+      )}
+
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { label: 'Total Referrals', value: totalReferrals,               color: 'gradient-text' },
-          { label: 'Active',          value: activeReferrals,               color: 'text-brand-400' },
-          { label: 'Total Earned',    value: formatNumber(totalRewards, 8), color: 'text-accent-cyan' },
-          { label: 'Team Size',       value: teamSize,                      color: 'text-accent-amber' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="glass-card text-center">
-            <p className="text-text-muted text-xs font-display uppercase tracking-wider">{label}</p>
-            <p className={`font-display font-bold text-2xl mt-1 ${color}`}>{value}</p>
-          </div>
-        ))}
+        <div className="glass-card text-center">
+          <p className="text-text-muted text-xs font-display uppercase tracking-wider">Direct (L1)</p>
+          <p className="font-display font-bold text-2xl mt-1 gradient-text">{totalReferrals}</p>
+          {networkTotal > totalReferrals && (
+            <p className="text-text-muted text-[10px] mt-0.5">{networkTotal} total network</p>
+          )}
+        </div>
+        <div className="glass-card text-center">
+          <p className="text-text-muted text-xs font-display uppercase tracking-wider">Active</p>
+          <p className="font-display font-bold text-2xl mt-1 text-brand-400">{activeReferrals}</p>
+          {networkTotal > 0 && activeReferrals < networkTotal && (
+            <p className="text-text-muted text-[10px] mt-0.5">of {networkTotal} in network</p>
+          )}
+        </div>
+        <div className="glass-card text-center">
+          <p className="text-text-muted text-xs font-display uppercase tracking-wider">Total Earned</p>
+          <p className="font-display font-bold text-2xl mt-1 text-accent-cyan">{formatNumber(totalRewards, 8)}</p>
+        </div>
+        <div className="glass-card text-center">
+          <p className="text-text-muted text-xs font-display uppercase tracking-wider">Team Size</p>
+          <p className="font-display font-bold text-2xl mt-1 text-accent-amber">
+            {teamSize > 0 ? teamSize : '—'}
+          </p>
+          {teamSize === 0 && (
+            <p className="text-text-muted text-[10px] mt-0.5">awaiting sync</p>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -270,65 +321,182 @@ export default function ReferralPanel() {
 
       {/* ── Overview ── */}
       {activeView === 'overview' && (
-        <div className="glass-card">
-          <h3 className="font-display font-semibold mb-4">How It Works</h3>
-          <div className="space-y-3">
-            {[
-              { n: 1, color: 'bg-brand-500/20 text-brand-400',        title: 'Share Your Link',       body: 'Copy your unique referral link and share it with friends and community.' },
-              { n: 2, color: 'bg-accent-purple/20 text-accent-purple', title: 'They Stake',            body: 'When someone registers through your link and stakes tokens, you earn commissions.' },
-              { n: 3, color: 'bg-accent-cyan/20 text-accent-cyan',     title: 'Earn 10 Levels Deep',   body: 'Earn from referrals up to 10 levels deep. The deeper the network, the higher the rewards!' },
-            ].map(({ n, color, title, body }) => (
-              <div key={n} className="flex items-start gap-4 p-3 rounded-xl bg-surface-800/30">
-                <div className={`w-8 h-8 rounded-lg ${color} flex items-center justify-center font-display font-bold text-sm shrink-0`}>{n}</div>
-                <div>
-                  <p className="font-display font-medium text-sm">{title}</p>
-                  <p className="text-text-muted text-xs mt-0.5">{body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          {currentTier && (
-            <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-text-muted">Active Team Bonus</p>
-                <p className="font-display font-bold text-brand-400">+{currentTier.bonusPercentage}% ({currentTier.label})</p>
-              </div>
-              <button type="button" onClick={() => setActiveView('team')} className="text-xs text-text-muted hover:text-text-secondary font-display transition-colors">
-                View tiers →
-              </button>
+        <div className="space-y-4">
+          {/* Full referral network — all L1–L10 levels, auto-refreshed every 30s */}
+          <div className="glass-card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display font-semibold">
+                Your Referral Network
+                {displayedTree.length > 0 && (
+                  <span className="ml-2 text-xs text-text-muted font-normal">
+                    ({displayedTree.length} member{displayedTree.length !== 1 ? 's' : ''} · {activeReferrals} staking)
+                  </span>
+                )}
+              </h3>
+              {isRefreshing && <span className="text-[10px] text-brand-400 animate-pulse">Syncing…</span>}
             </div>
-          )}
+
+            {displayedTree.length === 0 && totalReferrals === 0 ? (
+              <p className="text-center py-6 text-text-muted text-sm">
+                No referrals yet. Share your link to get started!
+              </p>
+            ) : displayedTree.length === 0 && totalReferrals > 0 ? (
+              <div className="text-center py-6">
+                {isRefreshing ? (
+                  <p className="text-text-muted text-sm animate-pulse">Loading referral accounts…</p>
+                ) : (
+                  <>
+                    <p className="text-text-muted text-sm">{totalReferrals} referral{totalReferrals !== 1 ? 's' : ''} registered — details unavailable</p>
+                    <button type="button" onClick={handleRefresh} className="mt-2 text-xs text-brand-400 hover:text-brand-300 font-display transition-colors">
+                      Retry ↻
+                    </button>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-text-muted text-xs font-display uppercase tracking-wider border-b border-white/5">
+                      <th className="text-left pb-3 pl-3">Wallet</th>
+                      <th className="text-center pb-3">Lv</th>
+                      <th className="text-center pb-3">Status</th>
+                      <th className="text-right pb-3">Staked</th>
+                      <th className="text-right pb-3">Earned</th>
+                      <th className="text-right pb-3 pr-3 hidden sm:table-cell">Joined</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {displayedTree.map((entry) => (
+                      <tr key={`${entry.address}-${entry.level}`} className="hover:bg-white/2 transition-colors">
+                        <td className="py-3 pl-3 font-mono text-xs text-text-secondary" title={entry.address}>
+                          {entry.address.slice(0, 6)}…{entry.address.slice(-4)}
+                        </td>
+                        <td className="py-3 text-center">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${LEVEL_COLORS[entry.level] ?? LEVEL_COLORS[10]}`}>
+                            L{entry.level}
+                          </span>
+                        </td>
+                        <td className="py-3 text-center">
+                          {entry.stakedAmount > 0
+                            ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-400 border border-brand-500/30">Active</span>
+                            : <span className="text-[11px] px-2 py-0.5 rounded-full bg-surface-700/50 text-text-muted border border-white/10">Registered</span>
+                          }
+                        </td>
+                        <td className="py-3 text-right font-mono text-xs">
+                          {entry.stakedAmount > 0
+                            ? <span className="text-brand-400">{formatNumber(entry.stakedAmount)} FBiT</span>
+                            : <span className="text-text-muted">—</span>
+                          }
+                        </td>
+                        <td className="py-3 text-right font-mono text-xs">
+                          {entry.rewardEarned > 0
+                            ? <span className="text-accent-cyan">{formatNumber(entry.rewardEarned)} FBiT</span>
+                            : <span className="text-text-muted">—</span>
+                          }
+                        </td>
+                        <td className="py-3 text-right pr-3 text-xs text-text-muted hidden sm:table-cell">
+                          {entry.registeredAt > 0
+                            ? new Date(entry.registeredAt * 1000).toLocaleDateString()
+                            : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {displayedTree.some(r => r.stakedAmount === 0) && (
+              <p className="text-[11px] text-text-muted mt-3 pt-3 border-t border-white/5">
+                Referral rewards and Team Size credit are earned when your referrals stake FBiT tokens.
+              </p>
+            )}
+          </div>
+
+          {/* How It Works */}
+          <div className="glass-card">
+            <h3 className="font-display font-semibold mb-4">How It Works</h3>
+            <div className="space-y-3">
+              {[
+                { n: 1, color: 'bg-brand-500/20 text-brand-400',        title: 'Share Your Link',       body: 'Copy your unique referral link and share it with friends and community.' },
+                { n: 2, color: 'bg-accent-purple/20 text-accent-purple', title: 'They Stake',            body: 'When someone registers through your link and stakes tokens, you earn commissions.' },
+                { n: 3, color: 'bg-accent-cyan/20 text-accent-cyan',     title: 'Earn 10 Levels Deep',   body: 'Earn from referrals up to 10 levels deep. The deeper the network, the higher the rewards!' },
+              ].map(({ n, color, title, body }) => (
+                <div key={n} className="flex items-start gap-4 p-3 rounded-xl bg-surface-800/30">
+                  <div className={`w-8 h-8 rounded-lg ${color} flex items-center justify-center font-display font-bold text-sm shrink-0`}>{n}</div>
+                  <div>
+                    <p className="font-display font-medium text-sm">{title}</p>
+                    <p className="text-text-muted text-xs mt-0.5">{body}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {currentTier && (
+              <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-text-muted">Active Team Bonus</p>
+                  <p className="font-display font-bold text-brand-400">+{currentTier.bonusPercentage}% ({currentTier.label})</p>
+                </div>
+                <button type="button" onClick={() => setActiveView('team')} className="text-xs text-text-muted hover:text-text-secondary font-display transition-colors">
+                  View tiers →
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {/* ── Levels ── */}
       {activeView === 'levels' && (
         <div className="glass-card">
-          <h3 className="font-display font-semibold mb-4">Referral Commission Levels</h3>
-          <div className="space-y-2">
-            {REFERRAL_LEVELS.map((level) => (
-              <div key={level.level} className="flex items-center justify-between p-3 rounded-xl bg-surface-800/30 hover:bg-surface-800/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
-                    level.level <= 3  ? 'bg-brand-500/20 text-brand-400' :
-                    level.level <= 6  ? 'bg-accent-purple/20 text-accent-purple' :
-                    level.level <= 8  ? 'bg-accent-cyan/20 text-accent-cyan' :
-                    'bg-accent-amber/20 text-accent-amber'
-                  }`}>L{level.level}</div>
-                  <span className="font-display text-sm">Level {level.level}</span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="w-28 h-2 rounded-full bg-surface-900 overflow-hidden">
-                    <ProgressBar pct={(level.percentage / 8) * 100} className="bg-linear-to-r from-brand-500 to-accent-cyan" />
-                  </div>
-                  <span className="font-mono text-sm text-brand-400 w-14 text-right">{level.percentage}%</span>
-                </div>
-              </div>
-            ))}
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 className="font-display font-semibold">Referral Commission Levels</h3>
+            {isRefreshing && <span className="text-[10px] text-brand-400 animate-pulse">Syncing…</span>}
           </div>
-          <div className="mt-4 pt-4 border-t border-white/5 flex justify-between text-sm">
-            <span className="text-text-muted">Total Commission (all levels)</span>
-            <span className="font-mono text-brand-400 font-bold">30%</span>
+          <div className="space-y-2">
+            {(() => {
+              const maxPct   = Math.max(...REFERRAL_LEVELS.map(l => l.percentage));
+              const totalPct = REFERRAL_LEVELS.reduce((s, l) => s + l.percentage, 0);
+              return (
+                <>
+                  {REFERRAL_LEVELS.map((level) => {
+                    const countAtLevel  = displayedTree.filter(r => r.level === level.level).length;
+                    const activeAtLevel = displayedTree.filter(r => r.level === level.level && r.stakedAmount > 0).length;
+                    return (
+                      <div key={level.level} className="flex items-center justify-between p-3 rounded-xl bg-surface-800/30 hover:bg-surface-800/50 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                            level.level <= 3  ? 'bg-brand-500/20 text-brand-400' :
+                            level.level <= 6  ? 'bg-accent-purple/20 text-accent-purple' :
+                            level.level <= 8  ? 'bg-accent-cyan/20 text-accent-cyan' :
+                            'bg-accent-amber/20 text-accent-amber'
+                          }`}>L{level.level}</div>
+                          <div>
+                            <span className="font-display text-sm block">Level {level.level}</span>
+                            <span className="text-[11px] text-text-muted">
+                              {countAtLevel === 0
+                                ? 'No referrals'
+                                : `${countAtLevel} referral${countAtLevel !== 1 ? 's' : ''}${activeAtLevel > 0 ? ` · ${activeAtLevel} staking` : ''}`}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="w-28 h-2 rounded-full bg-surface-900 overflow-hidden">
+                            <ProgressBar pct={(level.percentage / maxPct) * 100} className="bg-linear-to-r from-brand-500 to-accent-cyan" />
+                          </div>
+                          <span className="font-mono text-sm text-brand-400 w-14 text-right">{level.percentage}%</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div className="mt-4 pt-4 border-t border-white/5 flex justify-between text-sm">
+                    <span className="text-text-muted">Total Commission (all levels)</span>
+                    <span className="font-mono text-brand-400 font-bold">{totalPct}%</span>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -353,7 +521,7 @@ export default function ReferralPanel() {
               <div className="text-right">
                 <p className="text-text-muted text-xs mb-1">Team Size · Team Staked</p>
                 <p className="font-mono text-sm">
-                  <span className="text-brand-400">{teamSizeVal}</span>
+                  <span className="text-brand-400">{teamSize}</span>
                   <span className="text-text-muted"> members · </span>
                   <span className="text-accent-cyan">{formatNumber(teamTotalStaked)}</span>
                   <span className="text-text-muted"> FBiT</span>
@@ -388,7 +556,7 @@ export default function ReferralPanel() {
               Grow your team's total staked FBiT to unlock a permanent bonus applied on top of every staking reward claim.
             </p>
             <div className="space-y-3">
-              {TEAM_TARGET_TIERS.map((tier) => {
+              {activeTierList.map((tier) => {
                 const isActive   = currentTier?.tier === tier.tier;
                 const isUnlocked = currentTier ? currentTier.tier >= tier.tier : false;
                 const colMap: Record<string, string> = {
@@ -452,6 +620,9 @@ export default function ReferralPanel() {
                 </h3>
                 <p className="text-text-muted text-xs mt-0.5">
                   On-chain transactions where your referrals staked and you received a reward
+                  {onChainRefHistory.length >= 200 && (
+                    <span className="ml-1 text-accent-amber">· showing last 200 only</span>
+                  )}
                 </p>
               </div>
               <button
@@ -536,21 +707,16 @@ export default function ReferralPanel() {
                   Referral Network
                   {displayedTree.length > 0 && (
                     <span className="ml-2 text-xs text-text-muted font-normal">
-                      ({displayedTree.length} {hasFetchedChain ? 'across all levels' : 'direct referrals'})
+                      ({displayedTree.length} across all levels)
                     </span>
                   )}
                 </h3>
-                {!hasFetchedChain && (
-                  <p className="text-text-muted text-[11px] mt-0.5">
-                    Click <span className="text-brand-400">Refresh from Chain</span> above to load all 10 levels
-                  </p>
-                )}
               </div>
-              {hasFetchedChain && fullReferralTree.length > 0 && (
+              {displayedTree.length > 0 && (
                 <div className="flex gap-2 flex-wrap">
-                  {Array.from(new Set(fullReferralTree.map(r => r.level))).sort().map(lvl => (
+                  {Array.from(new Set(displayedTree.map(r => r.level))).sort((a, b) => a - b).map(lvl => (
                     <span key={lvl} className={`text-[10px] px-2 py-0.5 rounded-full border font-mono ${LEVEL_COLORS[lvl] ?? 'bg-surface-700 text-text-muted border-white/10'}`}>
-                      L{lvl}: {fullReferralTree.filter(r => r.level === lvl).length}
+                      L{lvl}: {displayedTree.filter(r => r.level === lvl).length}
                     </span>
                   ))}
                 </div>
@@ -573,8 +739,8 @@ export default function ReferralPanel() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {displayedTree.map((entry, i) => (
-                      <tr key={i} className="hover:bg-white/2 transition-colors">
+                    {displayedTree.map((entry) => (
+                      <tr key={`${entry.address}-${entry.level}`} className="hover:bg-white/2 transition-colors">
                         <td className="py-3 pl-3 font-mono text-xs text-text-secondary" title={entry.address}>
                           {entry.address.slice(0, 6)}...{entry.address.slice(-4)}
                         </td>
@@ -610,7 +776,7 @@ export default function ReferralPanel() {
           </div>
 
           {/* Total from on-chain */}
-          {hasFetchedChain && (
+          {(totalRewards > 0 || displayedTree.length > 0) && (
             <div className="glass-card bg-linear-to-r from-accent-amber/5 to-brand-500/5 border border-accent-amber/10">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
@@ -620,8 +786,8 @@ export default function ReferralPanel() {
                 <div className="text-right">
                   <p className="text-text-muted text-xs mb-1">Network Depth</p>
                   <p className="font-display font-bold text-brand-400">
-                    {fullReferralTree.length > 0
-                      ? `${Math.max(...fullReferralTree.map(r => r.level))} levels`
+                    {displayedTree.length > 0
+                      ? `${Math.max(...displayedTree.map(r => r.level))} level${Math.max(...displayedTree.map(r => r.level)) !== 1 ? 's' : ''}`
                       : '—'}
                   </p>
                 </div>

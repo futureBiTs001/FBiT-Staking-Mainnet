@@ -5,12 +5,17 @@ export const shortenAddress = (address: string, chars = 4): string => {
   return `${address.slice(0, chars + 2)}...${address.slice(-chars)}`;
 };
 
+const stripTrailingZeros = (s: string): string => {
+  if (!s.includes('.')) return s;
+  return s.replace(/\.?0+$/, '');
+};
+
 export const formatNumber = (num: number, decimals = 8): string => {
-  if (num == null || Number.isNaN(num)) return (0).toFixed(decimals);
-  if (num >= 1_000_000_000) return `${(num / 1_000_000_000).toFixed(decimals)}B`;
-  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(decimals)}M`;
-  if (num >= 1_000) return `${(num / 1_000).toFixed(decimals)}K`;
-  return num.toFixed(decimals);
+  if (num == null || Number.isNaN(num) || num === 0) return '0';
+  if (num >= 1_000_000_000) return `${stripTrailingZeros((num / 1_000_000_000).toFixed(decimals))}B`;
+  if (num >= 1_000_000) return `${stripTrailingZeros((num / 1_000_000).toFixed(decimals))}M`;
+  if (num >= 1_000) return `${stripTrailingZeros((num / 1_000).toFixed(decimals))}K`;
+  return stripTrailingZeros(num.toFixed(decimals));
 };
 
 export const formatTokenAmount = (amount: number, decimals: number): number => {
@@ -132,23 +137,23 @@ export const getDailyReward = (amount: number, apy: number): number => {
 
 // ===== TEAM TARGET BONUS HELPERS =====
 
-/** Returns the highest tier a user qualifies for, or null if none */
-export const getTeamTargetTier = (_teamSize: number, teamTotalStaked: number): TeamTargetTier | null => {
+type LiveTier = { tier: number; label: string; color: string; minTeamStaked: number; bonusBps: number; bonusPercentage: number };
+
+/** Returns the highest tier a user qualifies for, or null if none. Pass liveTiers from platformStats to use on-chain values. */
+export const getTeamTargetTier = (_teamSize: number, teamTotalStaked: number, liveTiers?: LiveTier[]): TeamTargetTier | null => {
+  const tiers = (liveTiers as TeamTargetTier[] | undefined) ?? TEAM_TARGET_TIERS;
   let current: TeamTargetTier | null = null;
-  for (const tier of TEAM_TARGET_TIERS) {
-    if (teamTotalStaked >= tier.minTeamStaked) {
-      current = tier;
-    }
+  for (const tier of tiers) {
+    if (teamTotalStaked >= tier.minTeamStaked) current = tier;
   }
   return current;
 };
 
-/** Returns the next tier the user can unlock, or null if already at max */
-export const getNextTeamTargetTier = (_teamSize: number, teamTotalStaked: number): TeamTargetTier | null => {
-  for (const tier of TEAM_TARGET_TIERS) {
-    if (teamTotalStaked < tier.minTeamStaked) {
-      return tier;
-    }
+/** Returns the next tier the user can unlock, or null if already at max. Pass liveTiers from platformStats to use on-chain values. */
+export const getNextTeamTargetTier = (_teamSize: number, teamTotalStaked: number, liveTiers?: LiveTier[]): TeamTargetTier | null => {
+  const tiers = (liveTiers as TeamTargetTier[] | undefined) ?? TEAM_TARGET_TIERS;
+  for (const tier of tiers) {
+    if (teamTotalStaked < tier.minTeamStaked) return tier;
   }
   return null;
 };
