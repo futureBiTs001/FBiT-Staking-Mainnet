@@ -20,6 +20,11 @@ const solanaAdapter = new SolanaAdapter({
 
 export let appKitModal: ReturnType<typeof createAppKit> | undefined;
 
+// Holds the Reown-connected Solana wallet provider so solana.ts can use the
+// exact wallet the user chose (prevents Binance sessions falling through to
+// a separately-installed Phantom extension).
+export let solanaWalletProvider: any = undefined;
+
 if (typeof window !== 'undefined') {
   const siteUrl = window.location.origin;
 
@@ -67,5 +72,9 @@ if (typeof window !== 'undefined') {
 
   if (!appKitModal) {
     console.warn('[FBiT] WalletConnect unavailable — both project IDs failed to initialize.');
+  } else {
+    appKitModal.subscribeProviders((providers: any) => {
+      solanaWalletProvider = providers?.solana ?? undefined;
+    });
   }
 }

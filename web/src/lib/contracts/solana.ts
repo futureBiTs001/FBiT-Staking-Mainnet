@@ -17,6 +17,7 @@ import { AnchorProvider, Program, BN } from '@coral-xyz/anchor';
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { IDL } from './idl';
 import { NETWORK_CONFIG } from '@/lib/config';
+import { appKitModal, solanaWalletProvider } from '@/lib/reown';
 import type { PlatformStats, StakeEntry, UserAccount, ReferralInfo } from '@/types';
 
 // Anchor discriminators: sha256("account:<Name>")[0..8] and sha256("global:<name>")[0..8]
@@ -207,10 +208,17 @@ function stakeEntryPda(owner: PublicKey, stakeId: number): [PublicKey, number] {
 // ── Provider / Program helpers ─────────────────────────────────────────────────
 
 /**
- * Returns whichever Solana wallet is currently connected.
- * Checks Phantom, Solflare, Backpack, and Jupiter in order.
+ * Returns the Reown-connected Solana wallet provider.
+ * Using the AppKit provider directly prevents Binance wallet sessions from
+ * accidentally routing Solana transactions through a separately-installed
+ * Phantom extension.
  */
 function getSolanaWallet(): any {
+  if (appKitModal) {
+    if (solanaWalletProvider?.publicKey) return solanaWalletProvider;
+    throw new Error('No Solana wallet connected. Please connect Phantom or Solflare for Solana staking. (Binance Wallet only supports Polygon network)');
+  }
+  // Fallback when AppKit is not available
   const w = (window as any);
   const candidates = [w.solana, w.solflare, w.backpack, w.jupiter];
   const wallet = candidates.find(c => c?.isConnected && c?.publicKey);
