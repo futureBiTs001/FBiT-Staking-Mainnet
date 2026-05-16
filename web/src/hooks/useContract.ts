@@ -63,6 +63,7 @@ import {
   solanaReleaseEmission,
   solanaSetRewardRate,
   solanaSetReferralRewardRate,
+  solanaSetReferralPercentages,
   solanaBlockUser,
   solanaUnblockUser,
   solanaTogglePause,
@@ -116,6 +117,8 @@ export interface ContractHook {
   fundRewardPool(amount: number): Promise<{ txHash: string }>;
   setRewardRate(rate: number): Promise<{ txHash: string }>;
   setReferralRewardRate(rate: number): Promise<{ txHash: string }>;
+  /** Update per-level referral percentages (BPS). Array of 10 values, total must be ≤ 5000 (50%). Solana only. */
+  setReferralPercentages(percentages: [number,number,number,number,number,number,number,number,number,number]): Promise<{ txHash: string }>;
   blockUser(address: string): Promise<{ txHash: string }>;
   unblockUser(address: string): Promise<{ txHash: string }>;
   togglePause(currentlyPaused: boolean): Promise<{ txHash: string }>;
@@ -350,6 +353,14 @@ export function useContract(): ContractHook {
     [selectedNetwork]
   );
 
+  const setReferralPercentages = useCallback(
+    (percentages: [number,number,number,number,number,number,number,number,number,number]) => {
+      if (selectedNetwork === 'solana') return solanaSetReferralPercentages(percentages);
+      return Promise.reject(new Error('setReferralPercentages is only supported on Solana.'));
+    },
+    [selectedNetwork]
+  );
+
   const blockUser = useCallback(
     (userAddress: string) => {
       if (selectedNetwork === 'solana') return solanaBlockUser(userAddress);
@@ -492,6 +503,7 @@ export function useContract(): ContractHook {
     fundRewardPool,
     setRewardRate,
     setReferralRewardRate,
+    setReferralPercentages,
     blockUser,
     unblockUser,
     togglePause,
