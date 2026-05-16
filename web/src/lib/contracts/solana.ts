@@ -17,7 +17,7 @@ import { AnchorProvider, Program, BN } from '@coral-xyz/anchor';
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { IDL } from './idl';
 import { NETWORK_CONFIG } from '@/lib/config';
-import { appKitModal, solanaWalletProvider } from '@/lib/reown';
+import { appKitModal, solanaWalletProvider, connectedSolanaAddress } from '@/lib/reown';
 import type { PlatformStats, StakeEntry, UserAccount, ReferralInfo } from '@/types';
 
 // Anchor discriminators: sha256("account:<Name>")[0..8] and sha256("global:<name>")[0..8]
@@ -209,16 +209,37 @@ function stakeEntryPda(owner: PublicKey, stakeId: number): [PublicKey, number] {
 
 /**
  * Returns the Reown-connected Solana wallet provider.
- * Using the AppKit provider directly prevents Binance wallet sessions from
- * accidentally routing Solana transactions through a separately-installed
- * Phantom extension.
+ *
+ * Priority:
+ * 1. AppKit subscribeProviders result — covers WalletConnect wallets (Binance, etc.)
+ *    and browser-extension wallets routed through AppKit (Phantom, Solflare).
+ * 2. Window-injected extension whose publicKey matches the connected address —
+ *    covers Phantom/Solflare when AppKit provider isn't yet available.
+ * 3. Any connected window extension (legacy fallback, no AppKit).
  */
 function getSolanaWallet(): any {
   if (appKitModal) {
+    // Layer 1: provider from AppKit (WalletConnect wallets like Binance, or Phantom via AppKit)
     if (solanaWalletProvider?.publicKey) return solanaWalletProvider;
-    throw new Error('No Solana wallet connected. Please connect Phantom or Solflare for Solana staking. (Binance Wallet only supports Polygon network)');
+
+    // Layer 2: browser extension whose address matches the Reown-connected address
+    // (handles Phantom/Solflare connected via AppKit before subscribeProviders fires)
+    if (connectedSolanaAddress) {
+      const w = (window as any);
+      const candidates = [w.solana, w.solflare, w.backpack, w.jupiter];
+      const matched = candidates.find(
+        c => c?.isConnected && c?.publicKey &&
+             c.publicKey.toString() === connectedSolanaAddress
+      );
+      if (matched) return matched;
+    }
+
+    throw new Error(
+      'Solana wallet not connected. To use Solana staking with Binance Wallet: ' +
+      'open the connect modal, select Binance, then choose your Solana account in the Binance app.'
+    );
   }
-  // Fallback when AppKit is not available
+  // Layer 3: no AppKit — any connected window extension (legacy)
   const w = (window as any);
   const candidates = [w.solana, w.solflare, w.backpack, w.jupiter];
   const wallet = candidates.find(c => c?.isConnected && c?.publicKey);

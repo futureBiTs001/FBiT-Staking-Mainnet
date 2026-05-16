@@ -25,6 +25,11 @@ export let appKitModal: ReturnType<typeof createAppKit> | undefined;
 // a separately-installed Phantom extension).
 export let solanaWalletProvider: any = undefined;
 
+// The Solana address currently connected via Reown (base58). Used to
+// verify that a window-injected extension (Phantom etc.) is actually the
+// wallet the user chose, rather than a different installed extension.
+export let connectedSolanaAddress: string | null = null;
+
 if (typeof window !== 'undefined') {
   const siteUrl = window.location.origin;
 
@@ -75,6 +80,20 @@ if (typeof window !== 'undefined') {
   } else {
     appKitModal.subscribeProviders((providers: any) => {
       solanaWalletProvider = providers?.solana ?? undefined;
+    });
+
+    appKitModal.subscribeAccount((account: any) => {
+      if (!account?.isConnected) {
+        connectedSolanaAddress = null;
+        return;
+      }
+      const caip = account?.caipAddress ?? '';
+      const addr = account?.address ?? '';
+      if (caip.startsWith('solana:') || (!caip && addr && !addr.startsWith('0x'))) {
+        connectedSolanaAddress = addr;
+      } else {
+        connectedSolanaAddress = null;
+      }
     });
   }
 }
