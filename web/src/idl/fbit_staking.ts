@@ -265,6 +265,16 @@ export type FbitStaking = {
       "args": []
     },
     {
+      "name": "setReferralPercentages",
+      "accounts": [
+        { "name": "platform", "isMut": true, "isSigner": false },
+        { "name": "authority", "isMut": false, "isSigner": true }
+      ],
+      "args": [
+        { "name": "percentages", "type": { "array": ["u64", 10] } }
+      ]
+    },
+    {
       "name": "fixBump",
       "accounts": [
         { "name": "platform", "isMut": true, "isSigner": false },
@@ -302,7 +312,8 @@ export type FbitStaking = {
           { "name": "totalEmissionReleased", "type": "u64" },
           { "name": "emissionStartTime", "type": "i64" },
           { "name": "annualEmission", "type": "u64" },
-          { "name": "burnBps", "type": "u64" }
+          { "name": "burnBps", "type": "u64" },
+          { "name": "referralPercentages", "type": { "array": ["u64", 10] } }
         ]
       }
     },
@@ -378,7 +389,9 @@ export type FbitStaking = {
     { "code": 6028, "name": "BurnBpsTooHigh", "msg": "Burn BPS exceeds maximum (5000 = 50%)" },
     { "code": 6029, "name": "BelowMinStake", "msg": "Stake amount is below minimum (1 FBiT)" },
     { "code": 6030, "name": "AboveMaxStake", "msg": "Stake amount exceeds maximum (500M FBiT)" },
-    { "code": 6031, "name": "InvalidReferralATA", "msg": "Invalid referral token account" }
+    { "code": 6031, "name": "InvalidReferralATA", "msg": "Invalid referral token account" },
+    { "code": 6032, "name": "ReferrerRequired", "msg": "A valid referrer is required to register" },
+    { "code": 6033, "name": "ReferralPercentagesTooHigh", "msg": "Total referral BPS exceeds 50% maximum" }
   ]
 };
 
@@ -649,6 +662,16 @@ export const IDL: FbitStaking = {
       "args": []
     },
     {
+      "name": "setReferralPercentages",
+      "accounts": [
+        { "name": "platform", "isMut": true, "isSigner": false },
+        { "name": "authority", "isMut": false, "isSigner": true }
+      ],
+      "args": [
+        { "name": "percentages", "type": { "array": ["u64", 10] } }
+      ]
+    },
+    {
       "name": "fixBump",
       "accounts": [
         { "name": "platform", "isMut": true, "isSigner": false },
@@ -686,7 +709,8 @@ export const IDL: FbitStaking = {
           { "name": "totalEmissionReleased", "type": "u64" },
           { "name": "emissionStartTime", "type": "i64" },
           { "name": "annualEmission", "type": "u64" },
-          { "name": "burnBps", "type": "u64" }
+          { "name": "burnBps", "type": "u64" },
+          { "name": "referralPercentages", "type": { "array": ["u64", 10] } }
         ]
       }
     },
@@ -762,6 +786,8 @@ export const IDL: FbitStaking = {
     { "code": 6028, "name": "BurnBpsTooHigh", "msg": "Burn BPS exceeds maximum (5000 = 50%)" },
     { "code": 6029, "name": "BelowMinStake", "msg": "Stake amount is below minimum (1 FBiT)" },
     { "code": 6030, "name": "AboveMaxStake", "msg": "Stake amount exceeds maximum (500M FBiT)" },
-    { "code": 6031, "name": "InvalidReferralATA", "msg": "Invalid referral token account" }
+    { "code": 6031, "name": "InvalidReferralATA", "msg": "Invalid referral token account" },
+    { "code": 6032, "name": "ReferrerRequired", "msg": "A valid referrer is required to register" },
+    { "code": 6033, "name": "ReferralPercentagesTooHigh", "msg": "Total referral BPS exceeds 50% maximum" }
   ]
 };
