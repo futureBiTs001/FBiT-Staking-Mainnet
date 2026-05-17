@@ -460,6 +460,9 @@ export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> 
       halvingEpoch,
       halvingStartTime,
       teamTiers,
+      referralPercentages: Array.isArray((platform as any).referralPercentages)
+        ? (platform as any).referralPercentages.map((v: any) => Number(v.toString()))
+        : undefined,
     };
   } catch {
     return null;
@@ -1449,7 +1452,10 @@ export async function solanaGetUserAccount(ownerAddress: string): Promise<UserAc
 
 // Shared BFS helper: fetches all UserAccount PDAs once, builds a referrer→children
 // map, then walks L1–L10 from ownerAddress. Returns all ReferralEntry records.
-async function bfsReferralTree(ownerAddress: string): Promise<import('@/types').ReferralEntry[]> {
+// liveBps: on-chain referral percentages in BPS — falls back to REFERRAL_BPS constants.
+async function bfsReferralTree(ownerAddress: string, liveBps?: number[]): Promise<import('@/types').ReferralEntry[]> {
+  const bpsArray = (liveBps && liveBps.length === 10) ? liveBps : [...REFERRAL_BPS];
+
   // Use cached/deduped fetch — avoids hammering RPC when multiple components poll.
   const allDecoded: any[] = await getAllUserAccounts();
 
@@ -1486,7 +1492,7 @@ async function bfsReferralTree(ownerAddress: string): Promise<import('@/types').
           address:      child.address,
           level,
           stakedAmount: child.staked,
-          rewardEarned: child.staked * REFERRAL_BPS[level - 1] / 10_000,
+          rewardEarned: child.staked * bpsArray[level - 1] / 10_000,
           registeredAt: child.registeredAt,
         });
       }
@@ -1505,6 +1511,18 @@ export async function solanaGetReferralInfo(ownerAddress: string): Promise<Refer
     const acc        = await (program.account as any).userAccount.fetch(pda);
     const totalReferrals       = acc.referralCount.toNumber();
     const totalReferralRewards = fromLamports(acc.totalReferralRewards);
+
+    // Fetch live referral percentages from platform — use for reward calculations
+    // so the displayed rewards reflect admin-updated on-chain BPS values.
+    let liveBps: number[] | undefined;
+    try {
+      const [platPda] = platformPda();
+      const platform: any = await (program.account as any).platform.fetch(platPda);
+      if (Array.isArray(platform.referralPercentages) && platform.referralPercentages.length === 10) {
+        const parsed = platform.referralPercentages.map((v: any) => Number(v.toString()));
+        if (parsed.some((v: number) => v > 0)) liveBps = parsed;
+      }
+    } catch { /* use fallback */ }
 
     // Fetch all UserAccount PDAs once via Anchor's own decoder — avoids hardcoded
     // byte offsets (the deployed account is 152 bytes; the IDL predicted 139).
@@ -1545,7 +1563,7 @@ export async function solanaGetReferralInfo(ownerAddress: string): Promise<Refer
               address:      child.address,
               level,
               stakedAmount: child.staked,
-              rewardEarned: child.staked * REFERRAL_BPS[level - 1] / 10_000,
+              rewardEarned: child.staked * (liveBps ? liveBps[level - 1] : REFERRAL_BPS[level - 1]) / 10_000,
               registeredAt: child.registeredAt,
             });
           }
@@ -1590,7 +1608,17 @@ export async function solanaGetReferralInfo(ownerAddress: string): Promise<Refer
  * Uses a single getProgramAccounts call + BFS — no N+1 queries.
  */
 export async function solanaGetFullReferralTree(ownerAddress: string): Promise<import('@/types').ReferralEntry[]> {
-  return bfsReferralTree(ownerAddress);
+  let liveBps: number[] | undefined;
+  try {
+    const program = getReadOnlyProgram();
+    const [platPda] = platformPda();
+    const platform: any = await (program.account as any).platform.fetch(platPda);
+    if (Array.isArray(platform.referralPercentages) && platform.referralPercentages.length === 10) {
+      const parsed = platform.referralPercentages.map((v: any) => Number(v.toString()));
+      if (parsed.some((v: number) => v > 0)) liveBps = parsed;
+    }
+  } catch { /* use fallback */ }
+  return bfsReferralTree(ownerAddress, liveBps);
 }
 
 /**

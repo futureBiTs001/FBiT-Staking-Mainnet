@@ -401,11 +401,11 @@ pub mod fbit_staking {
                 };
 
                 // Verify the account matches the expected referrer BEFORE advancing the chain.
-                // Updating cur_referrer first would allow a wrong-but-program-owned account to
-                // poison the chain and skip legitimate ancestors above it.
+                // If the provided account doesn't match the expected on-chain referrer, abort the
+                // entire chain walk — continuing with unverified data would let an attacker
+                // inject a fake ancestor and steal rewards from legitimate referrers above it.
                 if user_owner != expected_key {
-                    cur_referrer = next_ref;
-                    continue;
+                    break;
                 }
                 cur_referrer = next_ref;
 
@@ -971,7 +971,7 @@ pub struct Platform {
     // ── v3 field (reads as [0;10] from existing accounts; falls back to compile-time const) ──
     pub referral_percentages:    [u64; 10],
 }
-// space: 483 (v2 fields) + 80 (referral_percentages [u64;10]) = 563 — fits in 600
+// space: 8 disc + 371 (v1) + 40 (v2) + 80 (v3 referral_percentages) = 499 — fits in 600
 pub const PLATFORM_SPACE: usize = 600;
 
 #[account]
@@ -1206,26 +1206,26 @@ pub struct CompoundRewards<'info> {
 #[derive(Accounts)]
 pub struct Unstake<'info> {
     #[account(mut, seeds = [b"platform"], bump = platform.bump)]
-    pub platform:            Account<'info, Platform>,
+    pub platform:            Box<Account<'info, Platform>>,
     #[account(mut, seeds = [b"user", owner.key().as_ref()], bump = user_account.bump)]
-    pub user_account:        Account<'info, UserAccount>,
+    pub user_account:        Box<Account<'info, UserAccount>>,
     #[account(mut,
         seeds = [b"stake", owner.key().as_ref(), &stake_entry.stake_id.to_le_bytes()],
         bump = stake_entry.bump,
         has_one = owner @ StakingError::InvalidUserAccount)]
-    pub stake_entry:         Account<'info, StakeEntry>,
+    pub stake_entry:         Box<Account<'info, StakeEntry>>,
     #[account(mut,
         constraint = user_token_account.owner == owner.key() @ StakingError::InvalidUserAccount,
         constraint = user_token_account.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
-    pub user_token_account:  Account<'info, TokenAccount>,
+    pub user_token_account:  Box<Account<'info, TokenAccount>>,
     #[account(mut,
         constraint = stake_vault.owner == platform.key() @ StakingError::InvalidVault,
         constraint = stake_vault.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
-    pub stake_vault:         Account<'info, TokenAccount>,
+    pub stake_vault:         Box<Account<'info, TokenAccount>>,
     #[account(mut,
         constraint = (platform.is_renounced || admin_stake_account.owner == platform.authority) @ StakingError::InvalidAdminAccount,
         constraint = admin_stake_account.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
-    pub admin_stake_account: Account<'info, TokenAccount>,
+    pub admin_stake_account: Box<Account<'info, TokenAccount>>,
     pub owner:               Signer<'info>,
     pub token_program:       Program<'info, Token>,
 }
