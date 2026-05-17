@@ -821,7 +821,7 @@ function TeamTargetBonusCard({ teamTotalStaked, teamSize, onChainBonusBps, liveT
 
 function BurnEmissionPanel({ stats, network }: { stats: PlatformStats; network: string }) {
   const posApy = Math.round((stats.effectiveAPY || 1000) / 100);
-  const feeRate = (stats.burnBps ?? 1000) / 100;
+  const feeRate = (stats.burnBps ?? 0) / 100;
   const hasNetworkExtra = network === 'solana' || (network === 'polygon' && stats.remainingYears !== undefined);
   const colClass = stats.isRenounced
     ? 'md:grid-cols-5'

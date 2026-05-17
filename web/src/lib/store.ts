@@ -52,7 +52,7 @@ const BASE_PLATFORM_STATS: PlatformStats = {
   isPaused: false,
   totalBurned: 0,
   annualEmission: 0,
-  burnBps: 1000,
+  burnBps: 0,
   effectiveAPY: 1000,
   totalReserve: 0,
   emissionStartTime: 0,
