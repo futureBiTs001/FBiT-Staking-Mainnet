@@ -180,6 +180,12 @@ export default function ReferralPanel() {
   // if that was missed for early stakes, BFS gives the correct count.
   const teamSize        = Math.max(teamSizeVal, networkTotal);
 
+  const liveReferralPct = useAppStore(s => s.platformStats.referralPercentages);
+  // Build live referral levels: use on-chain values when available, fall back to REFERRAL_LEVELS constants.
+  const activeLevels = liveReferralPct && liveReferralPct.length === 10
+    ? liveReferralPct.map((bps, i) => ({ level: i + 1, percentage: bps / 100 }))
+    : REFERRAL_LEVELS;
+
   const liveTiers = useAppStore(s => s.platformStats.teamTiers) as typeof TEAM_TARGET_TIERS[number][] | undefined;
   const activeTierList = liveTiers ?? TEAM_TARGET_TIERS;
   const currentTier = getTeamTargetTier(teamSize, teamTotalStaked, liveTiers);
@@ -456,11 +462,11 @@ export default function ReferralPanel() {
           </div>
           <div className="space-y-2">
             {(() => {
-              const maxPct   = Math.max(...REFERRAL_LEVELS.map(l => l.percentage));
-              const totalPct = REFERRAL_LEVELS.reduce((s, l) => s + l.percentage, 0);
+              const maxPct   = Math.max(...activeLevels.map(l => l.percentage));
+              const totalPct = activeLevels.reduce((s, l) => s + l.percentage, 0);
               return (
                 <>
-                  {REFERRAL_LEVELS.map((level) => {
+                  {activeLevels.map((level) => {
                     const countAtLevel  = displayedTree.filter(r => r.level === level.level).length;
                     const activeAtLevel = displayedTree.filter(r => r.level === level.level && r.stakedAmount > 0).length;
                     return (

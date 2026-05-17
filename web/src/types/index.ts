@@ -156,6 +156,8 @@ export interface PlatformStats {
   halvingStartTime?: number;
   /** On-chain team tier config — populated from Platform.teamTierMinStaked/teamTierBonusBps. Overrides TEAM_TARGET_TIERS constants when present. */
   teamTiers?: Array<{ tier: number; label: string; color: string; minTeamStaked: number; bonusBps: number; bonusPercentage: number }>;
+  /** Per-level referral percentages in BPS from on-chain Platform.referralPercentages. Falls back to REFERRAL_LEVELS constants when absent. */
+  referralPercentages?: number[];
 }
 
 // ===== ADMIN TYPES =====

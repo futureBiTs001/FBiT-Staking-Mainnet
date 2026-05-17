@@ -99,7 +99,12 @@ export default function AdminPanel() {
       });
       toast.success(successMsg, { id: toastId });
     } catch (err: any) {
-      toast.error(sanitizeErrorMessage(err), { id: toastId });
+      // Log raw error for admin debugging — check browser DevTools console
+      console.error('[AdminPanel] raw error:', err);
+      const raw = err instanceof Error ? err.message : String(err);
+      // Show the real error to admin (first 200 chars), fall back to sanitized if empty
+      const display = raw.trim().slice(0, 200) || sanitizeErrorMessage(err);
+      toast.error(display, { id: toastId });
     } finally {
       setProcessing(null);
     }
@@ -172,6 +177,7 @@ export default function AdminPanel() {
   };
 
   const handleSetReferralPercentages = () => {
+    if (refPct.length !== 10) { toast.error('Exactly 10 referral percentages required.'); return; }
     const total = refPct.reduce((s, v) => s + v, 0);
     if (total > 5000) { toast.error(`Total BPS (${total}) exceeds 5000 (50%) limit.`); return; }
     if (refPct.some((v) => v < 0)) { toast.error('BPS values cannot be negative.'); return; }
@@ -233,8 +239,9 @@ export default function AdminPanel() {
     const min = parseFloat(tierMinStaked);
     const bps = parseInt(tierBonusBps, 10);
     if (!Number.isInteger(idx) || idx < 0 || idx > 9) { toast.error('Tier index must be 0–9.'); return; }
-    if (!isValidAmount(min)) { toast.error('Min staked must be a positive number.'); return; }
-    if (!isValidBonusBps(bps)) { toast.error('Bonus BPS must be 1–1000.'); return; }
+    // Use a generous cap (10B) — tier min staked can exceed the normal 500M stake cap
+    if (!Number.isFinite(min) || min <= 0 || min > 10_000_000_000) { toast.error('Min staked must be a positive number (max 10B).'); return; }
+    if (!Number.isInteger(bps) || bps < 0 || bps > 1000) { toast.error('Bonus BPS must be 0–1000 (0 = disable tier).'); return; }
     run(
       'teamTier',
       () => contract.setTeamTargetTier(idx, min, bps),
@@ -262,7 +269,9 @@ export default function AdminPanel() {
         successCount++;
         toast.success(`Tier ${i + 1} (${t.label}) updated ✓`, { duration: 2000 });
       } catch (err: any) {
-        toast.error(`Tier ${i + 1} failed: ${sanitizeErrorMessage(err)}`);
+        console.error(`[AdminPanel] Tier ${i + 1} sync error:`, err);
+        const raw = err instanceof Error ? err.message : String(err);
+        toast.error(`Tier ${i + 1} failed: ${raw.trim().slice(0, 150) || sanitizeErrorMessage(err)}`);
         break;
       }
     }
@@ -1242,7 +1251,7 @@ export default function AdminPanel() {
               label="Update Tier On-Chain"
               loadingLabel="Updating…"
               onClick={handleSetTeamTier}
-              disabled={isRenounced || !tierMinStaked || !tierBonusBps || !(parseInt(tierBonusBps) >= 1 && parseInt(tierBonusBps) <= 1000) || !(parseFloat(tierMinStaked) > 0)}
+              disabled={isRenounced || tierMinStaked === '' || tierBonusBps === '' || !(parseInt(tierBonusBps) >= 0 && parseInt(tierBonusBps) <= 1000) || !(parseFloat(tierMinStaked) > 0)}
               loading={busy('teamTier')}
               variant="amber"
             />
