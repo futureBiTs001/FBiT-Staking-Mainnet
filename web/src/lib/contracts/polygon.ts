@@ -34,14 +34,40 @@ function fromWei(raw: bigint): number {
 
 async function assertPolygonMainnet(): Promise<void> {
   const provider = await getProvider();
-  const network = await provider.getNetwork();
-  const chainId = Number(network.chainId);
+
+  // Detect current chain — WalletConnect (Binance Web3, etc.) may throw
+  // "no active chain" if the session was established on a different chain.
+  let chainId = 0;
+  try {
+    const network = await provider.getNetwork();
+    chainId = Number(network.chainId);
+  } catch (err: any) {
+    const msg = String(err?.message ?? '').toLowerCase();
+    // Treat "no active chain" / "no network" as "wrong chain — try to switch"
+    if (!msg.includes('no active chain') && !msg.includes('no network') && !msg.includes('unknown error')) {
+      throw err;
+    }
+    // fall through to switch logic below
+  }
+
   if (chainId === 137) return;
 
-  // Wrong chain — try to switch automatically before throwing.
+  // 1. AppKit switchNetwork — works for WalletConnect sessions (Binance, etc.)
+  //    Must come before wallet_switchEthereumChain because WC v2 sessions require
+  //    the chain to be in the approved namespace; the raw RPC method alone won't work.
+  try {
+    const { appKitModal } = await import('@/lib/reown');
+    const { polygon: polygonNet } = await import('@reown/appkit/networks');
+    if (appKitModal) {
+      await (appKitModal as any).switchNetwork(polygonNet);
+      return;
+    }
+  } catch { /* fall through to injected-wallet switch */ }
+
+  // 2. wallet_switchEthereumChain — for injected wallets (MetaMask extension, etc.)
   try {
     await provider.send('wallet_switchEthereumChain', [{ chainId: '0x89' }]);
-    return; // Switch accepted — proceed
+    return;
   } catch (switchErr: any) {
     // Error 4902 / -32603: chain not added to wallet yet — add it first.
     if (switchErr?.code === 4902 || switchErr?.code === -32603) {
@@ -53,12 +79,13 @@ async function assertPolygonMainnet(): Promise<void> {
           rpcUrls: ['https://polygon-rpc.com', 'https://polygon-bor-rpc.publicnode.com'],
           blockExplorerUrls: ['https://polygonscan.com'],
         }]);
-        return; // Added and switched
+        return;
       } catch {}
     }
-    // User rejected the switch request or it failed — show a clear message.
     throw new Error(
-      `Wrong network — please switch your wallet to Polygon Mainnet (chain 137). Currently on chain ${chainId}.`
+      chainId
+        ? `Wrong network — please switch your wallet to Polygon Mainnet (chain 137). Currently on chain ${chainId}.`
+        : 'Please switch your wallet to Polygon Mainnet and try again.'
     );
   }
 }
