@@ -251,7 +251,8 @@ function getSolanaWallet(): any {
 // Translates low-level WalletConnect errors into user-friendly Solana messages.
 // "no active chain" is thrown by the WC Universal Provider when Binance Web3 Wallet
 // is connected via WalletConnect but the Solana chain isn't in the approved session.
-function wrapSolanaSign<T>(fn: () => Promise<T>): Promise<T> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function wrapSolanaSign(fn: () => Promise<any>): Promise<any> {
   return fn().catch((err: any) => {
     const msg = String(err?.message ?? err ?? '').toLowerCase();
     if (msg.includes('no active chain') || msg.includes('no chain') || msg.includes('chain not found')) {
