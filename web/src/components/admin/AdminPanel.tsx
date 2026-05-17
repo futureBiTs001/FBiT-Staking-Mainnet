@@ -935,12 +935,28 @@ export default function AdminPanel() {
           {<div className="glass-card space-y-4">
             <h3 className="font-display font-semibold text-lg">Burn Percentage</h3>
             <p className="text-text-muted text-xs -mt-2">
-              Percentage of user's reward burned on every claim / compound.
-              Deducted from user's share — not an extra pool cost. Range: <span className="text-brand-400">0% – 50%</span>.
+              Percentage of user's reward burned on every claim / compound via SPL Token burn — permanently removes tokens from total supply (not a transfer to dead wallet).
+              Range: <span className="text-brand-400">0% – 50%</span>.
             </p>
+
+            {/* BURN INACTIVE warning */}
+            {(platformStats.burnBps ?? 0) === 0 && (
+              <div className="p-3 rounded-xl bg-accent-rose/15 border border-accent-rose/40 text-sm space-y-2">
+                <p className="font-semibold text-accent-rose">Burn is INACTIVE — 0% burn rate on-chain</p>
+                <p className="text-text-muted text-xs">No FBiT is being burned when users claim or compound. Set a burn rate to start permanently reducing total supply.</p>
+                <button
+                  type="button"
+                  onClick={() => { setBurnBpsValue('1000'); }}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-accent-rose/20 border border-accent-rose/40 text-accent-rose font-semibold hover:bg-accent-rose/30 transition-colors"
+                >
+                  Fill 1000 bps (10% default)
+                </button>
+              </div>
+            )}
+
             <div className="p-3 rounded-xl bg-accent-rose/5 border border-accent-rose/10 text-xs text-text-muted space-y-1">
-              <p>Current burn rate: <span className="text-accent-rose font-mono font-semibold">{((platformStats.burnBps ?? 1000) / 100).toFixed(2)}%</span> ({platformStats.burnBps ?? 1000} bps)</p>
-              <p>Example: 100 FBiT reward → <span className="text-accent-rose font-semibold">{((platformStats.burnBps ?? 1000) / 100).toFixed(2)} FBiT burned</span>, {(100 - (platformStats.burnBps ?? 1000) / 100).toFixed(2)} FBiT to user</p>
+              <p>On-chain burn rate: <span className="text-accent-rose font-mono font-semibold">{((platformStats.burnBps ?? 0) / 100).toFixed(2)}%</span> ({platformStats.burnBps ?? 0} bps)</p>
+              <p>Example: 100 FBiT reward → <span className="text-accent-rose font-semibold">{((platformStats.burnBps ?? 0) / 100).toFixed(2)} FBiT permanently burned</span> (SPL burn, reduces total supply), {(100 - (platformStats.burnBps ?? 0) / 100).toFixed(2)} FBiT to user</p>
             </div>
             <div>
               <label className="text-sm text-text-secondary font-display mb-1 block">New Burn Rate (basis points — 100 bps = 1%)</label>
@@ -950,12 +966,12 @@ export default function AdminPanel() {
                 max="5000"
                 value={burnBpsValue}
                 onChange={(e) => setBurnBpsValue(e.target.value)}
-                placeholder="e.g. 2500 = 25%, 1000 = 10%, 0 = no burn"
+                placeholder="e.g. 1000 = 10%, 2500 = 25%, 0 = disable burn"
                 className="input-field font-mono"
               />
             </div>
             <AdminButton
-              label="Update Burn Rate"
+              label={(platformStats.burnBps ?? 0) === 0 ? 'Activate Burn' : 'Update Burn Rate'}
               loadingLabel="Updating…"
               onClick={handleSetBurnBps}
               disabled={isRenounced || burnBpsValue === '' || parseInt(burnBpsValue) < 0 || parseInt(burnBpsValue) > 5000}
