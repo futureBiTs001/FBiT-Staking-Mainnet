@@ -248,15 +248,33 @@ function getSolanaWallet(): any {
   return wallet;
 }
 
+// Translates low-level WalletConnect errors into user-friendly Solana messages.
+// "no active chain" is thrown by the WC Universal Provider when Binance Web3 Wallet
+// is connected via WalletConnect but the Solana chain isn't in the approved session.
+function wrapSolanaSign<T>(fn: () => Promise<T>): Promise<T> {
+  return fn().catch((err: any) => {
+    const msg = String(err?.message ?? err ?? '').toLowerCase();
+    if (msg.includes('no active chain') || msg.includes('no chain') || msg.includes('chain not found')) {
+      throw new Error(
+        'Solana session is not active. Please disconnect your wallet, reconnect, ' +
+        'and choose the Solana network in the Binance app.'
+      );
+    }
+    throw err;
+  });
+}
+
 function getProvider(): AnchorProvider {
   const wallet = getSolanaWallet();
   const connection = getRpcConnection();
   // Re-wrap publicKey using our local @solana/web3.js PublicKey so Anchor 0.32's
   // internal isPubkey()/_bn check doesn't fail on Phantom's bundled version.
+  // Sign methods are wrapped to translate "no active chain" (WalletConnect error when
+  // Binance is connected as EVM and Solana chain isn't in the approved WC namespace).
   const anchorWallet = {
-    publicKey: new PublicKey(wallet.publicKey.toBytes()),
-    signTransaction: (tx: any) => wallet.signTransaction(tx),
-    signAllTransactions: (txs: any[]) => wallet.signAllTransactions(txs),
+    publicKey:           new PublicKey(wallet.publicKey.toBytes()),
+    signTransaction:     (tx: any)    => wrapSolanaSign(() => wallet.signTransaction(tx)),
+    signAllTransactions: (txs: any[]) => wrapSolanaSign(() => wallet.signAllTransactions(txs)),
   };
   return new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' });
 }
@@ -540,7 +558,7 @@ export async function solanaRegisterUser(referrer?: string): Promise<{ txHash: s
   const legacyTx = new Transaction({ feePayer: owner, recentBlockhash: blockhash });
   legacyTx.add(instruction);
 
-  const signedTx = await wallet.signTransaction(legacyTx);
+  const signedTx = await wrapSolanaSign(() => wallet.signTransaction(legacyTx));
   const txHash = await connection.sendRawTransaction(signedTx.serialize(), {
     skipPreflight: false,
     preflightCommitment: 'confirmed',
@@ -971,7 +989,7 @@ export async function solanaFixBump(): Promise<{ txHash: string }> {
   const legacyTx = new Transaction({ feePayer: authority, recentBlockhash: blockhash });
   legacyTx.add(instruction);
 
-  const signedTx = await wallet.signTransaction(legacyTx);
+  const signedTx = await wrapSolanaSign(() => wallet.signTransaction(legacyTx));
 
   let txHash: string;
   try {
@@ -1058,7 +1076,7 @@ export async function solanaDepositReserve(amount: number): Promise<{ txHash: st
   const legacyTx = new Transaction({ feePayer: authority, recentBlockhash: blockhash });
   legacyTx.add(instruction);
 
-  const signedTx = await wallet.signTransaction(legacyTx);
+  const signedTx = await wrapSolanaSign(() => wallet.signTransaction(legacyTx));
 
   let txHash: string;
   try {
