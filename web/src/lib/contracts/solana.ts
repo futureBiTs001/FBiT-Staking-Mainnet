@@ -1320,42 +1320,72 @@ function getReadOnlyProgram(): Program {
 
 /**
  * Fetch all active StakeEntry accounts for a given owner.
- * Uses a memcmp filter on the owner field (offset 8, after discriminator).
+ * Uses raw getProgramAccounts + manual binary parsing to avoid any
+ * Anchor IDL deserializer failures (IDL version mismatches, BorshCoder errors, etc).
+ *
+ * Binary layout (offsets after 8-byte discriminator):
+ *   8–39  : owner (Pubkey, 32 bytes)
+ *   40–47 : amount (u64 LE)
+ *   48    : lock_period_index (u8)
+ *   49–56 : staked_at (i64 LE)
+ *   57–64 : unlock_at (i64 LE)
+ *   65–72 : last_claim_at (i64 LE)
+ *   73–80 : total_claimed (u64 LE)
+ *   81    : is_active (bool)
+ *   82–89 : apy (u64 LE)
+ *   90–97 : stake_id (u64 LE) — only in 99-byte accounts
+ *   98    : bump (u8)  — offset 90 in 91-byte accounts
  */
 export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEntry[] | null> {
   try {
-    const owner = new PublicKey(ownerAddress);
-    const program = getReadOnlyProgram();
-    // Anchor's .all() already applies the discriminator filter automatically,
-    // so we only need the owner memcmp — no dataSize filter needed.
-    let all: any[] = [];
-    try {
-      all = await (program.account as any).stakeEntry.all([
-        { memcmp: { offset: 8, bytes: owner.toBase58() } },
-      ]);
-    } catch (fetchErr) {
-      console.error('[solanaGetUserStakes] fetch failed:', fetchErr);
-      return null;
+    const owner      = new PublicKey(ownerAddress);
+    const connection = getRpcConnection();
+    const programId  = getProgramId();
+    const stakeDisc  = Buffer.from(ACCOUNT_DISCRIMINATORS.StakeEntry);
+
+    const rawAccounts = await connection.getProgramAccounts(programId, {
+      filters: [{ memcmp: { offset: 8, bytes: owner.toBase58() } }],
+    });
+
+    console.info(`[solanaGetUserStakes] raw scan: ${rawAccounts.length} owner-matched accounts`);
+
+    const stakes: StakeEntry[] = [];
+    for (const { account } of rawAccounts) {
+      try {
+        const buf = Buffer.from(account.data);
+        // Must have correct discriminator; accept 91-byte (old, no stakeId) or 99-byte (new)
+        if (buf.length < 91 || !buf.subarray(0, 8).equals(stakeDisc)) continue;
+
+        const amount        = new BN(buf.readBigUInt64LE(40).toString());
+        const lockPeriodIdx = buf[48];
+        const stakedAt      = Number(buf.readBigInt64LE(49));
+        const unlockAt      = Number(buf.readBigInt64LE(57));
+        const lastClaimAt   = Number(buf.readBigInt64LE(65));
+        const totalClaimed  = new BN(buf.readBigUInt64LE(73).toString());
+        const isActive      = buf[81] === 1;
+        const apy           = Number(buf.readBigUInt64LE(82));
+        const stakeId       = buf.length >= 99 ? Number(buf.readBigUInt64LE(90)) : stakedAt;
+
+        if (!isActive) continue;
+
+        stakes.push({
+          id:              stakeId,
+          amount:          fromLamports(amount),
+          lockPeriodIndex: lockPeriodIdx,
+          stakedAt,
+          unlockAt,
+          lastClaimAt,
+          totalClaimed:    fromLamports(totalClaimed),
+          isActive,
+          apy,
+        });
+      } catch (parseErr) {
+        console.warn('[solanaGetUserStakes] parse error for one account:', parseErr);
+      }
     }
 
-    console.info(`[solanaGetUserStakes] Found ${all.length} stake accounts for ${ownerAddress}`);
-    return (all as any[])
-      .filter((e: any) => e.account.isActive)
-      .map((e: any): StakeEntry => {
-        const id = e.account.stakeId !== undefined ? e.account.stakeId.toNumber() : -1;
-        const stakedAt = e.account.stakedAt.toNumber();
-        return {
-          id:              id >= 0 ? id : stakedAt,
-          amount:          fromLamports(e.account.amount),
-          lockPeriodIndex: e.account.lockPeriodIndex,
-          stakedAt,
-          unlockAt:        e.account.unlockAt.toNumber(),
-          lastClaimAt:     e.account.lastClaimAt.toNumber(),
-          totalClaimed:    fromLamports(e.account.totalClaimed),
-          isActive:        e.account.isActive,
-          apy:             e.account.apy.toNumber(),
-        };
-      });
+    console.info(`[solanaGetUserStakes] parsed ${stakes.length} active stakes`);
+    return stakes;
   } catch (err) {
     console.error('[solanaGetUserStakes] error:', err);
     return null;
