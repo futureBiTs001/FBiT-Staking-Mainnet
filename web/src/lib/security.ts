@@ -153,6 +153,14 @@ export function sanitizeErrorMessage(err: unknown): string {
     raw.includes('Transaction was rejected')
   ) return 'Transaction cancelled — rejected by wallet.';
 
+  // Phantom dApp security block — domain flagged by Phantom's security system
+  if (
+    raw.toLowerCase().includes('request blocked') ||
+    raw.toLowerCase().includes('dapp could be malicious') ||
+    raw.toLowerCase().includes('blocked this request') ||
+    raw.toLowerCase().includes('phantom has blocked')
+  ) return 'Transaction blocked by Phantom security. Click "Proceed anyway" in Phantom, or contact review@phantom.com to whitelist this dApp.';
+
   // Insufficient gas funds
   if (
     raw.toLowerCase().includes('insufficient funds') ||
