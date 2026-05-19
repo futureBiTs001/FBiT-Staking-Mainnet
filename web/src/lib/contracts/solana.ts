@@ -1327,14 +1327,33 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
     const owner = new PublicKey(ownerAddress);
     const program = getReadOnlyProgram();
     // dataSize: 8(disc) + 32+8+1+8+8+8+8+1+8+8+1 = 99 — prevents Platform/UserAccount false matches
-    const all = await (program.account as any).stakeEntry.all([
-      { dataSize: 99 },
-      { memcmp: { offset: 8, bytes: owner.toBase58() } },
-    ]);
+    // Also try 91 bytes for older program binaries (without stakeId field)
+    const fetchAll = async (size: number) =>
+      (program.account as any).stakeEntry.all([
+        { dataSize: size },
+        { memcmp: { offset: 8, bytes: owner.toBase58() } },
+      ]);
+
+    let all: any[] = [];
+    try {
+      all = await fetchAll(99);
+      // If 99-byte filter returns empty, try 91-byte (older binary without stakeId)
+      if (all.length === 0) {
+        const older = await fetchAll(91);
+        if (older.length > 0) {
+          console.info('[solanaGetUserStakes] Found stakes with 91-byte accounts (older binary)');
+          all = older;
+        }
+      }
+    } catch (fetchErr) {
+      console.error('[solanaGetUserStakes] fetch failed:', fetchErr);
+      return null;
+    }
+
+    console.info(`[solanaGetUserStakes] Found ${all.length} stake accounts for ${ownerAddress}`);
     return (all as any[])
       .filter((e: any) => e.account.isActive)
       .map((e: any): StakeEntry => {
-        // stakeId field is now stored directly in StakeEntry
         const id = e.account.stakeId !== undefined ? e.account.stakeId.toNumber() : -1;
         const stakedAt = e.account.stakedAt.toNumber();
         return {
@@ -1349,7 +1368,8 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
           apy:             e.account.apy.toNumber(),
         };
       });
-  } catch {
+  } catch (err) {
+    console.error('[solanaGetUserStakes] error:', err);
     return null;
   }
 }
