@@ -1326,25 +1326,13 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
   try {
     const owner = new PublicKey(ownerAddress);
     const program = getReadOnlyProgram();
-    // dataSize: 8(disc) + 32+8+1+8+8+8+8+1+8+8+1 = 99 — prevents Platform/UserAccount false matches
-    // Also try 91 bytes for older program binaries (without stakeId field)
-    const fetchAll = async (size: number) =>
-      (program.account as any).stakeEntry.all([
-        { dataSize: size },
-        { memcmp: { offset: 8, bytes: owner.toBase58() } },
-      ]);
-
+    // Anchor's .all() already applies the discriminator filter automatically,
+    // so we only need the owner memcmp — no dataSize filter needed.
     let all: any[] = [];
     try {
-      all = await fetchAll(99);
-      // If 99-byte filter returns empty, try 91-byte (older binary without stakeId)
-      if (all.length === 0) {
-        const older = await fetchAll(91);
-        if (older.length > 0) {
-          console.info('[solanaGetUserStakes] Found stakes with 91-byte accounts (older binary)');
-          all = older;
-        }
-      }
+      all = await (program.account as any).stakeEntry.all([
+        { memcmp: { offset: 8, bytes: owner.toBase58() } },
+      ]);
     } catch (fetchErr) {
       console.error('[solanaGetUserStakes] fetch failed:', fetchErr);
       return null;
