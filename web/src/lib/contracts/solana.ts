@@ -1281,8 +1281,9 @@ export async function solanaRenounceOwnership(): Promise<{ txHash: string }> {
 // ── Read-only helpers ──────────────────────────────────────────────────────────
 
 /** Returns a read-only Anchor program instance (no wallet signer required). */
-// Helius is preferred when configured; falls back to Solana Foundation mainnet-beta.
-const READ_RPC = 'https://solana-rpc.publicnode.com';
+// Use the same Helius RPC configured for writes — publicnode.com doesn't support
+// getProgramAccounts with filters, which breaks stake fetching.
+const READ_RPC = NETWORK_CONFIG.solana.rpcUrl;
 
 // Concurrency limiter — prevents 429s on the Helius free tier (10 RPS cap).
 // Queues excess requests rather than firing them simultaneously.
