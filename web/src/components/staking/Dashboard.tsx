@@ -193,6 +193,7 @@ export default function Dashboard() {
         toast.success(`✓ Claimed ${formatNumber(net)} FBiT · ${formatNumber(burned)} FBiT burned 🔥`);
       }
     } catch (err: any) {
+      console.error('[handleClaim] error:', err);
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('invalid BigNumberish') || msg.includes('BigNumberish')) {
         toast.error('Transaction failed — please refresh the page and try again.');
@@ -267,6 +268,7 @@ export default function Dashboard() {
         toast.success(`↑ Compounded ${formatNumber(net, 8)} FBiT · ${formatNumber(burned, 8)} FBiT burned 🔥`);
       }
     } catch (err: any) {
+      console.error('[handleCompound] error:', err);
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('invalid BigNumberish') || msg.includes('BigNumberish')) {
         toast.error('Transaction failed — please refresh the page and try again.');
@@ -315,6 +317,7 @@ export default function Dashboard() {
       });
       toast.success(`✓ Unstaked ${formatNumber(stake.amount)} FBiT — returned to wallet!`);
     } catch (err: any) {
+      console.error('[handleUnstake] error:', err);
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('invalid BigNumberish') || msg.includes('BigNumberish')) {
         toast.error('Transaction failed — please refresh the page and try again.');

@@ -140,6 +140,39 @@ export function sanitizeErrorMessage(err: unknown): string {
   if (raw.includes('Contract not configured')) return raw;
   if (raw.includes('Too many')) return raw;
   if (raw.includes('Rate limit')) return raw;
+
+  // Wallet rejection — user cancelled on their device
+  if (
+    raw.toLowerCase().includes('user rejected') ||
+    raw.toLowerCase().includes('user denied') ||
+    raw.includes('ACTION_REJECTED') ||
+    raw.includes('rejected the request') ||
+    raw.includes('rejected transaction') ||
+    raw.includes('Request rejected') ||
+    raw.includes('Rejected by user') ||
+    raw.includes('Transaction was rejected')
+  ) return 'Transaction cancelled — rejected by wallet.';
+
+  // Insufficient gas funds
+  if (
+    raw.toLowerCase().includes('insufficient funds') ||
+    raw.toLowerCase().includes('insufficient gas') ||
+    raw.includes('InsufficientFunds')
+  ) return 'Insufficient POL for gas fees. Please add POL to your wallet and try again.';
+
+  // Network / RPC errors
+  if (
+    raw.toLowerCase().includes('network error') ||
+    raw.toLowerCase().includes('networkerror') ||
+    raw.includes('could not connect') ||
+    raw.includes('failed to fetch') ||
+    raw.includes('connection refused')
+  ) return 'Network error — please check your connection and try again.';
+
+  // Wrong network
+  if (raw.toLowerCase().includes('wrong network') || raw.toLowerCase().includes('switch your wallet to polygon'))
+    return raw.split('\n')[0].trim().slice(0, 120);
+
   // Solana contract error passthroughs
   if (raw.includes('Stake amount is below minimum')) return 'Minimum stake is 1 FBiT.';
   if (raw.includes('Stake amount exceeds maximum')) return 'Maximum stake is 500,000,000 FBiT.';
