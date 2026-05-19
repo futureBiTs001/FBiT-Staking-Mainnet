@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Outer circle -->
+  <circle cx="32" cy="32" r="30" fill="white" stroke="#1e1b4b" stroke-width="3"/>
+  <!-- Top bar (pink/purple) -->
+  <rect x="12" y="12" width="40" height="11" rx="5.5" fill="#d946ef"/>
+  <!-- Bottom bar (purple) -->
+  <rect x="14" y="27" width="36" height="11" rx="5.5" fill="#6d28d9"/>
+  <!-- Green dot for Bit. logo -->
+  <circle cx="18" cy="47" r="5" fill="#22c55e" stroke="#1e1b4b" stroke-width="1.5"/>
+  <!-- "Bit." text approximation -->
+  <text x="25" y="52" font-family="Arial, sans-serif" font-weight="900" font-size="12" fill="#1e1b4b">Bit.</text>
+  <!-- Connector lines -->
+  <line x1="22" y1="23" x2="22" y2="27" stroke="#1e1b4b" stroke-width="1.2"/>
+  <line x1="34" y1="38" x2="26" y2="42" stroke="#1e1b4b" stroke-width="1.2"/>
+  <!-- Small dots -->
+  <rect x="8" y="8" width="3" height="3" fill="#1e1b4b"/>
+  <rect x="53" y="8" width="3" height="3" fill="#1e1b4b"/>
+  <rect x="53" y="33" width="3" height="3" fill="#1e1b4b"/>
+  <rect x="8" y="53" width="3" height="3" fill="#1e1b4b"/>
+</svg>

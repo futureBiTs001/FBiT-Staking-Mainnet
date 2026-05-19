@@ -1342,7 +1342,6 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
     const owner      = new PublicKey(ownerAddress);
     const connection = getRpcConnection();
     const programId  = getProgramId();
-    const stakeDisc  = Buffer.from(ACCOUNT_DISCRIMINATORS.StakeEntry);
 
     const rawAccounts = await connection.getProgramAccounts(programId, {
       filters: [{ memcmp: { offset: 8, bytes: owner.toBase58() } }],
@@ -1353,19 +1352,26 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
     const stakes: StakeEntry[] = [];
     for (const { account } of rawAccounts) {
       try {
-        const buf = Buffer.from(account.data);
-        // Must have correct discriminator; accept 91-byte (old, no stakeId) or 99-byte (new)
-        if (buf.length < 91 || !buf.subarray(0, 8).equals(stakeDisc)) continue;
+        // Use Uint8Array + DataView — Buffer.readBigUInt64LE is not available in browser polyfills
+        const bytes = account.data instanceof Uint8Array
+          ? account.data
+          : new Uint8Array(account.data as unknown as ArrayBuffer);
+        const len = bytes.length;
+        if (len < 91) continue;
 
-        const amount        = new BN(buf.readBigUInt64LE(40).toString());
-        const lockPeriodIdx = buf[48];
-        const stakedAt      = Number(buf.readBigInt64LE(49));
-        const unlockAt      = Number(buf.readBigInt64LE(57));
-        const lastClaimAt   = Number(buf.readBigInt64LE(65));
-        const totalClaimed  = new BN(buf.readBigUInt64LE(73).toString());
-        const isActive      = buf[81] === 1;
-        const apy           = Number(buf.readBigUInt64LE(82));
-        const stakeId       = buf.length >= 99 ? Number(buf.readBigUInt64LE(90)) : stakedAt;
+        // Verify StakeEntry discriminator
+        if (!ACCOUNT_DISCRIMINATORS.StakeEntry.every((b, i) => bytes[i] === b)) continue;
+
+        const dv           = new DataView(bytes.buffer, bytes.byteOffset, len);
+        const amount       = new BN(dv.getBigUint64(40, true).toString());
+        const lockPeriodIdx = bytes[48];
+        const stakedAt     = Number(dv.getBigInt64(49, true));
+        const unlockAt     = Number(dv.getBigInt64(57, true));
+        const lastClaimAt  = Number(dv.getBigInt64(65, true));
+        const totalClaimed = new BN(dv.getBigUint64(73, true).toString());
+        const isActive     = bytes[81] === 1;
+        const apy          = Number(dv.getBigUint64(82, true));
+        const stakeId      = len >= 99 ? Number(dv.getBigUint64(90, true)) : stakedAt;
 
         if (!isActive) continue;
 
