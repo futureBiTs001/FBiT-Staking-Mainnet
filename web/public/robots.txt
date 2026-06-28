@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /export-data/
+
+Sitemap: https://stake.futurebit.in/sitemap.xml
