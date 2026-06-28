@@ -142,6 +142,7 @@ export default function LandingPage() {
               <div className="hidden md:flex items-center gap-8 text-sm font-display text-text-muted">
                 <a href="#features" className="hover:text-white transition-colors">Features</a>
                 <a href="#tokenomics" className="hover:text-white transition-colors">Tokenomics</a>
+                <a href="#token" className="hover:text-white transition-colors">Token</a>
                 <a href="#how-it-works" className="hover:text-white transition-colors">How It Works</a>
                 <a href="#referral" className="hover:text-white transition-colors">Referral</a>
                 <a href="#community" className="hover:text-white transition-colors">Community</a>
@@ -186,7 +187,7 @@ export default function LandingPage() {
             {/* Mobile menu */}
             {mobileMenu && (
               <div className="md:hidden border-t border-white/5 py-4 space-y-3 text-sm font-display">
-                {['#features','#tokenomics','#how-it-works','#referral','#community'].map(h => (
+                {['#features','#tokenomics','#token','#how-it-works','#referral','#community'].map(h => (
                   <a key={h} href={h} onClick={() => setMobileMenu(false)}
                     className="block px-2 py-2 text-text-muted hover:text-white capitalize">
                     {h.replace('#','').replace('-',' ')}
@@ -468,6 +469,228 @@ export default function LandingPage() {
               </p>
               <p className="text-text-muted text-sm mt-2">Your referees' rewards automatically flow up to you — forever</p>
             </div>
+          </div>
+        </section>
+
+        {/* ── FBIT TOKEN DETAILS ────────────────────────────────────────────── */}
+        <section id="token" className="py-20 px-4">
+          <div className="max-w-6xl mx-auto">
+
+            {/* Section header */}
+            <div className="text-center mb-14">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-400 text-xs font-display font-semibold mb-5">
+                <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse inline-block"/>
+                SPL Token on Solana · ERC-20 on Polygon
+              </div>
+              <h2 className="font-display font-bold text-3xl md:text-5xl mb-4">
+                About the <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-400 to-brand-600">FBiT Token</span>
+              </h2>
+              <p className="text-text-muted text-lg max-w-2xl mx-auto">
+                FBiT is the native utility token powering the entire FutureBit staking ecosystem — live on Solana and Polygon Mainnet.
+              </p>
+            </div>
+
+            {/* Contract Address cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+              {/* Solana FBiT */}
+              <div className="rounded-2xl bg-gradient-to-br from-[#9945FF]/10 to-[#14F195]/5 border border-[#14F195]/20 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-[#14F195]/15 border border-[#14F195]/30 flex items-center justify-center font-bold text-[#14F195] text-lg">◎</div>
+                  <div>
+                    <p className="font-display font-bold text-white text-lg">FBiT</p>
+                    <p className="text-text-muted text-xs">Solana Mainnet · SPL Token</p>
+                  </div>
+                  <span className="ml-auto px-2.5 py-1 rounded-full bg-[#14F195]/15 text-[#14F195] text-xs font-display font-bold">LIVE</span>
+                </div>
+                <div className="rounded-xl bg-black/30 border border-white/5 px-4 py-3 mb-4">
+                  <p className="text-text-muted text-[10px] font-display mb-1 uppercase tracking-wider">Mint Address</p>
+                  <p className="font-mono text-xs text-brand-300 break-all">CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu</p>
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-center text-xs mb-4">
+                  {[['Decimals','6'],['Type','SPL Token'],['Standard','Token-2022']].map(([k,v]) => (
+                    <div key={k} className="rounded-lg bg-black/20 border border-white/5 py-2 px-1">
+                      <p className="text-text-muted mb-0.5">{k}</p>
+                      <p className="font-mono font-bold text-white text-xs">{v}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <a href="https://explorer.solana.com/address/CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu"
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex-1 text-center py-2 rounded-xl border border-[#14F195]/25 text-[#14F195] text-xs font-display hover:bg-[#14F195]/10 transition-all">
+                    Solana Explorer ↗
+                  </a>
+                  <a href="https://birdeye.so/token/CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu"
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex-1 text-center py-2 rounded-xl border border-white/10 text-text-muted text-xs font-display hover:text-brand-400 hover:border-brand-500/25 transition-all">
+                    BirdEye ↗
+                  </a>
+                </div>
+              </div>
+
+              {/* Polygon WFBIT */}
+              <div className="rounded-2xl bg-gradient-to-br from-[#8247E5]/10 to-[#8247E5]/5 border border-[#8247E5]/20 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-[#8247E5]/20 border border-[#8247E5]/30 flex items-center justify-center font-bold text-[#8247E5] text-lg">⬡</div>
+                  <div>
+                    <p className="font-display font-bold text-white text-lg">WFBIT</p>
+                    <p className="text-text-muted text-xs">Polygon Mainnet · ERC-20</p>
+                  </div>
+                  <span className="ml-auto px-2.5 py-1 rounded-full bg-[#8247E5]/15 text-[#8247E5] text-xs font-display font-bold">LIVE</span>
+                </div>
+                <div className="rounded-xl bg-black/30 border border-white/5 px-4 py-3 mb-4">
+                  <p className="text-text-muted text-[10px] font-display mb-1 uppercase tracking-wider">Contract Address</p>
+                  <p className="font-mono text-xs text-[#a78bfa] break-all">0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945</p>
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-center text-xs mb-4">
+                  {[['Decimals','6'],['Type','ERC-20'],['Supply','1 Billion']].map(([k,v]) => (
+                    <div key={k} className="rounded-lg bg-black/20 border border-white/5 py-2 px-1">
+                      <p className="text-text-muted mb-0.5">{k}</p>
+                      <p className="font-mono font-bold text-white text-xs">{v}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <a href="https://polygonscan.com/address/0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945"
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex-1 text-center py-2 rounded-xl border border-[#8247E5]/25 text-[#8247E5] text-xs font-display hover:bg-[#8247E5]/10 transition-all">
+                    Polygonscan ↗
+                  </a>
+                  <a href="https://www.dextools.io/app/en/polygon/pair-explorer/0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945"
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex-1 text-center py-2 rounded-xl border border-white/10 text-text-muted text-xs font-display hover:text-[#8247E5] hover:border-[#8247E5]/25 transition-all">
+                    DexTools ↗
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* Token Utility Cards */}
+            <div className="mb-12">
+              <h3 className="font-display font-bold text-xl text-center mb-6 text-text-secondary">Token Utility</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { icon: '🏦', title: 'Staking Rewards',    color: 'text-brand-400',   bg: 'bg-brand-500/10   border-brand-500/20',  desc: 'Stake FBiT and earn up to 247% APY. Rewards calculated every 6 hours and claimable anytime.' },
+                  { icon: '🔥', title: 'Burn Mechanism',     color: 'text-accent-rose',  bg: 'bg-rose-500/10    border-rose-500/20',   desc: '10% of every staking reward is permanently burned, reducing total supply and increasing scarcity.' },
+                  { icon: '👥', title: 'Referral Income',    color: 'text-accent-purple', bg: 'bg-purple-500/10 border-purple-500/20', desc: 'Earn passive FBiT income from 10 levels of your referral network with automatic on-chain distribution.' },
+                  { icon: '🏆', title: 'Team Bonuses',       color: 'text-accent-amber',  bg: 'bg-amber-500/10  border-amber-500/20',  desc: 'Unlock up to 10% team target bonus when your network reaches total staking milestones.' },
+                ].map(u => (
+                  <div key={u.title} className={`rounded-2xl border ${u.bg} p-5 hover:-translate-y-1 transition-all`}>
+                    <div className="text-3xl mb-3">{u.icon}</div>
+                    <h4 className={`font-display font-bold text-base mb-2 ${u.color}`}>{u.title}</h4>
+                    <p className="text-text-muted text-xs leading-relaxed">{u.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Supply breakdown + How to get */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Supply breakdown */}
+              <div className="rounded-2xl bg-surface-800/60 border border-white/5 p-6">
+                <h3 className="font-display font-bold text-lg mb-5 flex items-center gap-2">
+                  <span>📊</span> Solana FBiT Distribution
+                </h3>
+                <div className="space-y-3">
+                  {[
+                    { label: 'Staking Reserve',      value: '213.8M FBiT', pct: 85,  color: 'bg-brand-500' },
+                    { label: 'Annual Emission',       value: '10M/year',    pct: 4,   color: 'bg-accent-cyan' },
+                    { label: 'Burned (cumulative)',   value: 'Growing 🔥',  pct: 5,   color: 'bg-accent-rose' },
+                    { label: 'Circulating / Staked', value: '4.04M FBiT',  pct: 6,   color: 'bg-accent-purple' },
+                  ].map(r => (
+                    <div key={r.label}>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-text-muted">{r.label}</span>
+                        <span className="font-mono font-semibold text-text-primary">{r.value}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                        <div className={`h-full ${r.color} rounded-full`} style={{ width: `${r.pct}%` }}/>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-5 rounded-xl bg-brand-500/5 border border-brand-500/10 p-3 text-xs text-text-muted">
+                  <span className="text-brand-400 font-semibold">Runway:</span> At 10M FBiT/year emission, the reserve covers ~21 years of staking rewards.
+                </div>
+              </div>
+
+              {/* How to get FBiT */}
+              <div className="rounded-2xl bg-surface-800/60 border border-white/5 p-6">
+                <h3 className="font-display font-bold text-lg mb-5 flex items-center gap-2">
+                  <span>🛒</span> How to Get FBiT
+                </h3>
+                <div className="space-y-3">
+                  {[
+                    {
+                      step: '01', title: 'Buy on DEX',
+                      desc: 'Trade SOL for FBiT on Raydium or Jupiter — the primary Solana DEX platforms.',
+                      links: [
+                        { label: 'Jupiter', href: 'https://jup.ag/swap/SOL-CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu' },
+                        { label: 'Raydium', href: 'https://raydium.io/' },
+                      ]
+                    },
+                    {
+                      step: '02', title: 'Track Price',
+                      desc: 'Monitor live price, volume, and liquidity on GeckoTerminal or BirdEye.',
+                      links: [
+                        { label: 'GeckoTerminal', href: 'https://www.geckoterminal.com/solana/pools/8FNq5nb5sCV3BUThSbWY3byVos3z5LAWREbv8DUQq6HR' },
+                        { label: 'BirdEye', href: 'https://birdeye.so/token/CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu' },
+                      ]
+                    },
+                    {
+                      step: '03', title: 'Start Staking',
+                      desc: 'Connect Phantom wallet, enter your amount, and start earning up to 247% APY.',
+                      links: [
+                        { label: 'Launch App', href: STAKING_APP },
+                      ]
+                    },
+                  ].map(s => (
+                    <div key={s.step} className="flex gap-3 p-3 rounded-xl bg-black/20 border border-white/5">
+                      <div className="w-8 h-8 shrink-0 rounded-full bg-brand-500/15 border border-brand-500/25 flex items-center justify-center text-brand-400 text-xs font-display font-bold">{s.step}</div>
+                      <div className="min-w-0">
+                        <p className="font-display font-semibold text-sm text-white mb-0.5">{s.title}</p>
+                        <p className="text-text-muted text-xs leading-relaxed mb-1.5">{s.desc}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {s.links.map(l => (
+                            <a key={l.label} href={l.href} target="_blank" rel="noopener noreferrer"
+                              className="text-brand-400 text-xs hover:underline font-display">
+                              {l.label} ↗
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Staking Program details strip */}
+            <div className="mt-8 rounded-2xl bg-gradient-to-r from-brand-500/5 via-accent-purple/5 to-brand-500/5 border border-white/5 p-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center text-sm">
+                <div>
+                  <p className="text-text-muted text-xs font-display mb-1 uppercase tracking-wider">Solana Program ID</p>
+                  <p className="font-mono text-brand-300 text-xs break-all">8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp</p>
+                  <a href="https://explorer.solana.com/address/8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp"
+                    target="_blank" rel="noopener noreferrer"
+                    className="text-brand-500/70 text-[10px] hover:text-brand-400 mt-1 block">View on Explorer ↗</a>
+                </div>
+                <div>
+                  <p className="text-text-muted text-xs font-display mb-1 uppercase tracking-wider">Polygon Staking Contract</p>
+                  <p className="font-mono text-[#a78bfa] text-xs break-all">0xb86DA67406DaD482428704c14AdA269E9653FDca</p>
+                  <a href="https://polygonscan.com/address/0xb86DA67406DaD482428704c14AdA269E9653FDca"
+                    target="_blank" rel="noopener noreferrer"
+                    className="text-[#8247E5]/70 text-[10px] hover:text-[#8247E5] mt-1 block">View on Polygonscan ↗</a>
+                </div>
+                <div>
+                  <p className="text-text-muted text-xs font-display mb-1 uppercase tracking-wider">Open Source</p>
+                  <p className="font-mono text-xs text-white break-all">futurebitsmaxx / FBiT-Staking-Mainnet</p>
+                  <a href={SOCIAL.github} target="_blank" rel="noopener noreferrer"
+                    className="text-text-muted text-[10px] hover:text-brand-400 mt-1 block">View on GitHub ↗</a>
+                </div>
+              </div>
+            </div>
+
           </div>
         </section>
 
