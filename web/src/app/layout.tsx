@@ -9,14 +9,81 @@ import { warnMissingEnv } from '@/lib/security';
 
 warnMissingEnv();
 
+const BASE_URL = 'https://stake.futurebit.in';
+
 export const metadata: Metadata = {
-  title: 'Future Bit (FBiT) Staking Mainnet | Multi-Chain Staking & Referral Platform',
-  description: 'Stake FBiT tokens across Solana and Polygon networks. Earn rewards with 10%–300% PoS APY and build your referral network with 10-level commissions.',
-  keywords: 'FBiT, staking, DeFi, Solana, Polygon, referral, crypto, yield farming',
+  metadataBase: new URL(BASE_URL),
+
+  title: {
+    default: 'FBiT Staking — Earn 247% APY on Solana & Polygon',
+    template: '%s | FBiT Staking',
+  },
+  description:
+    'Stake FBiT tokens on Solana and WFBIT on Polygon. Earn up to 247% dynamic Proof-of-Stake APY, build a 10-level referral network, and get Team Target Bonuses. Non-custodial, open-source, no KYC.',
+
+  keywords: [
+    'FBiT staking', 'FutureBit token', 'Solana staking', 'Polygon staking',
+    'WFBIT', 'DeFi staking', 'crypto staking', 'high APY staking',
+    '10 level referral', 'passive crypto income', 'FBiT token',
+    'multi-chain staking', 'non-custodial staking', 'stake and earn',
+  ],
+
+  authors: [{ name: 'FutureBit', url: BASE_URL }],
+  creator: 'FutureBit',
+  publisher: 'FutureBit',
+
+  openGraph: {
+    type: 'website',
+    url: BASE_URL,
+    siteName: 'FBiT Staking',
+    title: 'FBiT Staking — Earn 247% APY on Solana & Polygon',
+    description:
+      'Stake FBiT on Solana or WFBIT on Polygon. Up to 247% APY, 10-level referrals, deflationary burn. Non-custodial & open-source.',
+    images: [
+      {
+        url: `${BASE_URL}/og-image.png`,
+        width: 1200,
+        height: 630,
+        alt: 'FBiT Staking — Multi-Chain DeFi Platform',
+      },
+    ],
+    locale: 'en_US',
+  },
+
+  twitter: {
+    card: 'summary_large_image',
+    site: '@FutureBiT_Token',
+    creator: '@FutureBiT_Token',
+    title: 'FBiT Staking — Earn 247% APY on Solana & Polygon',
+    description:
+      'Stake FBiT on Solana or WFBIT on Polygon. Up to 247% APY, 10-level referrals, deflationary burn.',
+    images: [`${BASE_URL}/og-image.png`],
+  },
+
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-snippet': -1,
+      'max-image-preview': 'large',
+      'max-video-preview': -1,
+    },
+  },
+
+  alternates: {
+    canonical: BASE_URL,
+  },
+
   icons: {
     icon: '/favicon.svg',
     shortcut: '/favicon.svg',
     apple: '/favicon.svg',
+  },
+
+  verification: {
+    google: 'GOOGLE_SEARCH_CONSOLE_VERIFICATION_CODE', // replace after GSC setup
   },
 };
 
