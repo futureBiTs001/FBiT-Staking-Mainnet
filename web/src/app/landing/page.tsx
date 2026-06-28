@@ -13,8 +13,12 @@ const SOCIAL = {
   discord:  'https://discord.gg/futurebit',
 };
 
-// ── Google AdSense publisher ID — replace with your real ID ───────────────────
-const ADSENSE_PUB_ID = 'ca-pub-XXXXXXXXXXXXXXXXX';
+// ── Adcash zone IDs — replace with your real zone IDs from adcash.com dashboard
+const ADCASH_ZONES = {
+  top:    'ZONE_ID_TOP',    // top banner zone
+  mid:    'ZONE_ID_MID',    // mid-page zone
+  bottom: 'ZONE_ID_BOTTOM', // bottom banner zone
+};
 
 // ── Known pool addresses for FBiT price ──────────────────────────────────────
 const FBIT_POOLS = [
@@ -34,34 +38,30 @@ const KNOWN_STATS = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
-// AD COMPONENT — Google AdSense slot
+// AD COMPONENT — Adcash display zone
 // ══════════════════════════════════════════════════════════════════════════════
-function AdUnit({ slot, format, className }: { slot: string; format: string; className?: string }) {
+function AdcashUnit({ zoneId, className }: { zoneId: string; className?: string }) {
+  const id = `ac_${zoneId}`;
   useEffect(() => {
-    try { ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({}); } catch {}
-  }, []);
+    try {
+      ((window as any).adcash = (window as any).adcash || []).push({ ac_zone: zoneId });
+    } catch {}
+  }, [zoneId]);
   return (
     <div className={`flex items-center justify-center overflow-hidden ${className ?? ''}`}>
-      <ins
-        className="adsbygoogle"
-        style={{ display: 'block' }}
-        data-ad-client={ADSENSE_PUB_ID}
-        data-ad-slot={slot}
-        data-ad-format={format}
-        data-full-width-responsive="true"
-      />
+      <div id={id} />
     </div>
   );
 }
 
-// ── Ad placeholder shown until AdSense is approved ───────────────────────────
+// ── Shown while zone IDs are not yet configured ───────────────────────────────
 function AdPlaceholder({ label, height = 90 }: { label: string; height?: number }) {
   return (
     <div
       style={{ minHeight: height }}
       className="w-full flex items-center justify-center rounded-xl border border-dashed border-brand-500/20 bg-surface-800/30 text-text-muted text-xs font-mono"
     >
-      [ {label} — Google AdSense ]
+      [ {label} — Adcash ]
     </div>
   );
 }
@@ -110,11 +110,10 @@ export default function LandingPage() {
 
   return (
     <>
-      {/* Google AdSense script */}
+      {/* Adcash script */}
       <Script
         async
-        src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_PUB_ID}`}
-        crossOrigin="anonymous"
+        src="//static.adcash.com/js/adcash.js"
         strategy="lazyOnload"
       />
 
@@ -122,7 +121,11 @@ export default function LandingPage() {
 
         {/* ── TOP BANNER AD ─────────────────────────────────────────────────── */}
         <div className="w-full bg-surface-800/60 border-b border-white/5 py-2 px-4">
-          <AdPlaceholder label="Top Banner 728×90" height={60} />
+          {ADCASH_ZONES.top.startsWith('ZONE_') ? (
+            <AdPlaceholder label="Top Banner — Configure ADCASH_ZONES.top" height={60} />
+          ) : (
+            <AdcashUnit zoneId={ADCASH_ZONES.top} className="w-full min-h-15" />
+          )}
         </div>
 
         {/* ── NAVBAR ────────────────────────────────────────────────────────── */}
@@ -298,7 +301,11 @@ export default function LandingPage() {
 
         {/* ── MID AD ────────────────────────────────────────────────────────── */}
         <div className="max-w-4xl mx-auto py-8 px-4">
-          <AdPlaceholder label="Mid-Page Rectangle 336×280" height={100} />
+          {ADCASH_ZONES.mid.startsWith('ZONE_') ? (
+            <AdPlaceholder label="Mid-Page — Configure ADCASH_ZONES.mid" height={100} />
+          ) : (
+            <AdcashUnit zoneId={ADCASH_ZONES.mid} className="w-full min-h-24" />
+          )}
         </div>
 
         {/* ── FEATURES ──────────────────────────────────────────────────────── */}
@@ -696,7 +703,11 @@ export default function LandingPage() {
 
         {/* ── BOTTOM AD ─────────────────────────────────────────────────────── */}
         <div className="max-w-4xl mx-auto py-8 px-4">
-          <AdPlaceholder label="Bottom Banner 728×90" height={90} />
+          {ADCASH_ZONES.bottom.startsWith('ZONE_') ? (
+            <AdPlaceholder label="Bottom Banner — Configure ADCASH_ZONES.bottom" height={90} />
+          ) : (
+            <AdcashUnit zoneId={ADCASH_ZONES.bottom} className="w-full min-h-20" />
+          )}
         </div>
 
         {/* ── COMMUNITY / SOCIAL FOLLOW ─────────────────────────────────────── */}
