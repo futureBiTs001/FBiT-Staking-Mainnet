@@ -13,11 +13,13 @@ const SOCIAL = {
   discord:  'https://discord.gg/futurebit',
 };
 
-// ── Adcash zone IDs — replace with your real zone IDs from adcash.com dashboard
+// ── Adcash zone IDs — replace with real numeric IDs from adcash.com dashboard ──
+// Dashboard → Zones → Create Zone → copy the numeric Zone ID (e.g. 12345678)
 const ADCASH_ZONES = {
-  top:    'ZONE_ID_TOP',    // top banner zone
-  mid:    'ZONE_ID_MID',    // mid-page zone
-  bottom: 'ZONE_ID_BOTTOM', // bottom banner zone
+  top:        'ZONE_ID_TOP',    // Display Banner — top of page (728×90 or responsive)
+  mid:        'ZONE_ID_MID',    // Display Banner — middle of page (300×250 or responsive)
+  bottom:     'ZONE_ID_BOTTOM', // Display Banner — bottom of page (728×90 or responsive)
+  inPagePush: 'ZONE_ID_PUSH',  // In-Page Push   — auto-appears, no div needed
 };
 
 // ── Known pool addresses for FBiT price ──────────────────────────────────────
@@ -38,10 +40,11 @@ const KNOWN_STATS = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
-// AD COMPONENT — Adcash display zone
+// AD COMPONENTS — Adcash
 // ══════════════════════════════════════════════════════════════════════════════
-function AdcashUnit({ zoneId, className }: { zoneId: string; className?: string }) {
-  const id = `ac_${zoneId}`;
+
+// Display Banner — needs a named div container
+function AdcashBanner({ zoneId, className }: { zoneId: string; className?: string }) {
   useEffect(() => {
     try {
       ((window as any).adcash = (window as any).adcash || []).push({ ac_zone: zoneId });
@@ -49,9 +52,25 @@ function AdcashUnit({ zoneId, className }: { zoneId: string; className?: string 
   }, [zoneId]);
   return (
     <div className={`flex items-center justify-center overflow-hidden ${className ?? ''}`}>
-      <div id={id} />
+      <div id={`ac_${zoneId}`} />
     </div>
   );
+}
+
+// In-Page Push — no div needed, Adcash auto-injects push overlay
+function AdcashInPagePush({ zoneId }: { zoneId: string }) {
+  useEffect(() => {
+    if (!zoneId || zoneId.startsWith('ZONE_')) return;
+    try {
+      // Create and append a dedicated zone script — Adcash In-Page Push format
+      const s = document.createElement('script');
+      s.async = true;
+      s.src = `//static.adcash.com/js/adcash.js`;
+      s.setAttribute('data-aczone', zoneId);
+      document.head.appendChild(s);
+    } catch {}
+  }, [zoneId]);
+  return null; // no visual element — Adcash renders push UI itself
 }
 
 // ── Shown while zone IDs are not yet configured ───────────────────────────────
@@ -65,6 +84,8 @@ function AdPlaceholder({ label, height = 90 }: { label: string; height?: number 
     </div>
   );
 }
+
+const isPlaceholder = (id: string) => id.startsWith('ZONE_');
 
 // ══════════════════════════════════════════════════════════════════════════════
 // PRICE TICKER
@@ -110,21 +131,20 @@ export default function LandingPage() {
 
   return (
     <>
-      {/* Adcash script */}
-      <Script
-        async
-        src="//static.adcash.com/js/adcash.js"
-        strategy="lazyOnload"
-      />
+      {/* Adcash main script — loads display banner engine */}
+      <Script async src="//static.adcash.com/js/adcash.js" strategy="lazyOnload" />
+
+      {/* In-Page Push — auto-renders Adcash push notifications on page */}
+      <AdcashInPagePush zoneId={ADCASH_ZONES.inPagePush} />
 
       <div className="min-h-screen bg-surface-900 text-white font-body overflow-x-hidden">
 
         {/* ── TOP BANNER AD ─────────────────────────────────────────────────── */}
         <div className="w-full bg-surface-800/60 border-b border-white/5 py-2 px-4">
-          {ADCASH_ZONES.top.startsWith('ZONE_') ? (
-            <AdPlaceholder label="Top Banner — Configure ADCASH_ZONES.top" height={60} />
+          {isPlaceholder(ADCASH_ZONES.top) ? (
+            <AdPlaceholder label="Display Banner Top — set ADCASH_ZONES.top" height={60} />
           ) : (
-            <AdcashUnit zoneId={ADCASH_ZONES.top} className="w-full min-h-15" />
+            <AdcashBanner zoneId={ADCASH_ZONES.top} className="w-full min-h-15" />
           )}
         </div>
 
@@ -301,10 +321,10 @@ export default function LandingPage() {
 
         {/* ── MID AD ────────────────────────────────────────────────────────── */}
         <div className="max-w-4xl mx-auto py-8 px-4">
-          {ADCASH_ZONES.mid.startsWith('ZONE_') ? (
-            <AdPlaceholder label="Mid-Page — Configure ADCASH_ZONES.mid" height={100} />
+          {isPlaceholder(ADCASH_ZONES.mid) ? (
+            <AdPlaceholder label="Display Banner Mid — set ADCASH_ZONES.mid" height={100} />
           ) : (
-            <AdcashUnit zoneId={ADCASH_ZONES.mid} className="w-full min-h-24" />
+            <AdcashBanner zoneId={ADCASH_ZONES.mid} className="w-full min-h-24" />
           )}
         </div>
 
@@ -703,10 +723,10 @@ export default function LandingPage() {
 
         {/* ── BOTTOM AD ─────────────────────────────────────────────────────── */}
         <div className="max-w-4xl mx-auto py-8 px-4">
-          {ADCASH_ZONES.bottom.startsWith('ZONE_') ? (
-            <AdPlaceholder label="Bottom Banner — Configure ADCASH_ZONES.bottom" height={90} />
+          {isPlaceholder(ADCASH_ZONES.bottom) ? (
+            <AdPlaceholder label="Display Banner Bottom — set ADCASH_ZONES.bottom" height={90} />
           ) : (
-            <AdcashUnit zoneId={ADCASH_ZONES.bottom} className="w-full min-h-20" />
+            <AdcashBanner zoneId={ADCASH_ZONES.bottom} className="w-full min-h-20" />
           )}
         </div>
 
