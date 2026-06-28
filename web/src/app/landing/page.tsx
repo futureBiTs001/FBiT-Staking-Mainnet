@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Script from 'next/script';
 import SupportChat from '@/components/ui/SupportChat';
+import Logo3D from '@/components/ui/Logo3D';
 
 // ── Social links — update these with real handles ─────────────────────────────
 const SOCIAL = {
@@ -230,6 +231,12 @@ export default function LandingPage() {
           </div>
 
           <div className="relative max-w-5xl mx-auto text-center">
+
+            {/* 3D Rotating Logo */}
+            <div className="flex justify-center mb-8">
+              <Logo3D size={200} />
+            </div>
+
             {/* Badge */}
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-400 text-xs font-display font-semibold mb-8">
               <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse inline-block"/>
