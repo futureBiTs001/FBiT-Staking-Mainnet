@@ -1,0 +1,15 @@
+import { MetadataRoute } from 'next';
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [
+      {
+        userAgent: '*',
+        allow: '/',
+        disallow: ['/api/', '/export-data/'],
+      },
+    ],
+    sitemap: 'https://stake.futurebit.in/sitemap.xml',
+    host: 'https://stake.futurebit.in',
+  };
+}
