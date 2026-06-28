@@ -2,18 +2,6 @@
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "installCommand": "npm install",
-  "rewrites": [
-    {
-      "source": "/",
-      "destination": "/landing",
-      "has": [{ "type": "host", "value": "futurebit.in" }]
-    },
-    {
-      "source": "/",
-      "destination": "/landing",
-      "has": [{ "type": "host", "value": "www.futurebit.in" }]
-    }
-  ],
   "headers": [
     {
       "source": "/(.*)",
