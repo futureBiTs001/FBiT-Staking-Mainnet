@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Script from 'next/script';
+import SupportChat from '@/components/ui/SupportChat';
 
 // ── Social links — update these with real handles ─────────────────────────────
 const SOCIAL = {
@@ -595,6 +596,11 @@ export default function LandingPage() {
             </div>
 
             <div className="pt-8 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-text-muted">
+              <div className="flex flex-wrap gap-4">
+                <a href="/about"   className="hover:text-brand-400 transition-colors">About Us</a>
+                <a href="/privacy" className="hover:text-brand-400 transition-colors">Privacy Policy</a>
+                <a href="/terms"   className="hover:text-brand-400 transition-colors">Terms & Conditions</a>
+              </div>
               <p>© 2026 FutureBit Staking. All rights reserved.</p>
               <p className="text-center">
                 <span className="text-accent-rose">⚠</span> DeFi involves risk. Only invest what you can afford to lose.
@@ -604,6 +610,9 @@ export default function LandingPage() {
         </footer>
 
       </div>
+
+      {/* AI Support Chat */}
+      <SupportChat />
     </>
   );
 }
