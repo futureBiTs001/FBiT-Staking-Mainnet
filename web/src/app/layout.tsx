@@ -83,7 +83,7 @@ export const metadata: Metadata = {
   },
 
   verification: {
-    google: 'GOOGLE_SEARCH_CONSOLE_VERIFICATION_CODE', // replace after GSC setup
+    google: '15cb21c7066bda5e',
   },
 };
 
