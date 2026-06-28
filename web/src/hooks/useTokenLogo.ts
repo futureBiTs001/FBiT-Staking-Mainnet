@@ -31,7 +31,8 @@ function isPlaceholder(addr: string) {
 // ─── Solana: Metaplex DAS API ─────────────────────────────────────────────────
 async function fetchSolanaMetaplexLogo(
   rpcUrl: string,
-  mintAddress: string
+  mintAddress: string,
+  signal: AbortSignal
 ): Promise<{ logoUrl: string | null; name: string | null; symbol: string | null }> {
   const res = await fetch(rpcUrl, {
     method: 'POST',
@@ -42,6 +43,7 @@ async function fetchSolanaMetaplexLogo(
       method: 'getAsset',
       params: { id: mintAddress },
     }),
+    signal,
   });
 
   if (!res.ok) return { logoUrl: null, name: null, symbol: null };
@@ -51,17 +53,15 @@ async function fetchSolanaMetaplexLogo(
   const name   = result?.content?.metadata?.name   ?? null;
   const symbol = result?.content?.metadata?.symbol ?? null;
 
-  // Direct image link in DAS response
   const directImage = result?.content?.links?.image ?? null;
   if (directImage && directImage.startsWith('http')) {
     return { logoUrl: directImage, name, symbol };
   }
 
-  // Fallback: fetch the metadata URI JSON and read `image`
   const jsonUri = result?.content?.json_uri ?? null;
   if (jsonUri && jsonUri.startsWith('http')) {
     try {
-      const metaRes = await fetch(jsonUri, { cache: 'force-cache' });
+      const metaRes = await fetch(jsonUri, { cache: 'force-cache', signal });
       if (metaRes.ok) {
         const meta = await metaRes.json();
         if (meta?.image && meta.image.startsWith('http')) {
@@ -78,16 +78,16 @@ async function fetchSolanaMetaplexLogo(
 
 // ─── DexScreener: info.imageUrl (both chains) ────────────────────────────────
 async function fetchDexScreenerLogo(
-  tokenAddress: string
+  tokenAddress: string,
+  signal: AbortSignal
 ): Promise<{ logoUrl: string | null; name: string | null; symbol: string | null }> {
   const res = await fetch(
     `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`,
-    { cache: 'no-store' }
+    { cache: 'no-store', signal }
   );
   if (!res.ok) return { logoUrl: null, name: null, symbol: null };
   const data = await res.json();
 
-  // DexScreener returns info.imageUrl on the pair level
   const pair = data?.pairs?.[0];
   const logoUrl = pair?.info?.imageUrl ?? null;
   const name    = pair?.baseToken?.name   ?? null;
@@ -99,12 +99,12 @@ async function fetchDexScreenerLogo(
 // ─── Trust Wallet GitHub (Polygon/EVM fallback) ───────────────────────────────
 async function fetchTrustWalletLogo(
   tokenAddress: string,
+  signal: AbortSignal,
   chain: 'polygon' | 'ethereum' = 'polygon'
 ): Promise<string | null> {
-  // Trust Wallet requires EIP-55 checksum address; do a basic HEAD check
   const url = `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${chain}/assets/${tokenAddress}/logo.png`;
   try {
-    const res = await fetch(url, { method: 'HEAD' });
+    const res = await fetch(url, { method: 'HEAD', signal });
     return res.ok ? url : null;
   } catch {
     return null;
@@ -138,42 +138,42 @@ export function useTokenLogo(): TokenLogoState {
       return;
     }
 
+    const signal = abortRef.current!.signal;
+
     (async () => {
       try {
         if (selectedNetwork === 'solana') {
-          // 1. Metaplex DAS (on-chain smart contract metadata)
-          const { logoUrl, name, symbol } = await fetchSolanaMetaplexLogo(config.rpcUrl, tokenAddress);
+          const { logoUrl, name, symbol } = await fetchSolanaMetaplexLogo(config.rpcUrl, tokenAddress, signal);
           if (logoUrl) {
             setState({ logoUrl, tokenName: name, tokenSymbol: symbol, isLoading: false, source: 'metaplex' });
             return;
           }
 
-          // 2. DexScreener fallback
-          const ds = await fetchDexScreenerLogo(tokenAddress);
+          const ds = await fetchDexScreenerLogo(tokenAddress, signal);
           if (ds.logoUrl) {
             setState({ logoUrl: ds.logoUrl, tokenName: ds.name, tokenSymbol: ds.symbol, isLoading: false, source: 'dexscreener' });
             return;
           }
         } else {
-          // Polygon: DexScreener first
-          const ds = await fetchDexScreenerLogo(tokenAddress);
+          const ds = await fetchDexScreenerLogo(tokenAddress, signal);
           if (ds.logoUrl) {
             setState({ logoUrl: ds.logoUrl, tokenName: ds.name, tokenSymbol: ds.symbol, isLoading: false, source: 'dexscreener' });
             return;
           }
 
-          // Trust Wallet fallback
-          const tw = await fetchTrustWalletLogo(tokenAddress);
+          const tw = await fetchTrustWalletLogo(tokenAddress, signal);
           if (tw) {
             setState({ logoUrl: tw, tokenName: null, tokenSymbol: null, isLoading: false, source: 'trustwallet' });
             return;
           }
         }
 
-        // Nothing found
-        setState(s => ({ ...s, isLoading: false, source: 'none' }));
-      } catch {
-        setState(s => ({ ...s, isLoading: false, source: 'none' }));
+        if (!signal.aborted) setState(s => ({ ...s, isLoading: false, source: 'none' }));
+      } catch (e: any) {
+        // AbortError = component unmounted / network switched — no state update needed
+        if (e?.name !== 'AbortError') {
+          setState(s => ({ ...s, isLoading: false, source: 'none' }));
+        }
       }
     })();
   }, [selectedNetwork]);

@@ -51,7 +51,7 @@ export function usePolygonStaking() {
               chainName: POLYGON_CONFIG.name,
               rpcUrls: [POLYGON_CONFIG.rpcUrl],
               blockExplorerUrls: [POLYGON_CONFIG.explorerUrl],
-              nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+              nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
             }],
           });
         }

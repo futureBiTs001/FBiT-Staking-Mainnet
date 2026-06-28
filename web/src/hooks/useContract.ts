@@ -95,7 +95,7 @@ export interface ContractHook {
   /** true when isLive AND wallet connected */
   isReady: boolean;
 
-  stake(amount: number, referrer?: string): Promise<{ txHash: string; stakedAt?: number }>;
+  stake(amount: number, referrer?: string): Promise<{ txHash: string; stakeIndex?: number; stakedAt?: number }>;
   claimRewards(stakeId: number | string, stakedAt: number): Promise<{ txHash: string; reward: number }>;
   compoundRewards(stakeId: number | string, stakedAt: number): Promise<{ txHash: string; reward: number }>;
   unstake(stakeId: number | string, stakedAt: number): Promise<{ txHash: string }>;
