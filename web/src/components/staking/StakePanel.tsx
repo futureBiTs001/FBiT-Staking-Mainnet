@@ -110,10 +110,10 @@ export default function StakePanel() {
       const referrer = (selectedNetwork === 'solana' ? isSolRef : isEvmRef) ? rawReferrer : undefined;
       const result = await contract.stake(stakeAmount, referrer ?? undefined);
       txHash = result.txHash;
-      // For Solana, result.stakedAt is the monotonic stakeId (0, 1, 2…), not a timestamp.
-      // Always keep the locally captured timestamp for stakedAt/unlockAt display.
+      // For Solana, stakeIndex is the monotonic on-chain stakeId (0, 1, 2…).
+      // stakedAt is kept as local Unix timestamp for display only.
       const stakeEntryId = selectedNetwork === 'solana'
-        ? (result.stakedAt ?? existingStakes.length)
+        ? (result.stakeIndex ?? existingStakes.length)
         : existingStakes.length;
       contract.syncPlatformStats().catch(() => {});
 

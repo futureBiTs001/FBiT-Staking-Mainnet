@@ -90,9 +90,7 @@ function patchIdl(rawIdl: any, programAddress: string): any {
   if (patched.instructions) {
     patched.instructions = patched.instructions.map((ix: any) => {
       const disc = ix.discriminator ?? IX_DISCRIMINATORS[ix.name] ?? [];
-      if (typeof window !== 'undefined') {
-        console.log(`[patchIdl] ix="${ix.name}" disc=${JSON.stringify(disc)}`);
-      }
+
       return {
         ...ix,
         accounts: fixIxAccounts(ix.accounts ?? []),
@@ -572,7 +570,7 @@ export async function solanaRegisterUser(referrer?: string): Promise<{ txHash: s
 export async function solanaStake(
   amount: number,
   referrer?: string
-): Promise<{ txHash: string; stakedAt: number }> {
+): Promise<{ txHash: string; stakeIndex: number }> {
   if (!amount || amount < 1) throw new Error('Minimum stake is 1 FBiT.');
   const program  = getProgram();
   const owner    = getOwner();
@@ -592,20 +590,25 @@ export async function solanaStake(
   const stakeVault   = getStakeVault();
   const rewardVault  = getRewardVault();
 
+  // stakeId = current stakeCount on-chain — MUST succeed or we'd derive wrong PDA
   let stakeId = 0;
-  let adminStakeAccount = ata(stakeMint, owner); // fallback
   try {
     const userAccData: any = await (program.account as any).userAccount.fetch(userAccPda);
     stakeId = userAccData.stakeCount ? userAccData.stakeCount.toNumber() : 0;
-  } catch {}
+  } catch (e) {
+    throw new Error(`Failed to fetch user stake count — please retry. (${(e as Error).message})`);
+  }
 
-  // Get platform authority for adminStakeAccount
+  // adminStakeAccount = platform authority ATA — MUST succeed or stake goes to wrong account
+  let adminStakeAccount: import('@solana/web3.js').PublicKey;
   try {
     const [pda] = platformPda();
     const platformData: any = await (program.account as any).platform.fetch(pda);
     const authorityKey = new PublicKey(platformData.authority.toString());
     adminStakeAccount = ata(stakeMint, authorityKey);
-  } catch {}
+  } catch (e) {
+    throw new Error(`Failed to fetch platform authority — please retry. (${(e as Error).message})`);
+  }
 
   const [stakeEntryAccPda] = stakeEntryPda(owner, stakeId);
 
@@ -669,7 +672,7 @@ export async function solanaStake(
 
   // stakeId is the stake_count fetched before sending the tx — deterministic PDA seed.
   // Store it so claim/compound/unstake can re-derive the correct PDA.
-  return { txHash: tx, stakedAt: stakeId };
+  return { txHash: tx, stakeIndex: stakeId };
 }
 
 // Returns a releaseEmission TransactionInstruction if the reserve has ≥1 FBiT
