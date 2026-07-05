@@ -20,7 +20,7 @@ export default function StakePanel() {
   const [amount, setAmount] = useState('');
   const [isStaking, setIsStaking] = useState(false);
   const [tokenBalance, setTokenBalance] = useState(0);
-  const [effectiveAPY, setEffectiveAPY] = useState(10); // percent, fetched live from chain (10%–300%)
+  const [effectiveAPYBps, setEffectiveAPYBps] = useState(1000); // basis points, fetched live from chain (1000–30000 = 10%–300%)
 
   // Direct balance fetch — uses chain-specific address so balance always shows correctly
   const fetchTokenBalance = useCallback(async () => {
@@ -49,8 +49,12 @@ export default function StakePanel() {
   // Sync effectiveAPY from store (populated by syncPlatformStats on mount/network-switch)
   const storeAPY = useAppStore(s => s.platformStats.effectiveAPY);
   useEffect(() => {
-    if (storeAPY && storeAPY > 0) setEffectiveAPY(Math.round(storeAPY / 100));
+    if (storeAPY && storeAPY > 0) setEffectiveAPYBps(storeAPY);
   }, [storeAPY]);
+
+  // Whole-percent value for display only — calculations below use the raw bps
+  // value so the reward estimate matches the Dashboard's live accrual exactly.
+  const effectiveAPY = Math.round(effectiveAPYBps / 100);
 
   // Keep platform stats fresh
   useEffect(() => {
@@ -72,14 +76,14 @@ export default function StakePanel() {
   const lockDays      = platformStats.lockPeriodDays  ?? LOCK_PERIOD.days;
 
   const estimatedRewards = useMemo(() => {
-    const apy = effectiveAPY / 100;
+    const apy = effectiveAPYBps / 10000;
     const perInterval = (stakeAmount * apy) / 1460;
     return {
       perInterval,
       daily: perInterval * 4,
       total: perInterval * 4 * lockDays,
     };
-  }, [stakeAmount, effectiveAPY, lockDays]);
+  }, [stakeAmount, effectiveAPYBps, lockDays]);
 
   const handleStake = async () => {
     if (!stakeAmount || stakeAmount <= 0 || stakeAmount > tokenBalance) return;
@@ -126,7 +130,7 @@ export default function StakePanel() {
         lastClaimAt: stakedAt,
         totalClaimed: 0,
         isActive: true,
-        apy: effectiveAPY * 100,
+        apy: effectiveAPYBps,
       };
 
       addStake(newStake);
@@ -260,21 +264,21 @@ export default function StakePanel() {
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setAmount((tokenBalance * 0.25).toFixed(0))}
+                  onClick={() => setAmount(Math.floor(tokenBalance * 0.25).toString())}
                   className="px-2 py-1 rounded-md text-xs font-display bg-white/5 hover:bg-white/10 text-text-secondary transition-colors"
                 >
                   25%
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAmount((tokenBalance * 0.5).toFixed(0))}
+                  onClick={() => setAmount(Math.floor(tokenBalance * 0.5).toString())}
                   className="px-2 py-1 rounded-md text-xs font-display bg-white/5 hover:bg-white/10 text-text-secondary transition-colors"
                 >
                   50%
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAmount(tokenBalance.toFixed(0))}
+                  onClick={() => setAmount(Math.floor(tokenBalance).toString())}
                   className="px-2 py-1 rounded-md text-xs font-display bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 transition-colors"
                 >
                   MAX

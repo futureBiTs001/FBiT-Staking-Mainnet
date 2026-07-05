@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useMemo } from 'react';
-import { useWallet } from '@/context/WalletContext';
+import { useWallet, isAdminAddress } from '@/context/WalletContext';
 import { useAppStore } from '@/lib/store';
 import { NETWORK_CONFIG } from '@/lib/config';
 import { getBotGuard } from '@/lib/botManagement';
@@ -237,8 +237,10 @@ export function useContract(): ContractHook {
     // Emission release is bundled as a pre-instruction inside every claim/compound
     // transaction — no separate background trigger needed or wanted here.
 
-    // Auto-halving only: permissionless, fires at most once per 4-year cycle, no wallet popup
-    if (selectedNetwork === 'solana' && chainAddress) {
+    // Auto-halving: permissionless on-chain, but still requires a signed transaction
+    // from whoever calls it — restrict to admin wallets so ordinary visitors never
+    // see an unsolicited signature prompt when a halving becomes due.
+    if (selectedNetwork === 'solana' && chainAddress && isAdminAddress(chainAddress)) {
       if (stats.halvingStartTime && stats.halvingStartTime > 0) {
         const nowSecs      = Math.floor(Date.now() / 1000);
         const halvingEpoch = stats.halvingEpoch ?? 0;

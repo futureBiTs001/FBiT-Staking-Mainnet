@@ -8,6 +8,7 @@ import ExtensionErrorSuppressor from '@/components/ExtensionErrorSuppressor';
 import DataMigration from '@/components/DataMigration';
 import { warnMissingEnv } from '@/lib/security';
 import AdsManager from '@/components/ads/AdsManager';
+import SupportChat from '@/components/chat/SupportChat';
 
 warnMissingEnv();
 
@@ -251,6 +252,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <div className="relative z-10 min-h-screen">
               {children}
             </div>
+            <SupportChat />
           </WalletProvider>
         </AppKitProvider>
       </body>
