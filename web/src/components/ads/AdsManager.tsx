@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { getAdConfig, type AdConfig } from '@/lib/adConfig';
 
 declare global {
@@ -110,24 +110,14 @@ function loadAdcash(cfg: AdConfig['adcash']) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
+// Ad config is static per deploy (env vars, not runtime-editable) so this only
+// ever needs to apply once on mount.
 export default function AdsManager() {
-  const applied = useRef<string>('');
-
-  const applyConfig = () => {
+  useEffect(() => {
     const cfg = getAdConfig();
-    const key = JSON.stringify(cfg);
-    if (key === applied.current) return;
-    applied.current = key;
-
     loadCoinzilla(cfg.coinzilla);
     loadAdcash(cfg.adcash);
-  };
-
-  useEffect(() => {
-    applyConfig();
-    window.addEventListener('fbit-ad-config-changed', applyConfig);
-    return () => window.removeEventListener('fbit-ad-config-changed', applyConfig);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   return null;
 }

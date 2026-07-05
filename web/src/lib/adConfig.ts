@@ -25,45 +25,28 @@ export interface AdConfig {
   };
 }
 
-const STORAGE_KEY = 'fbit-ad-config';
+// Ad placements are configured via NEXT_PUBLIC_ADS_* env vars (set in Vercel project
+// settings, redeploy to apply) rather than a runtime admin toggle — this app has no
+// backend database, so a "live" admin-editable setting would only ever affect the
+// admin's own browser (localStorage), never other visitors. A zone ID being present
+// is what enables that placement.
+function zone(envVar: string | undefined): { enabled: boolean; zoneId: string } {
+  const zoneId = (envVar ?? '').trim();
+  return { enabled: !!zoneId, zoneId };
+}
 
-export const DEFAULT_AD_CONFIG: AdConfig = {
+export const AD_CONFIG: AdConfig = {
   coinzilla: {
-    banner: { enabled: false, zoneId: '' },
-    sticky: { enabled: false, zoneId: '' },
-    native: { enabled: false, zoneId: '' },
+    banner: zone(process.env.NEXT_PUBLIC_ADS_COINZILLA_BANNER_ZONE),
+    sticky: zone(process.env.NEXT_PUBLIC_ADS_COINZILLA_STICKY_ZONE),
+    native: zone(process.env.NEXT_PUBLIC_ADS_COINZILLA_NATIVE_ZONE),
   },
   adcash: {
-    displayBanner: { enabled: false, zoneId: '' },
-    inPagePush:    { enabled: false, zoneId: '' },
+    displayBanner: zone(process.env.NEXT_PUBLIC_ADS_ADCASH_BANNER_ZONE),
+    inPagePush:    zone(process.env.NEXT_PUBLIC_ADS_ADCASH_PUSH_ZONE),
   },
 };
 
 export function getAdConfig(): AdConfig {
-  if (typeof window === 'undefined') return DEFAULT_AD_CONFIG;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_AD_CONFIG;
-    const parsed = JSON.parse(raw);
-    return {
-      coinzilla: {
-        banner: { ...DEFAULT_AD_CONFIG.coinzilla.banner, ...parsed.coinzilla?.banner },
-        sticky: { ...DEFAULT_AD_CONFIG.coinzilla.sticky, ...parsed.coinzilla?.sticky },
-        native: { ...DEFAULT_AD_CONFIG.coinzilla.native, ...parsed.coinzilla?.native },
-      },
-      adcash: {
-        displayBanner: { ...DEFAULT_AD_CONFIG.adcash.displayBanner, ...parsed.adcash?.displayBanner },
-        inPagePush:    { ...DEFAULT_AD_CONFIG.adcash.inPagePush,    ...parsed.adcash?.inPagePush    },
-      },
-    };
-  } catch {
-    return DEFAULT_AD_CONFIG;
-  }
-}
-
-export function saveAdConfig(config: AdConfig): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-  // Notify AdsManager to reload
-  window.dispatchEvent(new CustomEvent('fbit-ad-config-changed'));
+  return AD_CONFIG;
 }
