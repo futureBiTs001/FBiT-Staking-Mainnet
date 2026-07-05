@@ -16,7 +16,7 @@ const SIZE: Record<string, { box: string; text: string; pulse: string }> = {
 function FBiTFallback({ size }: { size: string }) {
   const s = SIZE[size] ?? SIZE.md;
   return (
-    <div className={`${s.box} rounded-xl bg-gradient-to-br from-brand-500 to-accent-cyan flex items-center justify-center shrink-0`}>
+    <div className={`${s.box} rounded-xl bg-linear-to-br from-brand-500 to-accent-cyan flex items-center justify-center shrink-0`}>
       <span className={`font-display font-extrabold text-surface-900 ${s.text} leading-none`}>F</span>
     </div>
   );
