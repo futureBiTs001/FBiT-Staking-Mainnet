@@ -5,7 +5,6 @@ import toast from 'react-hot-toast';
 import { useWallet } from '@/context/WalletContext';
 import { useAppStore } from '@/lib/store';
 import { shortenAddress } from '@/lib/utils';
-import TokenLogo from '@/components/ui/TokenLogo';
 import { sanitizeErrorMessage } from '@/lib/security';
 import { polygonIsRegistered } from '@/lib/contracts/polygon';
 
@@ -351,7 +350,11 @@ export default function Header() {
         <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <TokenLogo size="md" showLiveDot />
+            <div className="relative inline-flex shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="FBiT logo" className="w-9 h-9 rounded-full object-cover" />
+              <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-brand-500 border-2 border-surface-900 animate-pulse" />
+            </div>
             <div className="hidden sm:block">
               <h1 className="font-display font-bold text-lg leading-tight">Future Bit (FBiT) Staking Mainnet</h1>
               <p className="text-[10px] text-text-secondary font-mono tracking-wider uppercase">Multi-Chain Protocol</p>
