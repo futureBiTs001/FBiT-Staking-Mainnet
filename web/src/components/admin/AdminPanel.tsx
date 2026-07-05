@@ -10,7 +10,7 @@ import { useContract } from '@/hooks/useContract';
 import { TEAM_TARGET_TIERS } from '@/types';
 import { checkRateLimit, isValidWalletAddress, isValidAmount, isValidBonusBps, sanitizeText, sanitizeErrorMessage } from '@/lib/security';
 import ContractSetupNotice from '@/components/ui/ContractSetupNotice';
-import { getAdConfig, saveAdConfig, type AdConfig } from '@/lib/adConfig';
+import { getAdConfig } from '@/lib/adConfig';
 
 export default function AdminPanel() {
   const { address } = useWallet();
@@ -27,8 +27,6 @@ export default function AdminPanel() {
   const [userAddress, setUserAddress]   = useState('');
   const [processing, setProcessing]       = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<'pool' | 'rates' | 'users' | 'tiers' | 'platform' | 'ads'>('pool');
-  const [adConfig, setAdConfigState] = useState<AdConfig | null>(null);
-  const [adSaved, setAdSaved] = useState(false);
   const [renounceConfirm, setRenounceConfirm] = useState(false);
 
   // Per-level referral percentages state (10 levels, default values in BPS)
@@ -110,21 +108,6 @@ export default function AdminPanel() {
     } finally {
       setProcessing(null);
     }
-  };
-
-  // Load ad config from localStorage when ads tab is opened
-  useEffect(() => {
-    if (activeSection === 'ads') {
-      setAdConfigState(getAdConfig());
-      setAdSaved(false);
-    }
-  }, [activeSection]);
-
-  const handleSaveAdConfig = () => {
-    if (!adConfig) return;
-    saveAdConfig(adConfig);
-    setAdSaved(true);
-    toast.success('Ad settings saved! Reload the page to apply changes.');
   };
 
   // Check on-chain whether Platform PDA is initialized
@@ -300,7 +283,7 @@ export default function AdminPanel() {
   };
 
   const EMISSION_MIN = 10_000;
-  const EMISSION_MAX = 1_000_000;
+  const EMISSION_MAX = 1_000_000_000; // matches contract's on-chain cap (setAnnualEmission)
 
   const handleSetAnnualEmission = () => {
     const emission = parseFloat(annualEmissionValue);
@@ -1811,211 +1794,37 @@ export default function AdminPanel() {
             </div>
           </div>
 
-          {!adConfig ? (
-            <div className="glass-card text-center text-text-muted py-8 animate-pulse">Loading ad settings…</div>
-          ) : (
-            <>
-              {/* Coinzilla Banner */}
-              <div className="glass-card space-y-4 border border-accent-amber/20 bg-accent-amber/5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-display font-semibold text-lg flex items-center gap-2">
-                      <span className="text-xl">🪙</span> Coinzilla — Display Banner
-                    </h3>
-                    <p className="text-text-muted text-xs mt-0.5">Crypto-specific ad network. Best for DeFi sites. No ban risk.</p>
-                  </div>
-                  <button
-                    type="button"
-                    aria-label={adConfig.coinzilla.banner.enabled ? 'Disable Coinzilla Banner' : 'Enable Coinzilla Banner'}
-                    onClick={() => setAdConfigState(c => c ? { ...c, coinzilla: { ...c.coinzilla, banner: { ...c.coinzilla.banner, enabled: !c.coinzilla.banner.enabled } } } : c)}
-                    className={`relative w-12 h-6 rounded-full transition-colors ${adConfig.coinzilla.banner.enabled ? 'bg-brand-500' : 'bg-surface-700 border border-white/10'}`}
-                  >
-                    <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${adConfig.coinzilla.banner.enabled ? 'left-7' : 'left-1'}`} />
-                  </button>
-                </div>
-                {adConfig.coinzilla.banner.enabled && (
-                  <div className="space-y-2">
-                    <label className="text-sm text-text-secondary font-display block">
-                      Zone ID <span className="text-text-muted">(coinzilla.io → Publisher → Zones)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={adConfig.coinzilla.banner.zoneId}
-                      onChange={e => setAdConfigState(c => c ? { ...c, coinzilla: { ...c.coinzilla, banner: { ...c.coinzilla.banner, zoneId: e.target.value.trim() } } } : c)}
-                      placeholder="e.g. 123456"
-                      className="input-field font-mono text-sm"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Coinzilla Sticky */}
-              <div className="glass-card space-y-4 border border-white/10">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-display font-semibold text-lg flex items-center gap-2">
-                      <span className="text-xl">📌</span> Coinzilla — Sticky Bar
-                    </h3>
-                    <p className="text-text-muted text-xs mt-0.5">Fixed bottom bar — always visible. High earnings.</p>
-                  </div>
-                  <button
-                    type="button"
-                    aria-label={adConfig.coinzilla.sticky.enabled ? 'Disable Coinzilla Sticky' : 'Enable Coinzilla Sticky'}
-                    onClick={() => setAdConfigState(c => c ? { ...c, coinzilla: { ...c.coinzilla, sticky: { ...c.coinzilla.sticky, enabled: !c.coinzilla.sticky.enabled } } } : c)}
-                    className={`relative w-12 h-6 rounded-full transition-colors ${adConfig.coinzilla.sticky.enabled ? 'bg-brand-500' : 'bg-surface-700 border border-white/10'}`}
-                  >
-                    <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${adConfig.coinzilla.sticky.enabled ? 'left-7' : 'left-1'}`} />
-                  </button>
-                </div>
-                {adConfig.coinzilla.sticky.enabled && (
-                  <div className="space-y-2">
-                    <label className="text-sm text-text-secondary font-display block">Zone ID</label>
-                    <input
-                      type="text"
-                      value={adConfig.coinzilla.sticky.zoneId}
-                      onChange={e => setAdConfigState(c => c ? { ...c, coinzilla: { ...c.coinzilla, sticky: { ...c.coinzilla.sticky, zoneId: e.target.value.trim() } } } : c)}
-                      placeholder="e.g. 123457"
-                      className="input-field font-mono text-sm"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Coinzilla Native */}
-              <div className="glass-card space-y-4 border border-white/10">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-display font-semibold text-lg flex items-center gap-2">
-                      <span className="text-xl">📰</span> Coinzilla — Native Ad
-                    </h3>
-                    <p className="text-text-muted text-xs mt-0.5">Content-style ads — blend with the page. High CTR.</p>
-                  </div>
-                  <button
-                    type="button"
-                    aria-label={adConfig.coinzilla.native.enabled ? 'Disable Coinzilla Native' : 'Enable Coinzilla Native'}
-                    onClick={() => setAdConfigState(c => c ? { ...c, coinzilla: { ...c.coinzilla, native: { ...c.coinzilla.native, enabled: !c.coinzilla.native.enabled } } } : c)}
-                    className={`relative w-12 h-6 rounded-full transition-colors ${adConfig.coinzilla.native.enabled ? 'bg-brand-500' : 'bg-surface-700 border border-white/10'}`}
-                  >
-                    <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${adConfig.coinzilla.native.enabled ? 'left-7' : 'left-1'}`} />
-                  </button>
-                </div>
-                {adConfig.coinzilla.native.enabled && (
-                  <div className="space-y-2">
-                    <label className="text-sm text-text-secondary font-display block">Zone ID</label>
-                    <input
-                      type="text"
-                      value={adConfig.coinzilla.native.zoneId}
-                      onChange={e => setAdConfigState(c => c ? { ...c, coinzilla: { ...c.coinzilla, native: { ...c.coinzilla.native, zoneId: e.target.value.trim() } } } : c)}
-                      placeholder="e.g. 123458"
-                      className="input-field font-mono text-sm"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Adcash Display Banner */}
-              <div className="glass-card space-y-4 border border-white/10">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-display font-semibold text-lg flex items-center gap-2">
-                      <span className="text-xl">📊</span> Adcash Display Banner
-                    </h3>
-                    <p className="text-text-muted text-xs mt-0.5">Fixed banner at the bottom of every page.</p>
-                  </div>
-                  <button
-                    type="button"
-                    aria-label={adConfig.adcash.displayBanner.enabled ? 'Disable Adcash Display Banner' : 'Enable Adcash Display Banner'}
-                    onClick={() => setAdConfigState(c => c ? { ...c, adcash: { ...c.adcash, displayBanner: { ...c.adcash.displayBanner, enabled: !c.adcash.displayBanner.enabled } } } : c)}
-                    className={`relative w-12 h-6 rounded-full transition-colors ${adConfig.adcash.displayBanner.enabled ? 'bg-brand-500' : 'bg-surface-700 border border-white/10'}`}
-                  >
-                    <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${adConfig.adcash.displayBanner.enabled ? 'left-7' : 'left-1'}`} />
-                  </button>
-                </div>
-
-                {adConfig.adcash.displayBanner.enabled && (
-                  <div className="space-y-2">
-                    <label className="text-sm text-text-secondary font-display block">
-                      Zone ID <span className="text-text-muted">(from adcash.com → Publisher → Ad Zones)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={adConfig.adcash.displayBanner.zoneId}
-                      onChange={e => setAdConfigState(c => c ? { ...c, adcash: { ...c.adcash, displayBanner: { ...c.adcash.displayBanner, zoneId: e.target.value.trim() } } } : c)}
-                      placeholder="e.g. 1234567"
-                      className="input-field font-mono text-sm"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Adcash In-Page Push */}
-              <div className="glass-card space-y-4 border border-white/10">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-display font-semibold text-lg flex items-center gap-2">
-                      <span className="text-xl">🔔</span> Adcash In-Page Push
-                    </h3>
-                    <p className="text-text-muted text-xs mt-0.5">Push notification style ads — shown automatically. High CTR.</p>
-                  </div>
-                  <button
-                    type="button"
-                    aria-label={adConfig.adcash.inPagePush.enabled ? 'Disable Adcash In-Page Push' : 'Enable Adcash In-Page Push'}
-                    onClick={() => setAdConfigState(c => c ? { ...c, adcash: { ...c.adcash, inPagePush: { ...c.adcash.inPagePush, enabled: !c.adcash.inPagePush.enabled } } } : c)}
-                    className={`relative w-12 h-6 rounded-full transition-colors ${adConfig.adcash.inPagePush.enabled ? 'bg-brand-500' : 'bg-surface-700 border border-white/10'}`}
-                  >
-                    <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${adConfig.adcash.inPagePush.enabled ? 'left-7' : 'left-1'}`} />
-                  </button>
-                </div>
-
-                {adConfig.adcash.inPagePush.enabled && (
-                  <div className="space-y-2">
-                    <label className="text-sm text-text-secondary font-display block">
-                      Zone ID <span className="text-text-muted">(from adcash.com → Publisher → Ad Zones)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={adConfig.adcash.inPagePush.zoneId}
-                      onChange={e => setAdConfigState(c => c ? { ...c, adcash: { ...c.adcash, inPagePush: { ...c.adcash.inPagePush, zoneId: e.target.value.trim() } } } : c)}
-                      placeholder="e.g. 7654321"
-                      className="input-field font-mono text-sm"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Current status summary */}
+          {(() => {
+            const adConfig = getAdConfig();
+            const rows = [
+              { label: 'Coinzilla Display Banner', envVar: 'NEXT_PUBLIC_ADS_COINZILLA_BANNER_ZONE', slot: adConfig.coinzilla.banner },
+              { label: 'Coinzilla Sticky Bar',      envVar: 'NEXT_PUBLIC_ADS_COINZILLA_STICKY_ZONE', slot: adConfig.coinzilla.sticky },
+              { label: 'Coinzilla Native Ad',       envVar: 'NEXT_PUBLIC_ADS_COINZILLA_NATIVE_ZONE', slot: adConfig.coinzilla.native },
+              { label: 'Adcash Display Banner',     envVar: 'NEXT_PUBLIC_ADS_ADCASH_BANNER_ZONE',     slot: adConfig.adcash.displayBanner },
+              { label: 'Adcash In-Page Push',       envVar: 'NEXT_PUBLIC_ADS_ADCASH_PUSH_ZONE',       slot: adConfig.adcash.inPagePush },
+            ];
+            return (
               <div className="glass-card space-y-2 border border-white/5">
-                <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-1">Active Now</p>
-                {[
-                  { label: 'Coinzilla Display Banner', on: adConfig.coinzilla.banner.enabled && !!adConfig.coinzilla.banner.zoneId },
-                  { label: 'Coinzilla Sticky Bar',     on: adConfig.coinzilla.sticky.enabled && !!adConfig.coinzilla.sticky.zoneId },
-                  { label: 'Coinzilla Native Ad',      on: adConfig.coinzilla.native.enabled && !!adConfig.coinzilla.native.zoneId },
-                  { label: 'Adcash Display Banner',    on: adConfig.adcash.displayBanner.enabled && !!adConfig.adcash.displayBanner.zoneId },
-                  { label: 'Adcash In-Page Push',      on: adConfig.adcash.inPagePush.enabled && !!adConfig.adcash.inPagePush.zoneId },
-                ].map(({ label, on }) => (
+                <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-1">Ad Placements (read-only)</p>
+                {rows.map(({ label, envVar, slot }) => (
                   <div key={label} className="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-800/40 border border-white/5 text-xs">
-                    <span className="text-text-secondary">{label}</span>
-                    <span className={on ? 'text-brand-400 font-semibold' : 'text-text-muted'}>
-                      {on ? '● Active' : '○ Off'}
+                    <div>
+                      <span className="text-text-secondary">{label}</span>
+                      <p className="text-text-muted font-mono text-[10px] mt-0.5">{envVar}</p>
+                    </div>
+                    <span className={slot.enabled ? 'text-brand-400 font-semibold' : 'text-text-muted'}>
+                      {slot.enabled ? `● Active (zone ${slot.zoneId})` : '○ Off'}
                     </span>
                   </div>
                 ))}
+                <p className="text-xs text-text-muted mt-2">
+                  Ad zone IDs are set via environment variables in Vercel project settings (not editable here) —
+                  this app has no backend database, so a live in-panel toggle would only ever affect your own
+                  browser, not real visitors. Set the env var and redeploy to change a placement.
+                </p>
               </div>
-
-              {/* Save button */}
-              <button
-                type="button"
-                onClick={handleSaveAdConfig}
-                className="w-full py-3 px-6 rounded-xl font-display font-semibold text-sm btn-primary transition-all"
-              >
-                {adSaved ? '✓ Saved — Reload page to apply' : 'Save Ad Settings'}
-              </button>
-
-              <p className="text-xs text-text-muted text-center">
-                Settings are stored in your browser. After saving, reload the page for changes to take effect.
-              </p>
-            </>
-          )}
+            );
+          })()}
         </div>
       )}
     </div>

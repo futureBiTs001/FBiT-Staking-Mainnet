@@ -927,16 +927,19 @@ export async function polygonGetOnChainHistory(address: string): Promise<import(
       for (const ev of evs) {
         const args = (ev as any).args;
         const ts = await getTs(ev as any);
+        // Contract emits a 0-based level index (i=0 is the direct L1 referrer);
+        // the rest of the app (network tree, REFERRAL_LEVEL_BPS lookup) is 1-based.
+        const level = Number(args.level) + 1;
         records.push({
           id: `poly-ref-${ev.transactionHash}-${args.level}`,
           type: 'referral',
-          label: `Referral reward (Level ${args.level}) on Polygon`,
+          label: `Referral reward (Level ${level}) on Polygon`,
           amount: fromWei(args.amount),
           txHash: ev.transactionHash,
           timestamp: ts,
           status: 'success',
           network: 'polygon',
-          referralLevel: Number(args.level),
+          referralLevel: level,
         });
       }
     })(),
