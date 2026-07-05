@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { Toaster } from 'react-hot-toast';
 import { useAppStore } from '@/lib/store';
 import { useBotGuard } from '@/hooks/useBotGuard';
@@ -77,12 +78,18 @@ export default function AppPage() {
               </div>
               <span className="font-display text-sm text-text-muted">Future Bit (FBiT) Staking Mainnet</span>
             </div>
-            <div className="flex items-center gap-6 text-xs text-text-muted">
+            <div className="flex items-center gap-4 text-xs text-text-muted flex-wrap justify-center">
               <span>Solana + Polygon</span>
               <span>·</span>
               <span>10-Level Referrals</span>
               <span>·</span>
               <span>Up to 300% APY</span>
+              <span>·</span>
+              <Link href="/about" className="hover:text-brand-400 transition-colors">About</Link>
+              <span>·</span>
+              <Link href="/terms" className="hover:text-brand-400 transition-colors">Terms</Link>
+              <span>·</span>
+              <Link href="/privacy" className="hover:text-brand-400 transition-colors">Privacy</Link>
             </div>
           </div>
         </div>
