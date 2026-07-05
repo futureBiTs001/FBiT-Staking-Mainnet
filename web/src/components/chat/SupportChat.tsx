@@ -58,7 +58,7 @@ export default function SupportChat() {
   return (
     <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end">
       {open && (
-        <div className="glass-card w-[min(360px,calc(100vw-2.5rem))] h-[480px] mb-3 flex flex-col p-0 overflow-hidden">
+        <div className="glass-card w-[min(360px,calc(100vw-2.5rem))] h-120 mb-3 flex flex-col p-0 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
             <div>
               <p className="font-display font-semibold text-sm">FBiT Support</p>
