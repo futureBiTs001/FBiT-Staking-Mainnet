@@ -40,6 +40,41 @@ export function resetRateLimit(key: string): void {
   _callLog.delete(key);
 }
 
+// ── 1b. Server-route origin allowlist ──────────────────────────────────────────
+
+/**
+ * Strips scheme, path, and stray whitespace/escape artifacts so config values
+ * like "https://example.com", "example.com", or "example.com\n" all normalize
+ * to the same bare hostname for comparison.
+ */
+function normalizeHost(value: string): string {
+  return value
+    .replace(/\\[nr]/g, '')          // literal backslash-n / backslash-r artifacts
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '');
+}
+
+/**
+ * Checks a request's Origin header against a comma-separated allowlist (e.g. from
+ * NEXT_PUBLIC_SITE_URL). Compares bare hostnames so entries work whether or not
+ * they include a scheme. Returns true (allow) if the allowlist is empty.
+ */
+export function isAllowedOrigin(originHeader: string, allowlistEnv: string | undefined): boolean {
+  const allowedHosts = (allowlistEnv ?? '').split(',').map(normalizeHost).filter(Boolean);
+  if (allowedHosts.length === 0) return true;
+
+  let originHost: string;
+  try {
+    originHost = new URL(originHeader).hostname;
+  } catch {
+    originHost = normalizeHost(originHeader);
+  }
+  if (!originHost) return false;
+
+  return allowedHosts.some(h => originHost === h || originHost.endsWith(`.${h}`));
+}
+
 // ── 2. Input Sanitization ──────────────────────────────────────────────────────
 
 /**

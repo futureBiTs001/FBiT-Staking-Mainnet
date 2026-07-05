@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { isAllowedOrigin } from '@/lib/security';
 
 export const runtime    = 'nodejs';
 export const maxDuration = 15;
@@ -27,7 +28,6 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-const ALLOWED_ORIGINS = (process.env.NEXT_PUBLIC_SITE_URL ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
 const SYSTEM_PROMPT = `You are the support assistant embedded on the FBiT Staking website (stake.futurebit.in), a multi-chain DeFi staking platform. Answer only questions about this platform using the facts below. Keep answers short (2-4 sentences), friendly, and precise.
 
@@ -63,11 +63,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Too many requests. Please wait a moment.' }, { status: 429 });
   }
 
-  if (ALLOWED_ORIGINS.length > 0) {
-    const origin = req.headers.get('origin') ?? '';
-    if (!ALLOWED_ORIGINS.some(o => origin === o || origin.endsWith(`.${o}`))) {
-      return NextResponse.json({ error: 'Origin not allowed' }, { status: 403 });
-    }
+  if (!isAllowedOrigin(req.headers.get('origin') ?? '', process.env.NEXT_PUBLIC_SITE_URL)) {
+    return NextResponse.json({ error: 'Origin not allowed' }, { status: 403 });
   }
 
   try {
