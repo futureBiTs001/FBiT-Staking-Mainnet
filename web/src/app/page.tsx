@@ -73,9 +73,8 @@ export default function AppPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-linear-to-br from-brand-500 to-accent-cyan flex items-center justify-center">
-                <span className="font-display font-bold text-surface-900 text-[10px]">F</span>
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="FBiT logo" className="w-6 h-6 rounded-full object-cover" />
               <span className="font-display text-sm text-text-muted">Future Bit (FBiT) Staking Mainnet</span>
             </div>
             <div className="flex items-center gap-4 text-xs text-text-muted flex-wrap justify-center">
