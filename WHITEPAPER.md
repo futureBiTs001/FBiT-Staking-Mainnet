@@ -1,6 +1,6 @@
 # Future Bit (FBiT) Staking Platform — Whitepaper
 
-> **Version 1.0 · May 2026**
+> **Version 1.1 · July 2026**
 > Dual-Chain Staking Protocol on Polygon & Solana
 
 ---
@@ -27,18 +27,18 @@
 
 ## 1. Executive Summary
 
-**Future Bit (FBiT) Staking** is a decentralized, dual-chain staking protocol deployed on **Polygon (EVM)** and **Solana**. The platform allows token holders to stake WFBIT / FBiT tokens and earn dynamic Annual Percentage Yields (APY) ranging from **60% to 250%**, compoundable every 6 hours.
+**Future Bit (FBiT) Staking** is a decentralized, dual-chain staking protocol deployed on **Polygon (EVM)** and **Solana**. The platform allows token holders to stake WFBIT / FBiT tokens and earn dynamic Annual Percentage Yields (APY), compoundable every 6 hours. The dynamic range currently differs slightly per chain: **10%–300% on Solana** and **60%–250% on Polygon**.
 
 Beyond simple staking, FBiT introduces a **10-level deep referral system** and a **10-tier team bonus structure** that rewards community builders with additional on-chain bonuses. The protocol features a fully audited smart contract with a long-term **800-year emission reserve** that guarantees reward sustainability without centralized re-funding.
 
 Key highlights:
-- Up to **250% APY** (dynamic, PoS-based)
+- Up to **300% APY on Solana**, up to **250% APY on Polygon** (dynamic, PoS-based)
 - **30-day lock period** with 6-hour claim intervals
-- **10-level referral rewards** totaling up to ~30% passive income
+- **10-level referral rewards** totaling **30%** passive income
 - **10-tier team bonus** (Bronze → Titan) up to +10% additional APY
 - **800,000,000 WFBIT reserve** — 800-year emission runway (at 1M/year)
 - **Deflationary burn** on every claim, compound, and unstake
-- Deployments live on **Polygon Mainnet** (Chain ID 137) since May 2, 2026
+- Live on **Polygon Mainnet** (Chain ID 137) since May 2, 2026 and **Solana Mainnet** since program deployment (Program ID `8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp`)
 
 ---
 
@@ -46,7 +46,7 @@ Key highlights:
 
 The decentralized finance (DeFi) ecosystem has grown rapidly, but most staking protocols offer only flat, unsustainable APYs without any network-growth incentive built in. Future Bit Staking addresses these limitations with:
 
-1. **Dynamic APY** — yield adjusts automatically based on on-chain conditions (min 60%, max 250%), ensuring long-term sustainability.
+1. **Dynamic APY** — yield adjusts automatically based on on-chain conditions (10%–300% on Solana, 60%–250% on Polygon), ensuring long-term sustainability.
 2. **Multi-level referral architecture** — 10 levels of passive referral income that incentivize organic growth without off-chain pyramids.
 3. **Team-based tier bonuses** — users who build larger staking teams unlock bonus yields, aligning individual incentives with platform growth.
 4. **Deflationary token supply** — a burn mechanism on every transaction reduces circulating supply over time.
@@ -132,9 +132,8 @@ The Solana program is built with the **Anchor framework** using PDAs for all vau
 
 ### 4.4 Frontend
 
-The web application is built with **Next.js 14 (App Router)** and deployed on **Vercel**. Wallet connectivity is provided by:
-- **Reown AppKit** (formerly WalletConnect) for EVM wallets (MetaMask, etc.)
-- **Solflare SDK + Solana Wallet Standard** for Solana wallets (Phantom, Solflare, etc.)
+The web application is built with **Next.js 16 (App Router)** and deployed on **Vercel**. Wallet connectivity is provided by:
+- **Reown AppKit** (formerly WalletConnect) for both EVM wallets (MetaMask, Binance Web3 Wallet, etc.) and Solana wallets (Phantom, Solflare, Backpack, etc.), using AppKit's built-in Wallet Standard auto-detection rather than manually-registered legacy adapters
 
 ---
 
@@ -195,11 +194,11 @@ After the 30-day lock expires:
 
 FBiT uses a **Proof-of-Stake style dynamic APY** that fluctuates between a minimum and maximum:
 
-| Parameter   | Value                    |
-|-------------|--------------------------|
-| Minimum APY | **60%** (6,000 BPS)      |
-| Maximum APY | **250%** (25,000 BPS)    |
-| APY Unit    | Basis Points (BPS), where 10,000 BPS = 100% |
+| Parameter   | Solana              | Polygon              |
+|-------------|---------------------|-----------------------|
+| Minimum APY | **10%** (1,000 BPS) | **60%** (6,000 BPS)   |
+| Maximum APY | **300%** (30,000 BPS) | **250%** (25,000 BPS) |
+| APY Unit    | Basis Points (BPS), where 10,000 BPS = 100% | (same) |
 
 The effective APY (`getEffectiveAPY()`) is computed on-chain based on current platform conditions. When a user stakes, their APY is **locked in** at that moment — this means early stakers lock in higher APYs if the platform has more rewards available relative to total staked.
 
@@ -345,9 +344,9 @@ Tiers are calculated and applied **on-chain** at claim time via `getTeamBonusBps
 ### 10.3 Maximum Effective Yield
 
 A top-tier **Titan** user staking at maximum APY could earn:
-- Base APY: 250%
+- Base APY: 300% (Solana) / 250% (Polygon)
 - Team Bonus: +10%
-- **Total Effective APY: up to ~260%**
+- **Total Effective APY: up to ~310% (Solana) / ~260% (Polygon)**
 
 Plus passive referral income from 10 levels of downline activity.
 
@@ -417,7 +416,7 @@ Both contracts are **verified on Polygonscan and Sourcify**.
 | Asset             | Address                                                  |
 |-------------------|----------------------------------------------------------|
 | FBiT SPL Mint     | `CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu`         |
-| Program ID        | Deployment in progress (Anchor program compiled)         |
+| Program ID        | `8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp`         |
 
 ---
 
@@ -470,15 +469,16 @@ Every claim, compound, and unstake burns a portion of rewards. Over time:
 - [x] 10-tier team bonus system live
 - [x] Frontend deployed on Vercel
 
-### Phase 2 — Solana Launch (IN PROGRESS)
-- [x] Anchor program compiled (fbit_staking.so, 433KB)
+### Phase 2 — Solana Launch (COMPLETE ✓)
+- [x] Anchor program compiled (fbit_staking.so)
 - [x] FBiT SPL mint created on Solana mainnet
-- [ ] Fund program deployment wallet (~3.5 SOL required)
-- [ ] Deploy Anchor program to mainnet
-- [ ] Initialize platform account + fund reserve vault
-- [ ] Connect Solana program to frontend
+- [x] Anchor program deployed to mainnet (`8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp`)
+- [x] Platform account initialized + reserve vault funded
+- [x] Solana program connected to frontend — both chains fully operational
 
-### Phase 3 — Growth & Ecosystem
+### Phase 3 — Growth & Ecosystem (IN PROGRESS)
+- [x] AI-powered support chat widget
+- [x] Full SEO setup (structured data, sitemap, OG image)
 - [ ] Centralized Exchange (CEX) listing for WFBIT/FBiT
 - [ ] Cross-chain bridge: WFBIT ↔ FBiT (Polygon ↔ Solana)
 - [ ] Mobile application
@@ -499,17 +499,19 @@ The platform is live and fully operational on Polygon Mainnet, with Solana deplo
 
 ### Key Contract Constants
 
-| Parameter              | Value                        |
-|------------------------|------------------------------|
-| `LOCK_PERIOD`          | 30 days                      |
-| `CLAIM_INTERVAL`       | 21,600 seconds (6 hours)     |
-| `MIN_APY_BPS`          | 6,000 (60%)                  |
-| `MAX_APY_BPS`          | 25,000 (250%)                |
-| `ANNUAL_EMISSION`      | 1,000,000 WFBIT              |
-| `MIN_STAKE_AMOUNT`     | Read from contract           |
-| `MAX_STAKE_PER_USER`   | Read from contract           |
-| `BURN_BPS`             | Read from contract           |
-| Token Decimals         | 6                            |
+| Parameter              | Polygon                | Solana                  |
+|------------------------|-------------------------|--------------------------|
+| `LOCK_PERIOD`          | 30 days                 | 30 days                  |
+| `CLAIM_INTERVAL`       | 21,600 seconds (6 hours) | 21,600 seconds (6 hours) |
+| `MIN_APY_BPS`          | 6,000 (60%)              | 1,000 (10%)              |
+| `MAX_APY_BPS`          | 25,000 (250%)            | 30,000 (300%)            |
+| `ANNUAL_EMISSION`      | 1,000,000 WFBIT (default) | Set via admin           |
+| `MIN_STAKE_AMOUNT`     | 1 FBiT                  | 1 FBiT                   |
+| `MAX_STAKE_PER_USER`   | 500,000,000 FBiT (per `stake()` call — see note below) | 500,000,000 FBiT (per `stake()` call) |
+| `BURN_BPS`             | Read from contract (0–5,000 / 0–50%) | Read from contract |
+| Token Decimals         | 6                        | 6                        |
+
+> **Note:** `MAX_STAKE_PER_USER` is enforced per individual `stake()` call, not against the user's cumulative total staked. A user can exceed the intended per-user ceiling by splitting a large position across multiple `stake()` calls. This is a known limitation in the current deployed contracts on both chains — see the README changelog for details.
 
 ### Key Contract Functions (Public)
 

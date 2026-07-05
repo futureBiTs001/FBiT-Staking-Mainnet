@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| v1.6.x (latest) | ✅ |
+| v1.7.x (latest) | ✅ |
+| v1.6.x | ✅ |
 | v1.5.x | ✅ |
 | < v1.5 | ❌ |
 
@@ -63,6 +64,21 @@ Both smart contracts implement the following protections:
 - **Input Validation** — amount bounds checked on-chain
 
 > **Note:** The admin panel is a UI gate only. Real enforcement is done by the smart contract's on-chain access control modifiers.
+
+## Known Limitations
+
+These are disclosed transparently rather than silently patched, since both live on a deployed mainnet contract holding real user funds — fixing them requires a new contract version and a migration plan, not a routine patch.
+
+- **Per-user stake cap is enforced per-call, not cumulatively** (both Solana and Polygon contracts): `stake()` checks the incoming amount against the 500M-FBiT ceiling, but never against the user's running `total_staked`. A user can exceed the intended per-user ceiling by splitting a large position across multiple `stake()` calls. This does not put other users' funds at risk — it only affects the platform's own risk-concentration assumptions.
+
+## AI-Assisted Layers
+
+Two server-side routes call the Claude API (`@anthropic-ai/sdk`), both rate-limited per-IP and origin-restricted to the production domain:
+
+- `/api/bot-assess` — borderline bot-detection sessions get a Claude risk assessment; fails open (never blocks a user) on any error or API outage.
+- `/api/support-chat` — the user-facing support widget; scoped by system prompt to platform facts only, with no access to user funds, wallet state, or contract-write capability.
+
+Neither route can execute on-chain actions or access private keys — they only read request data (session signals, chat messages) and return a text/JSON response.
 
 ## Disclosure Policy
 
