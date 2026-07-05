@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { isAllowedOrigin } from '@/lib/security';
 
 export const runtime    = 'nodejs';
 export const maxDuration = 10;
@@ -34,9 +35,6 @@ function checkRateLimit(ip: string): boolean {
   slot.count++;
   return true;
 }
-
-// Allowed origins — tighten if you have a fixed production domain
-const ALLOWED_ORIGINS = (process.env.NEXT_PUBLIC_SITE_URL ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Request / response types
@@ -79,11 +77,8 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Origin check (skip when no allowed origins configured) ─────────────────
-  if (ALLOWED_ORIGINS.length > 0) {
-    const origin = req.headers.get('origin') ?? '';
-    if (!ALLOWED_ORIGINS.some(o => origin === o || origin.endsWith(`.${o}`))) {
-      return NextResponse.json<AssessResponse>(failOpen(), { status: 403 });
-    }
+  if (!isAllowedOrigin(req.headers.get('origin') ?? '', process.env.NEXT_PUBLIC_SITE_URL)) {
+    return NextResponse.json<AssessResponse>(failOpen(), { status: 403 });
   }
 
   try {
