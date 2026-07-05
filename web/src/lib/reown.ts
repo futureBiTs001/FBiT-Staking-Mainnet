@@ -4,8 +4,6 @@ import { createAppKit } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { SolanaAdapter } from '@reown/appkit-adapter-solana';
 import { polygon, solana } from '@reown/appkit/networks';
-import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom';
-import { SolflareWalletAdapter } from '@solana/wallet-adapter-solflare';
 
 // Primary:  dashboard.walletconnect.com
 // Fallback: dashboard.reown.com
@@ -14,8 +12,15 @@ const FALLBACK_PROJECT_ID = (process.env.NEXT_PUBLIC_REOWN_PROJECT_ID_2 ?? '').t
 
 const ethersAdapter = new EthersAdapter();
 
+// Phantom, Solflare, and Backpack are all Wallet Standard-compliant and are
+// auto-detected by SolanaAdapter without being listed here. Explicitly passing
+// their legacy @solana/wallet-adapter-* adapters registered a second, competing
+// connector for the same installed extension — when a user picked Phantom,
+// two connect() calls raced against the one extension, and Phantom's own
+// single-flight guard declined the second with "a previous request is still
+// active". Leave this to auto-detection only.
 const solanaAdapter = new SolanaAdapter({
-  wallets: [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
+  wallets: [],
 });
 
 export let appKitModal: ReturnType<typeof createAppKit> | undefined;
