@@ -2,7 +2,7 @@
 
 A production-ready, decentralized staking platform for the **FBiT token** running on **Solana** and **Polygon** networks simultaneously. The platform implements Proof-of-Stake (PoS) APY, a 10-level referral commission system, a Team Target Bonus program, a deflationary burn mechanism, and an automated emission reserve — all governed by on-chain smart contracts.
 
-**Live Demo:** [https://stake-futurebit.vercel.app](https://stake-futurebit.vercel.app)
+**Live Demo:** [https://stake.futurebit.in](https://stake.futurebit.in)
 
 ---
 
@@ -37,14 +37,15 @@ FBiT Staking is a fully on-chain staking DApp where users lock FBiT tokens for *
 | Feature | Details |
 |---------|---------|
 | Lock Period | 30 days (fixed) |
-| Claim Interval | Every 12 hours |
-| APY Range | 60% – 250% (auto-adjusting, PoS) |
-| Burn Rate | 10% of gross reward (burned to dead address) |
+| Claim Interval | Every 6 hours (4 intervals/day) |
+| APY Range | 10% – 300% on Solana · 60% – 250% on Polygon (auto-adjusting, PoS — differs per chain in the deployed contracts) |
+| Burn Rate | 10% of gross reward (burned to dead address), adjustable 0–50% by admin |
 | Referral Levels | 10 levels deep |
 | Referral Total | 30% distributed across all 10 levels |
 | Team Bonus | Up to +10% on top of staking rewards |
 | Networks | Solana Mainnet + Polygon Mainnet (Chain ID: 137) |
 | Platform Fee | 1% on all operations (removed after ownership renouncement) |
+| AI Support Chat | Claude-powered widget answering platform FAQs (`/api/support-chat`) |
 
 ---
 
@@ -66,15 +67,17 @@ Before staking, a user can click a referral link (`?ref=<address>`). This stores
 5. The referral chain (up to 10 levels) immediately receives commissions from the reward pool.
 
 ### Step 4 — Earn Rewards
-Rewards accumulate every **12 hours**. Formula:
+Rewards accumulate every **6 hours** (4 intervals/day). Formula:
 
 ```
-grossReward = stakedAmount × effectiveAPY × intervals / (730 × 10,000)
+grossReward = stakedAmount × effectiveAPY × intervals / (1,460 × 10,000)
 
 Where:
-  effectiveAPY = clamp(ANNUAL_EMISSION × 10,000 / totalStaked, 6,000, 25,000)
-  intervals    = seconds elapsed / 43,200 (each interval = 12 hours)
-  730          = total 12-hour intervals in one year
+  effectiveAPY = clamp(ANNUAL_EMISSION × 10,000 / totalStaked, MIN_APY_BPS, MAX_APY_BPS)
+                 Solana:  MIN_APY_BPS = 1,000 (10%)   MAX_APY_BPS = 30,000 (300%)
+                 Polygon: MIN_APY_BPS = 6,000 (60%)   MAX_APY_BPS = 25,000 (250%)
+  intervals    = seconds elapsed / 21,600 (each interval = 6 hours)
+  1,460        = total 6-hour intervals in one year (4 × 365)
 ```
 
 The APY self-adjusts in real time:
@@ -82,7 +85,7 @@ The APY self-adjusts in real time:
 - Fewer stakers → higher APY (each person gets a larger share)
 
 ### Step 5 — Claim or Compound Rewards
-Every 12 hours the user can:
+Every 6 hours the user can:
 
 - **Claim**: Receive net FBiT reward to their wallet
 - **Compound**: Re-stake the net reward, increasing their stake (and future earnings)
@@ -215,14 +218,17 @@ Once per year, the contract automatically burns any **surplus** tokens in the ac
 ```
 effectiveAPY (bps) = clamp(
     ANNUAL_EMISSION × 10,000 / totalStaked,
-    MIN_APY_BPS =  6,000,   // 60% floor
-    MAX_APY_BPS = 25,000    // 250% ceiling
+    MIN_APY_BPS, MAX_APY_BPS
 )
+
+Solana:  MIN_APY_BPS = 1,000 (10% floor)   MAX_APY_BPS = 30,000 (300% ceiling)
+Polygon: MIN_APY_BPS = 6,000 (60% floor)   MAX_APY_BPS = 25,000 (250% ceiling)
 ```
 
-When no one is staking: APY = 250% (maximum, attracts stakers).
-As more tokens are staked: APY decreases automatically.
-The APY is always between 60% and 250%.
+When no one is staking: APY sits at its chain's ceiling (attracts stakers).
+As more tokens are staked: APY decreases automatically toward the floor.
+The two chains currently run different floor/ceiling values — check the
+live dashboard for the exact current APY on your selected network.
 
 ---
 
@@ -298,7 +304,7 @@ Built with Solidity 0.8.20 using OpenZeppelin libraries:
 
 **Key Constants:**
 ```solidity
-uint256 public constant CLAIM_INTERVAL   = 43200;   // 12 hours
+uint256 public constant CLAIM_INTERVAL   = 21600;   // 6 hours
 uint256 public constant LOCK_PERIOD      = 30;      // 30 days
 uint256 public constant PLATFORM_FEE_BPS = 100;     // 1%
 uint256 public constant MIN_APY_BPS      =  6_000;  // 60%
@@ -370,12 +376,19 @@ Built with the Anchor framework for Solana. Uses PDAs (Program Derived Addresses
 
 **Location:** `web/`
 
-Built with **Next.js 14** (App Router) + **TypeScript** + **Tailwind CSS**.
+Built with **Next.js 16** (App Router, Turbopack) + **TypeScript** + **Tailwind CSS v4**.
 
 ### Pages
 | Route | Component | Description |
 |-------|-----------|-------------|
-| `/` | `page.tsx` | Home — renders the full Dashboard |
+| `/` | `page.tsx` | Home — renders the full Dashboard (Stake / Referral / History / Admin tabs) |
+| `/about` | `about/page.tsx` | About FBiT Staking (SEO landing content) |
+| `/terms` | `terms/page.tsx` | Terms of Service |
+| `/privacy` | `privacy/page.tsx` | Privacy Policy |
+| `/export-data` | `export-data/page.tsx` | User data export tool |
+| `/api/bot-assess` | route handler | Claude-based bot-detection risk assessment (server-side) |
+| `/api/support-chat` | route handler | Claude-powered support chat backend (server-side) |
+| `/opengraph-image` | route handler | Dynamically generated OG share image |
 
 ### Components
 
@@ -388,7 +401,7 @@ Built with **Next.js 14** (App Router) + **TypeScript** + **Tailwind CSS**.
 #### `web/src/components/admin/`
 | File | Purpose |
 |------|---------|
-| `AdminPanel.tsx` | Full admin control: fund pool, set rates, manage users, Team Tiers, Renounce Ownership |
+| `AdminPanel.tsx` | Full admin control: fund pool, set rates, manage users, Team Tiers, Renounce Ownership, ad-placement status (read-only) |
 
 #### `web/src/components/history/`
 | File | Purpose |
@@ -404,6 +417,16 @@ Built with **Next.js 14** (App Router) + **TypeScript** + **Tailwind CSS**.
 | File | Purpose |
 |------|---------|
 | `TokenPriceWidget.tsx` | Live FBiT price and market data |
+
+#### `web/src/components/chat/`
+| File | Purpose |
+|------|---------|
+| `SupportChat.tsx` | Floating AI support-chat widget (Claude Haiku via `/api/support-chat`) |
+
+#### `web/src/components/ads/`
+| File | Purpose |
+|------|---------|
+| `AdsManager.tsx` | Loads Coinzilla/Adcash placements based on `NEXT_PUBLIC_ADS_*` env vars |
 
 #### `web/src/components/ui/`
 | File | Purpose |
@@ -720,10 +743,11 @@ npm start
 |-------|-----------|
 | Solana Contract | Rust + Anchor Framework 0.29 |
 | Polygon Contract | Solidity 0.8.20 + Hardhat + OpenZeppelin 5 |
-| Frontend Framework | Next.js 14 (App Router) |
+| Frontend Framework | Next.js 16 (App Router, Turbopack) |
 | Language | TypeScript |
-| Styling | Tailwind CSS v3 |
-| State Management | Zustand v4 (with localStorage persistence) |
+| Styling | Tailwind CSS v4 |
+| State Management | Zustand v5 (with localStorage persistence) |
+| AI | `@anthropic-ai/sdk` (Claude Haiku) — bot detection + support chat |
 | Solana SDK | `@solana/web3.js`, `@solana/spl-token`, `@coral-xyz/anchor` |
 | Polygon SDK | `ethers.js` v6 |
 | Wallet Connection | Reown AppKit (formerly WalletConnect) |
@@ -762,6 +786,23 @@ CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu
 ---
 
 ## 17. Changelog
+
+### v1.7 — July 2026
+
+- **AI Support Chat** — New floating widget (`web/src/components/chat/SupportChat.tsx`) backed by a rate-limited `/api/support-chat` route using Claude Haiku, scoped strictly to platform facts (APY, chains, referrals, safety)
+- **New static pages** — `/about`, `/terms`, `/privacy`, linked from the footer
+- **Ad placements** — Coinzilla/Adcash integration (`AdsManager.tsx`) driven entirely by `NEXT_PUBLIC_ADS_*` env vars; the Admin Panel's Ads tab is a read-only status view (there is no backend database, so a live in-panel toggle would only ever affect the admin's own browser via `localStorage`, never real visitors — this was in fact a live bug, fixed this cycle)
+- **SEO overhaul** — full metadata, sitemap, robots.txt, Schema.org structured data (Organization/WebSite/WebApp/FAQ), Google Search Console verification, dynamic OG image
+- **New brand logo** — header and footer updated
+- **Wallet connect fix** — `@reown/appkit`, `-adapter-ethers`, and `-adapter-solana` were resolving to two different versions (1.8.19 vs 1.8.21) because npm couldn't dedupe them, so the Solana adapter ran against a separate copy of AppKit's internal connection state than the rest of the app — this produced Phantom's "Connection declined — a previous request is still active" error on every connect attempt. Pinned all three to `1.8.21` with an override. Also removed a redundant, manually-registered Phantom/Solflare adapter that competed with AppKit's own Wallet Standard auto-detection for the same installed extension.
+- **Production origin-check bug** — `NEXT_PUBLIC_SITE_URL` in Vercel was malformed (bare hostname plus a stray literal `\n`), so the Origin-allowlist check in `/api/bot-assess` silently 403'd every real request in production — meaning the Claude bot-detection layer had likely never actually run in production (it fails open, so this went unnoticed). Added `isAllowedOrigin()` in `lib/security.ts` which normalizes hostnames regardless of scheme/formatting.
+- **Unsolicited wallet signature fix** — the auto-halving check in `syncPlatformStats()` called `triggerHalving()` for *any* connected wallet once a halving became due, prompting a surprise signature request for ordinary visitors; now gated to admin wallets only
+- **Stake amount precision fixes** — the Stake page's MAX/25%/50% quick-fill buttons used `toFixed(0)` which could round *up* past the actual wallet balance (now `Math.floor`); the reward estimate used a double-rounded whole-percent APY instead of the raw basis-points value, causing it to diverge from the Dashboard's live figures
+- **Polygon referral level off-by-one** — the on-chain history feed displayed the contract's 0-based `ReferralReward` level index verbatim while the rest of the app is 1-based, showing every Polygon referral one level lower than actual
+- **Admin emission cap mismatch** — the Annual Emission input capped at 1,000,000 FBiT while the on-chain contract allows up to 1,000,000,000, so the built-in APY calculator's own quick-fill values were sometimes rejected by the form that generated them
+- **Dependency vulnerability patches** — resolved a critical `shell-quote` CRLF injection and several high/moderate advisories (`@babel/core`, `form-data`, `ws`) across the web app and contract tooling via `npm audit fix`
+- **Corrected referral total in SEO/FAQ content and the support chat** — was incorrectly stated as 15.75%; the real total across all 10 levels is 30%
+- **Known limitation (not fixed — flagged for a deliberate decision):** both the Solana and Polygon contracts check the 500M-FBiT per-user stake cap only against each individual `stake()` call, never the user's cumulative `total_staked`. A user can bypass the intended ceiling by splitting a large stake across multiple calls. Fixing this requires a new contract version and a migration plan for existing stakers — out of scope for a routine patch on a live mainnet contract holding real funds.
 
 ### v1.6 — May 2026
 
