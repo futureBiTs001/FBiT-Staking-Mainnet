@@ -803,6 +803,17 @@ CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu
 - **Dependency vulnerability patches** — resolved a critical `shell-quote` CRLF injection and several high/moderate advisories (`@babel/core`, `form-data`, `ws`) across the web app and contract tooling via `npm audit fix`
 - **Corrected referral total in SEO/FAQ content and the support chat** — was incorrectly stated as 15.75%; the real total across all 10 levels is 30%
 - **Known limitation (not fixed — flagged for a deliberate decision):** both the Solana and Polygon contracts check the 500M-FBiT per-user stake cap only against each individual `stake()` call, never the user's cumulative `total_staked`. A user can bypass the intended ceiling by splitting a large stake across multiple calls. Fixing this requires a new contract version and a migration plan for existing stakers — out of scope for a routine patch on a live mainnet contract holding real funds.
+- **New Swap tab** (`SwapPanel`) — custom SOL ↔ FBiT swap UI built directly on Jupiter's Quote/Swap API, with a live GeckoTerminal price chart alongside it
+- **New Staking Calculator tab** — projects claim-only vs compound rewards for a chosen amount/APY/duration, no wallet connection required
+- **New `UsdValue` component** — live "~ $X" estimate shown next to FBiT amounts across Dashboard, Stake, History, Referral, Admin, and the calculator
+- **Admin panel: Blocked Users list** — count + per-address Unblock button (Solana via a discriminator-filtered `getProgramAccounts` scan, Polygon via `UserBlockedEvent`/`UserUnblockedEvent` log replay); the Ads Management tab was removed
+- **Nav reordered and code-split** — Dashboard → Swap → Stake → Referral → Calculator → History; every tab now loads via `next/dynamic` so switching tabs only pulls in that tab's JS
+- **Referral persistence fix** — Solana/Polygon referrer is now resolved independently, so a malformed `?ref=` URL param no longer wipes out a legitimately stored referrer
+- **Claim/compound fee-recipient fallback fix** — a failed platform-state fetch now aborts before signing instead of silently defaulting the fee recipient to the user's own wallet
+- **Solana RPC rate-limiting storm fix** — history fetchers now batch `getParsedTransactions` (chunks of 50) instead of 100–200 individual calls, and space queued RPC requests ~120ms apart, eliminating repeated 429s from the Helius free tier
+- **Price feed fix** — the confirmed-correct FBiT/SOL pool is now pinned to the front of the price list regardless of liquidity ranking
+- **Dependency updates** — `@reown/appkit` + adapters, React, Tailwind, Recharts, Zustand and others bumped to latest compatible versions
+- **Support contact email** updated to `contact@futurebit.in` across Terms, Privacy Policy, and [SECURITY.md](SECURITY.md)
 
 ### v1.6 — May 2026
 
