@@ -12,8 +12,8 @@
  * Amount parameters are in token units (not lamports).
  */
 
-import { Connection, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction, TransactionInstruction } from '@solana/web3.js';
-import { AnchorProvider, Program, BN } from '@coral-xyz/anchor';
+import { Connection, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction, TransactionInstruction, VersionedTransaction } from '@solana/web3.js';
+import { AnchorProvider, Program, BN, utils as anchorUtils } from '@coral-xyz/anchor';
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { IDL } from './idl';
 import { NETWORK_CONFIG } from '@/lib/config';
@@ -715,27 +715,30 @@ export async function solanaClaimRewards(
   const [userAccPda] = userPda(owner);
   const [stakeEntryAccPda] = stakeEntryPda(owner, Number(stakeId));
 
-  // Read pending reward using live APY (dynamic PoS — not locked at stake time)
+  // Fetch platform once — required to correctly resolve the admin/fee-recipient
+  // accounts below, so unlike the reward preview this is NOT best-effort: if it
+  // fails we abort before building a transaction, rather than silently defaulting
+  // to the wrong accounts and letting the signed tx revert on-chain.
+  const fetchedPlatform: any = await (program.account as any).platform.fetch(platPda);
+
+  // Read pending reward using live APY (dynamic PoS — not locked at stake time).
+  // Best-effort: a failure here only affects the displayed preview, not the tx.
   let reward = 0;
   try {
-    const [pda] = platformPda();
-    const [entry, platform]: [any, any] = await Promise.all([
-      (program.account as any).stakeEntry.fetch(stakeEntryAccPda),
-      (program.account as any).platform.fetch(pda),
-    ]);
+    const entry: any = await (program.account as any).stakeEntry.fetch(stakeEntryAccPda);
     const now = Math.floor(Date.now() / 1000);
     const intervals = Math.floor((now - entry.lastClaimAt.toNumber()) / 21600);
     // Live dynamic APY = emission / totalStaked (same as contract)
     let liveApy = 1_000;
-    if (platform.annualEmission && platform.totalStaked) {
-      const emBN = new BN(platform.annualEmission.toString());
-      const stBN = new BN(platform.totalStaked.toString());
+    if (fetchedPlatform.annualEmission && fetchedPlatform.totalStaked) {
+      const emBN = new BN(fetchedPlatform.annualEmission.toString());
+      const stBN = new BN(fetchedPlatform.totalStaked.toString());
       if (emBN.gtn(0) && stBN.gtn(0)) {
         const raw = emBN.muln(10_000).div(stBN).toNumber();
         liveApy = Math.min(30_000, Math.max(1_000, raw));
       } else {
         liveApy = Math.min(30_000, Math.max(1_000,
-          platform.baseApy ? Number(platform.baseApy[0]) : 1_000
+          fetchedPlatform.baseApy ? Number(fetchedPlatform.baseApy[0]) : 1_000
         ));
       }
     }
@@ -746,22 +749,17 @@ export async function solanaClaimRewards(
   const userTokenAcc = ata(rewardMint, owner);
   const rewardVault  = getRewardVault();
 
-  // Fetch platform to check renounced state and get fee_recipient
-  const [pda] = platformPda();
+  // Resolve admin/fee-recipient accounts from the platform state fetched above.
   let adminRewardAccount = userTokenAcc; // fallback: pass user's ATA (unused when renounced)
   let feeRecipientTokenAccount = userTokenAcc; // fallback (unused when NOT renounced)
-  let fetchedPlatform: any = null;
-  try {
-    fetchedPlatform = await (program.account as any).platform.fetch(pda);
-    if (fetchedPlatform.isRenounced && fetchedPlatform.feeRecipient) {
-      const feeRecipientKey = new PublicKey(fetchedPlatform.feeRecipient.toString());
-      feeRecipientTokenAccount = ata(rewardMint, feeRecipientKey);
-      adminRewardAccount       = feeRecipientTokenAccount;
-    } else {
-      const authorityKey = new PublicKey(fetchedPlatform.authority.toString());
-      adminRewardAccount = ata(rewardMint, authorityKey);
-    }
-  } catch {}
+  if (fetchedPlatform.isRenounced && fetchedPlatform.feeRecipient) {
+    const feeRecipientKey = new PublicKey(fetchedPlatform.feeRecipient.toString());
+    feeRecipientTokenAccount = ata(rewardMint, feeRecipientKey);
+    adminRewardAccount       = feeRecipientTokenAccount;
+  } else {
+    const authorityKey = new PublicKey(fetchedPlatform.authority.toString());
+    adminRewardAccount = ata(rewardMint, authorityKey);
+  }
 
   // Bundle releaseEmission as a pre-instruction so reward pool is topped up
   // in the same transaction — no extra wallet popup needed.
@@ -798,24 +796,29 @@ export async function solanaCompoundRewards(
   const [userAccPda] = userPda(owner);
   const [stakeEntryAccPda] = stakeEntryPda(owner, Number(stakeId));
 
+  // Fetch platform once — required to correctly resolve the admin/fee-recipient
+  // accounts below, so unlike the reward preview this is NOT best-effort: if it
+  // fails we abort before building a transaction, rather than silently defaulting
+  // to the wrong accounts and letting the signed tx revert on-chain.
+  const fetchedPlatform: any = await (program.account as any).platform.fetch(platPda);
+
+  // Read pending reward using live APY. Best-effort: a failure here only
+  // affects the displayed preview, not the tx.
   let reward = 0;
   try {
-    const [entry, platform]: [any, any] = await Promise.all([
-      (program.account as any).stakeEntry.fetch(stakeEntryAccPda),
-      (program.account as any).platform.fetch(platPda),
-    ]);
+    const entry: any = await (program.account as any).stakeEntry.fetch(stakeEntryAccPda);
     const now = Math.floor(Date.now() / 1000);
     const intervals = Math.floor((now - entry.lastClaimAt.toNumber()) / 21600);
     let liveApy = 1_000;
-    if (platform.annualEmission && platform.totalStaked) {
-      const emBN = new BN(platform.annualEmission.toString());
-      const stBN = new BN(platform.totalStaked.toString());
+    if (fetchedPlatform.annualEmission && fetchedPlatform.totalStaked) {
+      const emBN = new BN(fetchedPlatform.annualEmission.toString());
+      const stBN = new BN(fetchedPlatform.totalStaked.toString());
       if (emBN.gtn(0) && stBN.gtn(0)) {
         const raw = emBN.muln(10_000).div(stBN).toNumber();
         liveApy = Math.min(30_000, Math.max(1_000, raw));
       } else {
         liveApy = Math.min(30_000, Math.max(1_000,
-          platform.baseApy ? Number(platform.baseApy[0]) : 1_000
+          fetchedPlatform.baseApy ? Number(fetchedPlatform.baseApy[0]) : 1_000
         ));
       }
     }
@@ -825,22 +828,17 @@ export async function solanaCompoundRewards(
   const rewardMint  = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
   const rewardVault = getRewardVault();
 
-  // Resolve admin/fee-recipient accounts based on renounce state
-  const [pda] = platformPda();
+  // Resolve admin/fee-recipient accounts from the platform state fetched above.
   let adminRewardAccount        = ata(rewardMint, owner); // fallback
   let feeRecipientTokenAccount  = ata(rewardMint, owner); // fallback
-  let fetchedPlatform: any = null;
-  try {
-    fetchedPlatform = await (program.account as any).platform.fetch(pda);
-    if (fetchedPlatform.isRenounced && fetchedPlatform.feeRecipient) {
-      const feeRecipientKey = new PublicKey(fetchedPlatform.feeRecipient.toString());
-      feeRecipientTokenAccount = ata(rewardMint, feeRecipientKey);
-      adminRewardAccount       = feeRecipientTokenAccount;
-    } else {
-      const authorityKey = new PublicKey(fetchedPlatform.authority.toString());
-      adminRewardAccount = ata(rewardMint, authorityKey);
-    }
-  } catch {}
+  if (fetchedPlatform.isRenounced && fetchedPlatform.feeRecipient) {
+    const feeRecipientKey = new PublicKey(fetchedPlatform.feeRecipient.toString());
+    feeRecipientTokenAccount = ata(rewardMint, feeRecipientKey);
+    adminRewardAccount       = feeRecipientTokenAccount;
+  } else {
+    const authorityKey = new PublicKey(fetchedPlatform.authority.toString());
+    adminRewardAccount = ata(rewardMint, authorityKey);
+  }
 
   // Pass already-fetched platform to avoid an extra RPC call that could fail silently.
   const releaseIx = await buildReleaseIxIfReady(program, fetchedPlatform);
@@ -1194,6 +1192,70 @@ export async function solanaUnblockUser(userAddress: string): Promise<{ txHash: 
   return { txHash: tx };
 }
 
+export interface BlockedUserSummary {
+  address: string;
+  totalStaked: number;
+}
+
+/**
+ * Scans every UserAccount PDA on the program (raw getProgramAccounts + manual
+ * binary parsing, same approach as solanaGetUserStakes) and returns the ones
+ * with isBlocked = true. No backend/indexer exists, so this is the only way
+ * to enumerate blocked users — one RPC call, filtered client-side.
+ *
+ * Binary layout (offsets after 8-byte discriminator):
+ *   8–39  : owner (Pubkey, 32 bytes)
+ *   40–47 : total_staked (u64 LE)
+ *   48–55 : total_rewards_earned (u64 LE)
+ *   56–63 : total_referral_rewards (u64 LE)
+ *   64    : referrer Option tag (0 = None, 1 = Some) — variable-length field
+ *   [65–96 if Some] : referrer Pubkey
+ *   next 8: referral_count (u64 LE)
+ *   next 1: is_blocked (bool)
+ */
+export async function solanaGetBlockedUsers(): Promise<BlockedUserSummary[]> {
+  try {
+    const connection = getRpcConnection();
+    const programId  = getProgramId();
+    // Server-side discriminator filter — without this, getProgramAccounts returns
+    // every account owned by the program (Platform + every UserAccount + every
+    // StakeEntry, which usually outnumbers users several-to-one). That single
+    // unfiltered call was heavy enough to trip the RPC's rate limit on its own.
+    const discriminatorB58 = anchorUtils.bytes.bs58.encode(Buffer.from(ACCOUNT_DISCRIMINATORS.UserAccount));
+    const rawAccounts = await connection.getProgramAccounts(programId, {
+      filters: [{ memcmp: { offset: 0, bytes: discriminatorB58 } }],
+    });
+
+    const blocked: BlockedUserSummary[] = [];
+    for (const { account } of rawAccounts) {
+      try {
+        const bytes = account.data instanceof Uint8Array
+          ? account.data
+          : new Uint8Array(account.data as unknown as ArrayBuffer);
+        if (bytes.length < 74) continue;
+        if (!ACCOUNT_DISCRIMINATORS.UserAccount.every((b, i) => bytes[i] === b)) continue;
+
+        const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
+        const owner       = new PublicKey(bytes.slice(8, 40)).toBase58();
+        const totalStaked = new BN(dv.getBigUint64(40, true).toString());
+
+        let offset = 64;
+        const hasReferrer = bytes[offset] === 1;
+        offset += 1 + (hasReferrer ? 32 : 0);
+        offset += 8; // referral_count
+        if (offset >= bytes.length) continue;
+        const isBlocked = bytes[offset] === 1;
+
+        if (isBlocked) blocked.push({ address: owner, totalStaked: fromLamports(totalStaked) });
+      } catch { /* skip individual parse failures */ }
+    }
+    return blocked;
+  } catch (err) {
+    console.error('[solanaGetBlockedUsers] error:', err);
+    return [];
+  }
+}
+
 export async function solanaTogglePause(): Promise<{ txHash: string }> {
   const program  = getProgram();
   const owner    = getOwner();
@@ -1288,21 +1350,32 @@ export async function solanaRenounceOwnership(): Promise<{ txHash: string }> {
 // getProgramAccounts with filters, which breaks stake fetching.
 const READ_RPC = NETWORK_CONFIG.solana.rpcUrl;
 
-// Concurrency limiter — prevents 429s on the Helius free tier (10 RPS cap).
-// Queues excess requests rather than firing them simultaneously.
-const _RPC_MAX = 5;
-let _rpcInFlight = 0;
+// Rate limiter — prevents 429s on the Helius free tier (10 RPS cap).
+// A pure concurrency cap (e.g. "max 5 in flight") does NOT bound requests/sec:
+// if 5 fast requests each resolve in ~50ms, the queue can still dispatch well
+// over 10/sec. This instead spaces every dispatched request at least ~120ms
+// apart (≈8/sec ceiling), regardless of how many are queued or how fast they
+// resolve — the actual constraint the RPC provider enforces.
+const _RPC_MIN_INTERVAL_MS = 120;
 const _rpcQueue: Array<() => void> = [];
+let _rpcTimer: ReturnType<typeof setTimeout> | null = null;
+let _rpcLastDispatch = 0;
+
+function _rpcPump(): void {
+  if (_rpcTimer || _rpcQueue.length === 0) return;
+  const wait = Math.max(0, _rpcLastDispatch + _RPC_MIN_INTERVAL_MS - Date.now());
+  _rpcTimer = setTimeout(() => {
+    _rpcTimer = null;
+    _rpcLastDispatch = Date.now();
+    _rpcQueue.shift()?.();
+    _rpcPump();
+  }, wait);
+}
 
 function rpcFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   return new Promise<Response>((resolve, reject) => {
-    const run = (): void => {
-      _rpcInFlight++;
-      fetch(input, init)
-        .then(resolve, reject)
-        .finally(() => { _rpcInFlight--; _rpcQueue.shift()?.(); });
-    };
-    _rpcInFlight < _RPC_MAX ? run() : _rpcQueue.push(run);
+    _rpcQueue.push(() => fetch(input, init).then(resolve, reject));
+    _rpcPump();
   });
 }
 
@@ -1376,8 +1449,6 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
         const apy          = Number(dv.getBigUint64(82, true));
         const stakeId      = len >= 99 ? Number(dv.getBigUint64(90, true)) : stakedAt;
 
-        if (!isActive) continue;
-
         stakes.push({
           id:              stakeId,
           amount:          fromLamports(amount),
@@ -1394,7 +1465,7 @@ export async function solanaGetUserStakes(ownerAddress: string): Promise<StakeEn
       }
     }
 
-    console.info(`[solanaGetUserStakes] parsed ${stakes.length} active stakes`);
+    console.info(`[solanaGetUserStakes] parsed ${stakes.length} stakes (active + inactive)`);
     return stakes;
   } catch (err) {
     console.error('[solanaGetUserStakes] error:', err);
@@ -1463,6 +1534,18 @@ export async function solanaGetTokenBalance(ownerAddress: string): Promise<numbe
     }
   }
   return 0;
+}
+
+/** Native SOL balance (in SOL, not lamports) for the swap widget's "from" balance display. */
+export async function solanaGetSolBalance(ownerAddress: string): Promise<number> {
+  if (!ownerAddress || ownerAddress.startsWith('0x')) return 0;
+  try {
+    const owner = new PublicKey(ownerAddress);
+    const lamports = await getRpcConnection().getBalance(owner, 'confirmed');
+    return lamports / 1_000_000_000;
+  } catch {
+    return 0;
+  }
 }
 
 export async function solanaGetUserAccount(ownerAddress: string): Promise<UserAccount | null> {
@@ -1749,17 +1832,31 @@ export async function solanaGetOnChainHistory(address: string): Promise<import('
     const [userAccPda] = userPda(owner);
 
     const sigs = await connection.getSignaturesForAddress(userAccPda, { limit: 100 });
+    const validSigs = sigs.filter(s => !s.err);
     const records: import('@/types').TxRecord[] = [];
 
-    await Promise.allSettled(
-      sigs.map(async (sig) => {
-        if (sig.err) return;
-        try {
-          const tx = await connection.getParsedTransaction(sig.signature, {
-            maxSupportedTransactionVersion: 0,
-            commitment: 'confirmed',
-          });
-          if (!tx) return;
+    // Batched RPC calls (chunks of 50) instead of one getParsedTransaction per
+    // signature — firing up to 100 individual requests at once used to trip
+    // the RPC provider's rate limit.
+    const CHUNK = 50;
+    const txs: (Awaited<ReturnType<typeof connection.getParsedTransactions>>[number])[] = [];
+    for (let i = 0; i < validSigs.length; i += CHUNK) {
+      const slice = validSigs.slice(i, i + CHUNK);
+      try {
+        const res = await connection.getParsedTransactions(
+          slice.map(s => s.signature),
+          { maxSupportedTransactionVersion: 0, commitment: 'confirmed' },
+        );
+        txs.push(...res);
+      } catch {
+        txs.push(...slice.map(() => null));
+      }
+    }
+
+    validSigs.forEach((sig, i) => {
+      try {
+        const tx = txs[i];
+        if (!tx) return;
 
           const logs: string[] = tx.meta?.logMessages ?? [];
           const ts = (sig.blockTime ?? 0) * 1000;
@@ -1818,11 +1915,10 @@ export async function solanaGetOnChainHistory(address: string): Promise<import('
             status: 'success',
             network: 'solana',
           });
-        } catch {
-          // skip individual tx parse failures
-        }
-      })
-    );
+      } catch {
+        // skip individual tx parse failures
+      }
+    });
 
     return records.sort((a, b) => b.timestamp - a.timestamp);
   } catch {
@@ -1848,23 +1944,33 @@ export async function solanaGetReferralOnChainHistory(
     const [accPda]   = userPda(owner);
 
     // Scan the last 200 signatures touching our UserAccount PDA.
-    // When a referree stakes, our UserAccount PDA is passed as remaining_accounts
+    // When a referee stakes, our UserAccount PDA is passed as remaining_accounts
     // so it appears in this signature list — that's how we detect referral events.
     const sigs = await connection.getSignaturesForAddress(accPda, { limit: 200 });
+    const validSigs = sigs.filter(s => !s.err);
     const records: import('@/types').TxRecord[] = [];
 
-    // Process in batches of 10 to avoid RPC rate limits on concurrent calls.
-    const BATCH = 10;
-    for (let i = 0; i < sigs.length; i += BATCH) {
-      await Promise.allSettled(
-        sigs.slice(i, i + BATCH).map(async (sig) => {
-          if (sig.err) return;
-          try {
-            const tx = await connection.getParsedTransaction(sig.signature, {
-              maxSupportedTransactionVersion: 0,
-              commitment: 'confirmed',
-            });
-            if (!tx) return;
+    // Batched RPC calls (chunks of 50) instead of one getParsedTransaction per
+    // signature — up to 200 individual requests used to trip the RPC rate limit.
+    const BATCH = 50;
+    const txs: (Awaited<ReturnType<typeof connection.getParsedTransactions>>[number])[] = [];
+    for (let i = 0; i < validSigs.length; i += BATCH) {
+      const slice = validSigs.slice(i, i + BATCH);
+      try {
+        const res = await connection.getParsedTransactions(
+          slice.map(s => s.signature),
+          { maxSupportedTransactionVersion: 0, commitment: 'confirmed' },
+        );
+        txs.push(...res);
+      } catch {
+        txs.push(...slice.map(() => null));
+      }
+    }
+
+    validSigs.forEach((sig, i) => {
+      try {
+        const tx = txs[i];
+        if (!tx) return;
 
             const logs: string[] = tx.meta?.logMessages ?? [];
             // Only stake instructions distribute referral rewards
@@ -1900,14 +2006,100 @@ export async function solanaGetReferralOnChainHistory(
               status:    'success',
               network:   'solana',
             });
-          } catch { /* skip individual parse failures */ }
-        })
-      );
-    }
+      } catch { /* skip individual parse failures */ }
+    });
 
     return records.sort((a, b) => b.timestamp - a.timestamp);
   } catch {
     return [];
   }
+}
+
+// ── Custom Jupiter Swap (Quote API + Swap API, no embedded widget) ────────────
+//
+// Uses Jupiter's public REST API directly instead of the Jupiter Terminal
+// script/iframe: a plain fetch() for a quote, another fetch() to build the
+// transaction, then the same wallet-signing path as the rest of this file
+// (getSolanaWallet / wrapSolanaSign) to sign and broadcast it.
+
+// quote-api.jup.ag (v6) was retired — Jupiter's free-tier API now lives at lite-api.jup.ag.
+const JUPITER_QUOTE_API = 'https://lite-api.jup.ag/swap/v1/quote';
+const JUPITER_SWAP_API  = 'https://lite-api.jup.ag/swap/v1/swap';
+
+export interface JupiterQuote {
+  inputMint:      string;
+  outputMint:     string;
+  inAmountRaw:    string;   // smallest-unit integer string
+  outAmountRaw:   string;   // smallest-unit integer string
+  priceImpactPct: number;
+  slippageBps:    number;
+  raw: unknown; // full quote response — passed back to the swap endpoint as-is
+}
+
+/** Fetch a swap quote. `amountRaw` is the input amount in the token's smallest unit (integer string). */
+export async function jupiterGetQuote(
+  inputMint: string,
+  outputMint: string,
+  amountRaw: string,
+  slippageBps = 50,
+): Promise<JupiterQuote> {
+  const params = new URLSearchParams({
+    inputMint, outputMint, amount: amountRaw,
+    slippageBps: String(slippageBps),
+  });
+  const res = await fetch(`${JUPITER_QUOTE_API}?${params.toString()}`);
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data || data.error) {
+    if (data?.errorCode === 'TOKEN_NOT_TRADABLE') {
+      throw new Error(
+        'FBiT is not yet sellable via Jupiter — this is not a trust issue (FBiT\'s pool ' +
+        'liquidity is burned/locked, so it can never be rugged), the pool is just still small ' +
+        'in size. Buying FBiT with SOL still works; selling will unlock as pool liquidity grows.'
+      );
+    }
+    throw new Error(data?.error ?? 'No swap route found for this pair/amount.');
+  }
+  return {
+    inputMint, outputMint,
+    inAmountRaw:    String(data.inAmount),
+    outAmountRaw:   String(data.outAmount),
+    priceImpactPct: Number(data.priceImpactPct ?? 0),
+    slippageBps,
+    raw: data,
+  };
+}
+
+/** Build, sign, and broadcast the swap transaction for a previously-fetched quote. */
+export async function jupiterExecuteSwap(quote: JupiterQuote): Promise<{ txHash: string }> {
+  const owner      = getOwner();
+  const wallet     = getSolanaWallet();
+  const connection = getRpcConnection();
+
+  const swapRes = await fetch(JUPITER_SWAP_API, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      quoteResponse:              quote.raw,
+      userPublicKey:              owner.toBase58(),
+      wrapAndUnwrapSol:           true,
+      dynamicComputeUnitLimit:    true,
+      prioritizationFeeLamports:  'auto',
+    }),
+  });
+  const swapData = await swapRes.json().catch(() => null);
+  if (!swapRes.ok || !swapData?.swapTransaction) {
+    throw new Error(swapData?.error ?? 'Failed to build swap transaction. Please try again.');
+  }
+
+  const txBytes = Uint8Array.from(atob(swapData.swapTransaction), c => c.charCodeAt(0));
+  const tx = VersionedTransaction.deserialize(txBytes);
+
+  const signedTx: VersionedTransaction = await wrapSolanaSign(() => wallet.signTransaction(tx));
+  const rawTx = signedTx.serialize();
+
+  const signature = await connection.sendRawTransaction(rawTx, { skipPreflight: false, maxRetries: 3 });
+  await connection.confirmTransaction(signature, 'confirmed');
+
+  return { txHash: signature };
 }
 

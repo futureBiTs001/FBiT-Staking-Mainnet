@@ -34,11 +34,12 @@ const GECKO_NETWORK: Record<string, string> = {
 };
 
 // ── Hardcoded FBiT pool addresses on Solana (always fetched first) ────────────
+// AroG3irz... (FBiT/SOL, Pumpswap) is the confirmed-correct live pool — pinned
+// to the front in parseGeckoPools() below regardless of liquidity ranking.
 const FBIT_SOLANA_POOLS = [
-  '8FNq5nb5sCV3BUThSbWY3byVos3z5LAWREbv8DUQq6HR',
-  'Czfq3xZZDmsdGdUyrNLtRhGc47cXcZtLG4crryfu44zE',
-  '4sC7TFsmHodm4sfFFBcKXKbL1K2V5pav52zAiokufnQy',
+  'AroG3irzC96vcSbYxUHMsW9mSPimDSE5JhC1LzpMjApP',
 ];
+const PINNED_FBIT_POOL = FBIT_SOLANA_POOLS[0];
 
 // ── GeckoTerminal multi-pool fetch ────────────────────────────────────────────
 async function fetchGeckoMultiPools(network: string, poolAddresses: string[]): Promise<DexPair[]> {
@@ -85,7 +86,11 @@ function parseGeckoPools(data: any, network: string): DexPair[] {
         url: `https://www.geckoterminal.com/${geckoNet}/pools/${poolAddr}`,
       };
     })
-    .sort((a, b) => b.liquidityUsd - a.liquidityUsd)
+    .sort((a, b) => {
+      if (a.pairAddress === PINNED_FBIT_POOL) return -1;
+      if (b.pairAddress === PINNED_FBIT_POOL) return 1;
+      return b.liquidityUsd - a.liquidityUsd;
+    })
     .slice(0, 6);
 }
 
@@ -116,7 +121,11 @@ function parseGeckoSearch(data: any, network: string): DexPair[] {
         url: `https://www.geckoterminal.com/${geckoNet}/pools/${poolAddr}`,
       };
     })
-    .sort((a, b) => b.liquidityUsd - a.liquidityUsd)
+    .sort((a, b) => {
+      if (a.pairAddress === PINNED_FBIT_POOL) return -1;
+      if (b.pairAddress === PINNED_FBIT_POOL) return 1;
+      return b.liquidityUsd - a.liquidityUsd;
+    })
     .slice(0, 6);
 }
 
