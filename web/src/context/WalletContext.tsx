@@ -81,25 +81,34 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const POLY_KEY = 'fbit-referrer-polygon';
 
     const fromUrl = getReferrerFromUrl();
-    if (fromUrl) {
-      const isSolana = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(fromUrl);
-      const isEVM    = /^0x[0-9a-fA-F]{40}$/.test(fromUrl);
-      if (isSolana) {
-        setSolanaReferrerState(fromUrl);
-        try { localStorage.setItem(SOL_KEY, fromUrl); } catch {}
-      } else if (isEVM) {
-        setPolygonReferrerState(fromUrl);
-        try { localStorage.setItem(POLY_KEY, fromUrl); } catch {}
-      }
-      setActiveTab('stake');
+    const isSolanaFromUrl = !!fromUrl && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(fromUrl);
+    const isEVMFromUrl    = !!fromUrl && /^0x[0-9a-fA-F]{40}$/.test(fromUrl);
+
+    // Each chain's referrer is resolved independently: a valid match from the
+    // URL wins and is persisted; otherwise fall back to whatever is already
+    // stored, so a malformed/unrelated `?ref=` param never wipes out a
+    // legitimately stored referrer for either chain.
+    if (isSolanaFromUrl) {
+      setSolanaReferrerState(fromUrl);
+      try { localStorage.setItem(SOL_KEY, fromUrl); } catch {}
     } else {
       try {
-        const sol  = localStorage.getItem(SOL_KEY);
-        const poly = localStorage.getItem(POLY_KEY);
-        if (sol  && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(sol))  setSolanaReferrerState(sol);
-        if (poly && /^0x[0-9a-fA-F]{40}$/.test(poly))            setPolygonReferrerState(poly);
+        const sol = localStorage.getItem(SOL_KEY);
+        if (sol && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(sol)) setSolanaReferrerState(sol);
       } catch {}
     }
+
+    if (isEVMFromUrl) {
+      setPolygonReferrerState(fromUrl);
+      try { localStorage.setItem(POLY_KEY, fromUrl); } catch {}
+    } else {
+      try {
+        const poly = localStorage.getItem(POLY_KEY);
+        if (poly && /^0x[0-9a-fA-F]{40}$/.test(poly)) setPolygonReferrerState(poly);
+      } catch {}
+    }
+
+    if (fromUrl) setActiveTab('stake');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
