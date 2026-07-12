@@ -32,6 +32,7 @@
 Beyond simple staking, FBiT introduces a **10-level deep referral system** and a **10-tier team bonus structure** that rewards community builders with additional on-chain bonuses. The protocol features a fully audited smart contract with a long-term **800-year emission reserve** that guarantees reward sustainability without centralized re-funding.
 
 Key highlights:
+
 - Up to **300% APY on Solana**, up to **250% APY on Polygon** (dynamic, PoS-based)
 - **30-day lock period** with 6-hour claim intervals
 - **10-level referral rewards** totaling **30%** passive income
@@ -60,28 +61,28 @@ The platform is built on battle-tested OpenZeppelin smart contracts and has unde
 
 ### 3.1 WFBIT — Wrapped Futurebit (Polygon)
 
-| Property         | Value                                                              |
-|------------------|--------------------------------------------------------------------|
-| **Name**         | Wrapped Futurebit                                                  |
-| **Symbol**       | WFBIT                                                              |
-| **Decimals**     | 6                                                                  |
-| **Total Supply** | 1,000,000,000 WFBIT (1 Billion)                                   |
-| **Network**      | Polygon Mainnet (Chain ID 137)                                     |
-| **Contract**     | `0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945`                       |
-| **Standard**     | ERC-20                                                             |
-| **Verified**     | Polygonscan + Sourcify                                             |
+| Property         | Value                                        |
+| ---------------- | -------------------------------------------- |
+| **Name**         | Wrapped Futurebit                            |
+| **Symbol**       | WFBIT                                        |
+| **Decimals**     | 6                                            |
+| **Total Supply** | 1,000,000,000 WFBIT (1 Billion)              |
+| **Network**      | Polygon Mainnet (Chain ID 137)               |
+| **Contract**     | `0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945` |
+| **Standard**     | ERC-20                                       |
+| **Verified**     | Polygonscan + Sourcify                       |
 
 WFBIT serves as both the **stake token** and the **reward token** on the Polygon chain. This single-token design means all staking rewards are paid in the same asset users stake, eliminating impermanent loss from reward token divergence.
 
 ### 3.2 FBiT SPL Token (Solana)
 
-| Property         | Value                                                              |
-|------------------|--------------------------------------------------------------------|
-| **Symbol**       | FBiT                                                              |
-| **Decimals**     | 6                                                                  |
-| **Network**      | Solana Mainnet                                                     |
-| **Mint Address** | `CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu`                   |
-| **Standard**     | SPL Token                                                          |
+| Property         | Value                                          |
+| ---------------- | ---------------------------------------------- |
+| **Symbol**       | FBiT                                           |
+| **Decimals**     | 6                                              |
+| **Network**      | Solana Mainnet                                 |
+| **Mint Address** | `CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu` |
+| **Standard**     | SPL Token                                      |
 
 FBiT on Solana mirrors the WFBIT token on Polygon, enabling a consistent staking experience across both chains. The Solana program is built using the **Anchor framework** and uses Program Derived Addresses (PDAs) for trustless vault management.
 
@@ -93,7 +94,7 @@ FBiT on Solana mirrors the WFBIT token on Polygon, enabling a consistent staking
 
 FBiT Staking operates across two independent but functionally equivalent chains:
 
-```
+```text
 ┌─────────────────────────────────────────────────┐
 │              FBiT Staking Frontend               │
 │         (Next.js · Vercel · AppKit)              │
@@ -113,6 +114,7 @@ Users select their preferred chain from the frontend. Both chains support the co
 ### 4.2 Polygon Smart Contract
 
 The Polygon contract (`FBiTStaking.sol`) is an audited Solidity contract built on OpenZeppelin's `Ownable`, `Pausable`, and `ReentrancyGuard` libraries. It handles:
+
 - User registration with optional referrer
 - Multi-position staking (one user can hold multiple stake entries)
 - Locked APY snapshots at stake time
@@ -123,6 +125,7 @@ The Polygon contract (`FBiTStaking.sol`) is an audited Solidity contract built o
 ### 4.3 Solana Program
 
 The Solana program is built with the **Anchor framework** using PDAs for all vaults:
+
 - **Platform PDA** — global state (total staked, users, config)
 - **User PDA** — per-user account (stakes, referrer, team info)
 - **Stake Entry PDA** — individual stake records (seeds: `["stake", owner, timestamp]`)
@@ -133,6 +136,7 @@ The Solana program is built with the **Anchor framework** using PDAs for all vau
 ### 4.4 Frontend
 
 The web application is built with **Next.js 16 (App Router)** and deployed on **Vercel**. Wallet connectivity is provided by:
+
 - **Reown AppKit** (formerly WalletConnect) for both EVM wallets (MetaMask, Binance Web3 Wallet, etc.) and Solana wallets (Phantom, Solflare, Backpack, etc.), using AppKit's built-in Wallet Standard auto-detection rather than manually-registered legacy adapters
 
 ---
@@ -150,11 +154,11 @@ Each stake call creates a new **stake entry** with a unique ID. Users can hold m
 
 ### 5.2 Lock Period
 
-| Parameter         | Value      |
-|-------------------|------------|
-| Lock Duration     | **30 Days**|
-| Early Unstake     | Not allowed (funds locked until `unlockAt`) |
-| Unlock Condition  | `block.timestamp >= unlockAt`               |
+| Parameter        | Value                                       |
+| ---------------- | ------------------------------------------- |
+| Lock Duration    | **30 Days**                                 |
+| Early Unstake    | Not allowed (funds locked until `unlockAt`) |
+| Unlock Condition | `block.timestamp >= unlockAt`               |
 
 The `unlockAt` timestamp is set at stake time: `stakedAt + 30 days`. Once unlocked, users may call `unstake(stakeId)` to withdraw their principal plus any unclaimed rewards.
 
@@ -162,15 +166,16 @@ The `unlockAt` timestamp is set at stake time: `stakedAt + 30 days`. Once unlock
 
 Rewards accrue per completed **6-hour interval** (4 intervals per day). Users may call `claimRewards(stakeId)` once every 6 hours.
 
-| Parameter           | Value                                      |
-|---------------------|--------------------------------------------|
-| Claim Interval      | **6 hours** (21,600 seconds)               |
-| Claims per Day      | 4 (maximum)                                |
-| Minimum Wait        | Must complete at least 1 full 6h interval  |
+| Parameter      | Value                                     |
+| -------------- | ----------------------------------------- |
+| Claim Interval | **6 hours** (21,600 seconds)              |
+| Claims per Day | 4 (maximum)                               |
+| Minimum Wait   | Must complete at least 1 full 6h interval |
 
 ### 5.4 Compounding
 
 Calling `compoundRewards(stakeId)` automatically:
+
 1. Calculates pending rewards for the stake entry
 2. Applies the burn fee on the reward amount
 3. Adds net rewards back into the principal stake
@@ -181,6 +186,7 @@ Compounding increases the effective yield over time through exponential growth.
 ### 5.5 Unstaking
 
 After the 30-day lock expires:
+
 1. All pending rewards are calculated and claimed
 2. The burn fee is applied to the reward portion
 3. The principal is returned to the user
@@ -194,23 +200,24 @@ After the 30-day lock expires:
 
 FBiT uses a **Proof-of-Stake style dynamic APY** that fluctuates between a minimum and maximum:
 
-| Parameter   | Solana              | Polygon              |
-|-------------|---------------------|-----------------------|
-| Minimum APY | **10%** (1,000 BPS) | **60%** (6,000 BPS)   |
-| Maximum APY | **300%** (30,000 BPS) | **250%** (25,000 BPS) |
-| APY Unit    | Basis Points (BPS), where 10,000 BPS = 100% | (same) |
+| Parameter   | Solana                                      | Polygon               |
+| ----------- | ------------------------------------------- | --------------------- |
+| Minimum APY | **10%** (1,000 BPS)                         | **60%** (6,000 BPS)   |
+| Maximum APY | **300%** (30,000 BPS)                       | **250%** (25,000 BPS) |
+| APY Unit    | Basis Points (BPS), where 10,000 BPS = 100% | (same)                |
 
 The effective APY (`getEffectiveAPY()`) is computed on-chain based on current platform conditions. When a user stakes, their APY is **locked in** at that moment — this means early stakers lock in higher APYs if the platform has more rewards available relative to total staked.
 
 ### 6.2 Reward Calculation Formula
 
-```
+```text
 reward per 6h interval = (stakedAmount × APY_BPS / 10,000) / 1,460
 
 where 1,460 = 4 intervals/day × 365 days
 ```
 
 **Example:** 10,000 WFBIT staked at 250% APY:
+
 - Annual reward = 10,000 × 2.50 = 25,000 WFBIT
 - Per 6h interval = 25,000 / 1,460 ≈ 17.12 WFBIT
 
@@ -226,14 +233,15 @@ FBiT's long-term sustainability is guaranteed by an **on-chain reserve vault** t
 
 ### 7.1 Reserve Vault
 
-| Parameter              | Value                                    |
-|------------------------|------------------------------------------|
-| Total Reserve Deposited | **800,000,000 WFBIT**                   |
-| Annual Emission Rate   | **1,000,000 WFBIT / year**               |
-| Emission Runway        | **~800 years** at current rate           |
-| Emission Start Date    | **May 2, 2026**                          |
+| Parameter               | Value                          |
+| ----------------------- | ------------------------------ |
+| Total Reserve Deposited | **800,000,000 WFBIT**          |
+| Annual Emission Rate    | **1,000,000 WFBIT / year**     |
+| Emission Runway         | **~800 years** at current rate |
+| Emission Start Date     | **May 2, 2026**                |
 
 The reserve is held in a separate vault from the active reward pool. This design ensures:
+
 - The reward pool cannot be accidentally over-spent
 - Emission is transparent and verifiable on-chain at all times
 - No trusted party can re-mint or inflate tokens
@@ -242,7 +250,7 @@ The reserve is held in a separate vault from the active reward pool. This design
 
 Anyone can call `releaseEmission()` to move releasable tokens from the reserve into the active reward pool. The releasable amount is proportional to time elapsed since the last release:
 
-```
+```text
 releasable = (now - lastReleaseTime) × ANNUAL_EMISSION / 365 days
 ```
 
@@ -251,6 +259,7 @@ The contract enforces that releases cannot exceed the total reserve balance. `ge
 ### 7.3 Reward Pool
 
 The active reward pool (`rewardPoolBalance`) is what pays out staking rewards, referral commissions, and team bonuses. It receives tokens from:
+
 1. The emission release mechanism (primary, automated)
 2. Direct funding by the platform (`fundRewardPool`) for bootstrap liquidity
 
@@ -264,11 +273,11 @@ FBiT incorporates a **deflationary burn** that permanently removes tokens from c
 
 A **BURN_BPS** fee (configurable, capped by `MAX_BURN_BPS`) is deducted from the reward/principal on:
 
-| Action        | Burn Applied To             |
-|---------------|-----------------------------|
-| `claimRewards`  | Reward amount               |
+| Action            | Burn Applied To                    |
+| ----------------- | ---------------------------------- |
+| `claimRewards`    | Reward amount                      |
 | `compoundRewards` | Reward amount (before compounding) |
-| `unstake`       | Reward amount at unstake    |
+| `unstake`         | Reward amount at unstake           |
 
 The burn tokens are sent to the zero address (`0x000...dead`) and tracked in the `totalBurned` counter.
 
@@ -291,18 +300,18 @@ FBiT's referral system is one of its most distinctive features. When a user regi
 
 ### 9.2 Referral Commission Table
 
-| Level | Percentage |
-|-------|-----------|
-| 1     | **0.25%** |
-| 2     | **0.50%** |
-| 3     | **1.25%** |
-| 4     | **1.50%** |
-| 5     | **2.00%** |
-| 6     | **3.25%** |
-| 7     | **3.50%** |
-| 8     | **4.25%** |
-| 9     | **5.50%** |
-| 10    | **8.00%** |
+| Level     | Percentage |
+| --------- | ---------- |
+| 1         | **0.25%**  |
+| 2         | **0.50%**  |
+| 3         | **1.25%**  |
+| 4         | **1.50%**  |
+| 5         | **2.00%**  |
+| 6         | **3.25%**  |
+| 7         | **3.50%**  |
+| 8         | **4.25%**  |
+| 9         | **5.50%**  |
+| 10        | **8.00%**  |
 | **Total** | **~30.0%** |
 
 Percentages are applied to each claimant's **reward amount**, not their stake principal. They are paid from the reward pool, not deducted from the claimant.
@@ -326,24 +335,25 @@ Each user's **team total staked** = sum of WFBIT staked by all users in their do
 
 ### 10.2 Tier Table
 
-| Tier | Label      | Min Team Staked     | Bonus APY |
-|------|------------|---------------------|-----------|
-| 1    | Bronze     | 250,000 WFBIT       | +2%       |
-| 2    | Silver     | 350,000 WFBIT       | +3%       |
-| 3    | Gold       | 500,000 WFBIT       | +4%       |
-| 4    | Platinum   | 1,000,000 WFBIT     | +5%       |
-| 5    | Diamond    | 5,000,000 WFBIT     | +6%       |
-| 6    | Ruby       | 10,000,000 WFBIT    | +7%       |
-| 7    | Emerald    | 50,000,000 WFBIT    | +7.5%     |
-| 8    | Sapphire   | 100,000,000 WFBIT   | +8.5%     |
-| 9    | Obsidian   | 500,000,000 WFBIT   | +9%       |
-| 10   | Titan      | 1,000,000,000 WFBIT | +10%      |
+| Tier | Label    | Min Team Staked     | Bonus APY |
+| ---- | -------- | ------------------- | --------- |
+| 1    | Bronze   | 250,000 WFBIT       | +2%       |
+| 2    | Silver   | 350,000 WFBIT       | +3%       |
+| 3    | Gold     | 500,000 WFBIT       | +4%       |
+| 4    | Platinum | 1,000,000 WFBIT     | +5%       |
+| 5    | Diamond  | 5,000,000 WFBIT     | +6%       |
+| 6    | Ruby     | 10,000,000 WFBIT    | +7%       |
+| 7    | Emerald  | 50,000,000 WFBIT    | +7.5%     |
+| 8    | Sapphire | 100,000,000 WFBIT   | +8.5%     |
+| 9    | Obsidian | 500,000,000 WFBIT   | +9%       |
+| 10   | Titan    | 1,000,000,000 WFBIT | +10%      |
 
 Tiers are calculated and applied **on-chain** at claim time via `getTeamBonusBps(user)`. The on-chain tier config is adjustable and always takes precedence over any frontend constant.
 
 ### 10.3 Maximum Effective Yield
 
 A top-tier **Titan** user staking at maximum APY could earn:
+
 - Base APY: 300% (Solana) / 250% (Polygon)
 - Team Bonus: +10%
 - **Total Effective APY: up to ~310% (Solana) / ~260% (Polygon)**
@@ -357,22 +367,24 @@ Plus passive referral income from 10 levels of downline activity.
 ### 11.1 Smart Contract Security
 
 The `FBiTStaking.sol` contract inherits from:
+
 - `OpenZeppelin Ownable` — access control for admin functions
 - `OpenZeppelin Pausable` — emergency pause/unpause
 - `OpenZeppelin ReentrancyGuard` — prevents re-entrancy attacks
 
 **Four audit fixes applied before mainnet launch:**
 
-| # | Fix                                                                              |
-|---|----------------------------------------------------------------------------------|
-| 1 | `getReferralPercentages()` added as `pure` getter (avoids constant array storage issue) |
-| 2 | `_calculateReward` uses locked APY from stake entry (`entry.apy > 0 ? entry.apy : getEffectiveAPY()`) |
-| 3 | `ReferralSkipped` event added for pool-insufficient referral payments             |
-| 4 | `_processReferralRewards` refactored with memory array + graceful skip logic      |
+| #   | Fix                                                                                                   |
+| --- | ----------------------------------------------------------------------------------------------------- |
+| 1   | `getReferralPercentages()` added as `pure` getter (avoids constant array storage issue)               |
+| 2   | `_calculateReward` uses locked APY from stake entry (`entry.apy > 0 ? entry.apy : getEffectiveAPY()`) |
+| 3   | `ReferralSkipped` event added for pool-insufficient referral payments                                 |
+| 4   | `_processReferralRewards` refactored with memory array + graceful skip logic                          |
 
 ### 11.2 Ownership Renouncement
 
 The contract includes a `renounceOwnershipWithFee()` function. When called:
+
 - Ownership is permanently renounced (no admin functions can be called after)
 - A one-time fee is transferred to the former admin wallet
 - `OwnershipRenounced` event is emitted on-chain
@@ -383,6 +395,7 @@ Post-renouncement, the `isRenounced` flag is `true` and the `feeRecipient` addre
 ### 11.3 Frontend Security
 
 The web application includes multiple layers of protection:
+
 - **Bot Protection** — ML-based bot classifier (`mlBotClassifier.ts`) that analyzes behavioral patterns
 - **CAPTCHA Challenge** — Risk-triggered challenge UI (`BotChallenge`) for suspicious sessions
 - **Rate Limiting** — Per-action rate limits enforced client-side (`checkRateLimit`)
@@ -391,11 +404,11 @@ The web application includes multiple layers of protection:
 
 ### 11.4 Emergency Controls
 
-| Function              | Effect                                                  |
-|-----------------------|---------------------------------------------------------|
+| Function              | Effect                                                   |
+| --------------------- | -------------------------------------------------------- |
 | `pause()`             | Halts all staking operations; existing stakes unaffected |
-| `unpause()`           | Resumes normal operation                                |
-| `emergencyWithdraw()` | Recovers accidentally sent tokens (admin only)          |
+| `unpause()`           | Resumes normal operation                                 |
+| `emergencyWithdraw()` | Recovers accidentally sent tokens (admin only)           |
 
 ---
 
@@ -403,20 +416,20 @@ The web application includes multiple layers of protection:
 
 ### 12.1 Polygon Mainnet (Chain ID 137)
 
-| Contract              | Address                                              |
-|-----------------------|------------------------------------------------------|
-| FBiTStaking (Active)  | `0xb86DA67406DaD482428704c14AdA269E9653FDca`         |
-| WFBIT Token           | `0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945`         |
-| Explorer              | [Polygonscan](https://polygonscan.com)               |
+| Contract             | Address                                      |
+| -------------------- | -------------------------------------------- |
+| FBiTStaking (Active) | `0xb86DA67406DaD482428704c14AdA269E9653FDca` |
+| WFBIT Token          | `0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945` |
+| Explorer             | [Polygonscan](https://polygonscan.com)       |
 
 Both contracts are **verified on Polygonscan and Sourcify**.
 
 ### 12.2 Solana Mainnet
 
-| Asset             | Address                                                  |
-|-------------------|----------------------------------------------------------|
-| FBiT SPL Mint     | `CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu`         |
-| Program ID        | `8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp`         |
+| Asset         | Address                                        |
+| ------------- | ---------------------------------------------- |
+| FBiT SPL Mint | `CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu` |
+| Program ID    | `8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp` |
 
 ---
 
@@ -424,15 +437,15 @@ Both contracts are **verified on Polygonscan and Sourcify**.
 
 ### 13.1 Total Supply
 
-| Token | Total Supply         | Network |
-|-------|----------------------|---------|
-| WFBIT | 1,000,000,000 (1B)   | Polygon |
-| FBiT  | TBD                  | Solana  |
+| Token | Total Supply       | Network |
+| ----- | ------------------ | ------- |
+| WFBIT | 1,000,000,000 (1B) | Polygon |
+| FBiT  | TBD                | Solana  |
 
 ### 13.2 WFBIT Allocation (Polygon)
 
-| Allocation           | Amount (WFBIT)  | % of Supply |
-|----------------------|-----------------|-------------|
+| Allocation            | Amount (WFBIT) | % of Supply |
+| --------------------- | -------------- | ----------- |
 | Staking Reserve Vault | 800,000,000    | 80%         |
 | Circulating / Users   | 200,000,000    | 20%         |
 
@@ -440,7 +453,7 @@ The **800M WFBIT reserve** is locked in the on-chain reserve vault and released 
 
 ### 13.3 Emission Schedule
 
-```
+```text
 Year 1  (2026): 1,000,000 WFBIT emitted → reward pool
 Year 2  (2027): 1,000,000 WFBIT emitted → reward pool
 ...
@@ -452,6 +465,7 @@ At any point, `getRemainingYears()` on the contract shows the remaining emission
 ### 13.4 Deflationary Pressure
 
 Every claim, compound, and unstake burns a portion of rewards. Over time:
+
 - `totalBurned` grows, reducing circulating supply
 - `totalYearlyBurned` tracks annual burn from year-end pool burns
 - Net effect: circulating supply decreases even as emission continues
@@ -461,6 +475,7 @@ Every claim, compound, and unstake burns a portion of rewards. Over time:
 ## 14. Roadmap
 
 ### Phase 1 — Polygon Launch (COMPLETE ✓)
+
 - [x] WFBIT ERC-20 token deployed and verified
 - [x] FBiTStaking contract deployed and verified
 - [x] 800M WFBIT reserve funded (May 2, 2026)
@@ -470,6 +485,7 @@ Every claim, compound, and unstake burns a portion of rewards. Over time:
 - [x] Frontend deployed on Vercel
 
 ### Phase 2 — Solana Launch (COMPLETE ✓)
+
 - [x] Anchor program compiled (fbit_staking.so)
 - [x] FBiT SPL mint created on Solana mainnet
 - [x] Anchor program deployed to mainnet (`8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp`)
@@ -477,6 +493,7 @@ Every claim, compound, and unstake burns a portion of rewards. Over time:
 - [x] Solana program connected to frontend — both chains fully operational
 
 ### Phase 3 — Growth & Ecosystem (IN PROGRESS)
+
 - [x] AI-powered support chat widget
 - [x] Full SEO setup (structured data, sitemap, OG image)
 - [ ] Centralized Exchange (CEX) listing for WFBIT/FBiT
@@ -499,38 +516,38 @@ The platform is live and fully operational on Polygon Mainnet, with Solana deplo
 
 ### Key Contract Constants
 
-| Parameter              | Polygon                | Solana                  |
-|------------------------|-------------------------|--------------------------|
-| `LOCK_PERIOD`          | 30 days                 | 30 days                  |
-| `CLAIM_INTERVAL`       | 21,600 seconds (6 hours) | 21,600 seconds (6 hours) |
-| `MIN_APY_BPS`          | 6,000 (60%)              | 1,000 (10%)              |
-| `MAX_APY_BPS`          | 25,000 (250%)            | 30,000 (300%)            |
-| `ANNUAL_EMISSION`      | 1,000,000 WFBIT (default) | Set via admin           |
-| `MIN_STAKE_AMOUNT`     | 1 FBiT                  | 1 FBiT                   |
-| `MAX_STAKE_PER_USER`   | 500,000,000 FBiT (per `stake()` call — see note below) | 500,000,000 FBiT (per `stake()` call) |
-| `BURN_BPS`             | Read from contract (0–5,000 / 0–50%) | Read from contract |
-| Token Decimals         | 6                        | 6                        |
+| Parameter            | Polygon                                                | Solana                                |
+| -------------------- | ------------------------------------------------------ | ------------------------------------- |
+| `LOCK_PERIOD`        | 30 days                                                | 30 days                               |
+| `CLAIM_INTERVAL`     | 21,600 seconds (6 hours)                               | 21,600 seconds (6 hours)              |
+| `MIN_APY_BPS`        | 6,000 (60%)                                            | 1,000 (10%)                           |
+| `MAX_APY_BPS`        | 25,000 (250%)                                          | 30,000 (300%)                         |
+| `ANNUAL_EMISSION`    | 1,000,000 WFBIT (default)                              | Set via admin                         |
+| `MIN_STAKE_AMOUNT`   | 1 FBiT                                                 | 1 FBiT                                |
+| `MAX_STAKE_PER_USER` | 500,000,000 FBiT (per `stake()` call — see note below) | 500,000,000 FBiT (per `stake()` call) |
+| `BURN_BPS`           | Read from contract (0–5,000 / 0–50%)                   | Read from contract                    |
+| Token Decimals       | 6                                                      | 6                                     |
 
 > **Note:** `MAX_STAKE_PER_USER` is enforced per individual `stake()` call, not against the user's cumulative total staked. A user can exceed the intended per-user ceiling by splitting a large position across multiple `stake()` calls. This is a known limitation in the current deployed contracts on both chains — see the README changelog for details.
 
 ### Key Contract Functions (Public)
 
-| Function                        | Description                                    |
-|---------------------------------|------------------------------------------------|
-| `registerUser(referrer)`        | Register a new user, optionally with referrer  |
-| `stake(amount)`                 | Stake WFBIT tokens for 30 days                 |
-| `claimRewards(stakeId)`         | Claim accrued rewards for a stake entry        |
-| `compoundRewards(stakeId)`      | Add rewards back to principal                  |
-| `unstake(stakeId)`              | Withdraw staked tokens after lock expires      |
-| `getEffectiveAPY()`             | Current dynamic APY in basis points            |
-| `getPendingReward(user, id)`    | Pending reward for a specific stake            |
-| `getUserStakes(user)`           | All stake entries for an address               |
-| `getReferralChain(user)`        | 10-level referral chain                        |
-| `getReferralPercentages()`      | 10 referral commission percentages             |
-| `getTeamBonusBps(user)`         | Current team bonus for a user (BPS)            |
-| `getReleasableEmission()`       | Tokens ready to release from reserve           |
-| `getRemainingYears()`           | Remaining emission runway in years             |
-| `releaseEmission()`             | Release releasable tokens into reward pool     |
+| Function                     | Description                                   |
+| ---------------------------- | --------------------------------------------- |
+| `registerUser(referrer)`     | Register a new user, optionally with referrer |
+| `stake(amount)`              | Stake WFBIT tokens for 30 days                |
+| `claimRewards(stakeId)`      | Claim accrued rewards for a stake entry       |
+| `compoundRewards(stakeId)`   | Add rewards back to principal                 |
+| `unstake(stakeId)`           | Withdraw staked tokens after lock expires     |
+| `getEffectiveAPY()`          | Current dynamic APY in basis points           |
+| `getPendingReward(user, id)` | Pending reward for a specific stake           |
+| `getUserStakes(user)`        | All stake entries for an address              |
+| `getReferralChain(user)`     | 10-level referral chain                       |
+| `getReferralPercentages()`   | 10 referral commission percentages            |
+| `getTeamBonusBps(user)`      | Current team bonus for a user (BPS)           |
+| `getReleasableEmission()`    | Tokens ready to release from reserve          |
+| `getRemainingYears()`        | Remaining emission runway in years            |
+| `releaseEmission()`          | Release releasable tokens into reward pool    |
 
 ---
 
