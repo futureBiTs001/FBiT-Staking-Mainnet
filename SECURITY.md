@@ -15,7 +15,7 @@ If you discover a security vulnerability in FBiT Staking, please **do not** open
 
 ### How to Report
 
-**Email:** parthkurrey740@gmail.com
+**Email:** <contact@futurebit.in>
 
 Please include the following in your report:
 
@@ -28,7 +28,6 @@ Please include the following in your report:
 ### Response Timeline
 
 | Step | Timeframe |
-|------|-----------|
 | Acknowledgement | Within 48 hours |
 | Initial assessment | Within 5 days |
 | Fix & patch release | Within 14 days (critical), 30 days (others) |
