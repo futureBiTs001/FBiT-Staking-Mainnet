@@ -782,6 +782,62 @@ export async function polygonUnblockUser(userAddress: string): Promise<{ txHash:
   return { txHash: txHash(tx, receipt) };
 }
 
+export interface BlockedUserSummary {
+  address: string;
+  totalStaked: number;
+}
+
+/**
+ * No backend/indexer exists, so blocked users are enumerated by replaying
+ * UserBlockedEvent/UserUnblockedEvent logs and keeping whichever event is
+ * most recent per address. Same ~2M block (~11 day) window used by
+ * polygonGetOnChainHistory, to keep RPC calls reasonable on public endpoints.
+ */
+export async function polygonGetBlockedUsers(): Promise<BlockedUserSummary[]> {
+  const { contractAddress } = NETWORK_CONFIG.polygon;
+  if (!contractAddress || contractAddress.toUpperCase().startsWith('YOUR_')) return [];
+
+  try {
+    const contract = getReadOnlyStakingContract();
+    const provider  = getReadOnlyProvider();
+    const toBlock   = await provider.getBlockNumber();
+    const fromBlock = Math.max(0, toBlock - 2_000_000);
+
+    const [blockedEvs, unblockedEvs] = await Promise.all([
+      queryFilterChunked(contract, contract.filters.UserBlockedEvent(), fromBlock, toBlock),
+      queryFilterChunked(contract, contract.filters.UserUnblockedEvent(), fromBlock, toBlock),
+    ]);
+
+    const latest = new Map<string, { blocked: boolean; blockNumber: number; index: number }>();
+    const consider = (ev: any, blocked: boolean) => {
+      const addr = String(ev.args?.user ?? '').toLowerCase();
+      if (!addr) return;
+      const blockNumber = ev.blockNumber ?? 0;
+      const index = ev.index ?? ev.logIndex ?? 0;
+      const cur = latest.get(addr);
+      if (!cur || blockNumber > cur.blockNumber || (blockNumber === cur.blockNumber && index > cur.index)) {
+        latest.set(addr, { blocked, blockNumber, index });
+      }
+    };
+    blockedEvs.forEach((ev) => consider(ev, true));
+    unblockedEvs.forEach((ev) => consider(ev, false));
+
+    const blockedAddresses = [...latest.entries()].filter(([, v]) => v.blocked).map(([addr]) => addr);
+
+    return await Promise.all(blockedAddresses.map(async (addr): Promise<BlockedUserSummary> => {
+      try {
+        const acc = await polygonGetUserAccount(addr);
+        return { address: addr, totalStaked: acc?.totalStaked ?? 0 };
+      } catch {
+        return { address: addr, totalStaked: 0 };
+      }
+    }));
+  } catch (err) {
+    console.error('[polygonGetBlockedUsers] error:', err);
+    return [];
+  }
+}
+
 export async function polygonTogglePause(currentlyPaused: boolean): Promise<{ txHash: string }> {
   await assertPolygonMainnet();
   const contract = await getStakingContract();

@@ -8,6 +8,8 @@ import { useContract } from '@/hooks/useContract';
 import { getExplorerTxUrl } from '@/lib/config';
 import { formatNumber } from '@/lib/utils';
 import { sanitizeErrorMessage } from '@/lib/security';
+import UsdValue from '@/components/ui/UsdValue';
+import { useTokenPrice } from '@/hooks/useTokenPrice';
 import type { TxRecord } from '@/types';
 
 // ─── Filter types ──────────────────────────────────────────────────────────────
@@ -56,7 +58,7 @@ function formatDate(ts: number): { date: string; time: string } {
 }
 
 // ─── Summary card ─────────────────────────────────────────────────────────────
-function SummaryCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color: string }) {
+function SummaryCard({ label, value, sub, color }: { label: string; value: string; sub?: React.ReactNode; color: string }) {
   return (
     <div className="glass-card">
       <p className={`text-xs font-display uppercase tracking-wider mb-1 ${color}`}>{label}</p>
@@ -67,7 +69,7 @@ function SummaryCard({ label, value, sub, color }: { label: string; value: strin
 }
 
 // ─── Single activity row ───────────────────────────────────────────────────────
-function ActivityRow({ tx, network }: { tx: TxRecord; network: string }) {
+function ActivityRow({ tx, network, priceUsd }: { tx: TxRecord; network: string; priceUsd: number | null }) {
   const cfg = TYPE_CONFIG[tx.type] ?? TYPE_CONFIG.admin;
   const { date, time } = formatDate(tx.timestamp);
   const explorerUrl = getExplorerTxUrl(tx.network, tx.txHash);
@@ -106,7 +108,9 @@ function ActivityRow({ tx, network }: { tx: TxRecord; network: string }) {
           <p className={`font-mono text-sm font-semibold ${cfg.text}`}>
             {tx.type === 'unstake' ? '-' : '+'}{formatNumber(tx.amount, 8)}
           </p>
-          <p className="text-text-muted text-[10px]">FBiT</p>
+          <p className="text-text-muted text-[10px]">
+            FBiT <UsdValue amount={tx.amount} priceUsd={priceUsd} />
+          </p>
         </div>
       )}
 
@@ -144,6 +148,8 @@ export default function HistoryPanel() {
   const allStakes = walletData?.stakes ?? [];
 
   const contract = useContract();
+  const { pairs: pricePairs } = useTokenPrice();
+  const fbitPriceUsd = pricePairs[0]?.priceUsd ? Number(pricePairs[0].priceUsd) : null;
 
   const [filter, setFilter] = useState<FilterType>('all');
   const [search, setSearch] = useState('');
@@ -210,9 +216,12 @@ export default function HistoryPanel() {
       ? allStakes.reduce((a, s) => a + s.amount, 0)
       : transactions.filter(t => t.type === 'stake').reduce((a, t) => a + t.amount, 0));
 
-  const totalUnstaked = allStakes.length > 0
-    ? allStakes.filter(s => !s.isActive).reduce((a, s) => a + s.amount, 0)
-    : transactions.filter(t => t.type === 'unstake').reduce((a, t) => a + t.amount, 0);
+  // Neither source alone is reliable: on-chain stakes can lag behind a fresh
+  // unstake tx (RPC eventual consistency), while local tx history can miss
+  // unstakes made elsewhere. Take whichever derivation reports the higher total.
+  const stakesDerivedUnstaked = allStakes.filter(s => !s.isActive).reduce((a, s) => a + s.amount, 0);
+  const txDerivedUnstaked = transactions.filter(t => t.type === 'unstake').reduce((a, t) => a + t.amount, 0);
+  const totalUnstaked = Math.max(stakesDerivedUnstaked, txDerivedUnstaked);
 
   // ── Solana: on-chain authoritative sources ────────────────────────────────
   // stake_entry.total_claimed is updated ONLY by claim_rewards (not compound_rewards).
@@ -326,12 +335,12 @@ export default function HistoryPanel() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <SummaryCard label="Total Staked"    value={formatNumber(totalStaked, 8)}    sub="FBiT staked"                                                color="text-brand-400" />
-        <SummaryCard label="Total Unstaked"  value={formatNumber(totalUnstaked, 8)}  sub="FBiT withdrawn"                                             color="text-accent-rose" />
-        <SummaryCard label="Total Claimed"   value={formatNumber(totalClaimed, 8)}   sub={isSolana ? 'FBiT sent to wallet' : 'FBiT rewards claimed'}  color="text-accent-cyan" />
-        <SummaryCard label="Total Compound"  value={formatNumber(totalCompound, 8)}  sub={isSolana ? 'FBiT auto-restaked' : 'FBiT re-staked'}         color="text-accent-purple" />
-        <SummaryCard label="Referral Earned" value={formatNumber(onChainReferralEarned, 8)} sub="FBiT from referrals"                                 color="text-accent-amber" />
-        <SummaryCard label="Team Bonus"      value={tierBonusBps > 0 && isSolana ? `~${formatNumber(totalTeamBonus, 4)}` : formatNumber(totalTeamBonus, 8)} sub={isSolana && tierBonusBps > 0 ? `Auto-applied (+${(tierBonusBps / 100).toFixed(1)}%)` : 'FBiT bonus rewards'} color="text-emerald-400" />
+        <SummaryCard label="Total Staked"    value={formatNumber(totalStaked, 8)}    sub={<>FBiT staked <UsdValue amount={totalStaked} priceUsd={fbitPriceUsd} /></>}                                                color="text-brand-400" />
+        <SummaryCard label="Total Unstaked"  value={formatNumber(totalUnstaked, 8)}  sub={<>FBiT withdrawn <UsdValue amount={totalUnstaked} priceUsd={fbitPriceUsd} /></>}                                             color="text-accent-rose" />
+        <SummaryCard label="Total Claimed"   value={formatNumber(totalClaimed, 8)}   sub={<>{isSolana ? 'FBiT sent to wallet' : 'FBiT rewards claimed'} <UsdValue amount={totalClaimed} priceUsd={fbitPriceUsd} /></>}  color="text-accent-cyan" />
+        <SummaryCard label="Total Compound"  value={formatNumber(totalCompound, 8)}  sub={<>{isSolana ? 'FBiT auto-restaked' : 'FBiT re-staked'} <UsdValue amount={totalCompound} priceUsd={fbitPriceUsd} /></>}         color="text-accent-purple" />
+        <SummaryCard label="Referral Earned" value={formatNumber(onChainReferralEarned, 8)} sub={<>FBiT from referrals <UsdValue amount={onChainReferralEarned} priceUsd={fbitPriceUsd} /></>}                                 color="text-accent-amber" />
+        <SummaryCard label="Team Bonus"      value={tierBonusBps > 0 && isSolana ? `~${formatNumber(totalTeamBonus, 4)}` : formatNumber(totalTeamBonus, 8)} sub={<>{isSolana && tierBonusBps > 0 ? `Auto-applied (+${(tierBonusBps / 100).toFixed(1)}%)` : 'FBiT bonus rewards'} <UsdValue amount={totalTeamBonus} priceUsd={fbitPriceUsd} /></>} color="text-emerald-400" />
       </div>
 
       {/* Platform snapshot */}
@@ -424,7 +433,7 @@ export default function HistoryPanel() {
               </div>
               <div className="space-y-2">
                 {txs.map(tx => (
-                  <ActivityRow key={tx.id} tx={tx} network={selectedNetwork} />
+                  <ActivityRow key={tx.id} tx={tx} network={selectedNetwork} priceUsd={fbitPriceUsd} />
                 ))}
               </div>
             </div>

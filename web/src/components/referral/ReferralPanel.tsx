@@ -14,6 +14,8 @@ import {
 } from '@/lib/utils';
 import { REFERRAL_LEVELS, TEAM_TARGET_TIERS } from '@/types';
 import { getExplorerTxUrl } from '@/lib/config';
+import UsdValue from '@/components/ui/UsdValue';
+import { useTokenPrice } from '@/hooks/useTokenPrice';
 import type { ReferralEntry, TxRecord } from '@/types';
 
 // ProgressBar sets width imperatively to avoid JSX inline-style linter warnings
@@ -44,6 +46,8 @@ export default function ReferralPanel() {
   const { address, solanaAddress, evmAddress } = useWallet();
   const { getWalletData, selectedNetwork } = useAppStore();
   const contract = useContract();
+  const { pairs: pricePairs } = useTokenPrice();
+  const fbitPriceUsd = pricePairs[0]?.priceUsd ? Number(pricePairs[0].priceUsd) : null;
 
   const [copied, setCopied]           = useState(false);
   const [activeView, setActiveView]   = useState<'overview' | 'levels' | 'team' | 'history'>('overview');
@@ -295,6 +299,7 @@ export default function ReferralPanel() {
         <div className="glass-card text-center">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider">Total Earned</p>
           <p className="font-display font-bold text-2xl mt-1 text-accent-cyan">{formatNumber(totalRewards, 8)}</p>
+          <UsdValue amount={totalRewards} priceUsd={fbitPriceUsd} className="text-[11px]" />
         </div>
         <div className="glass-card text-center">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider">Team Size</p>
@@ -391,13 +396,19 @@ export default function ReferralPanel() {
                         </td>
                         <td className="py-3 text-right font-mono text-xs">
                           {entry.stakedAmount > 0
-                            ? <span className="text-brand-400">{formatNumber(entry.stakedAmount)} FBiT</span>
+                            ? <span className="text-brand-400">
+                                {formatNumber(entry.stakedAmount)} FBiT{' '}
+                                <UsdValue amount={entry.stakedAmount} priceUsd={fbitPriceUsd} className="text-[10px]" />
+                              </span>
                             : <span className="text-text-muted">—</span>
                           }
                         </td>
                         <td className="py-3 text-right font-mono text-xs">
                           {entry.rewardEarned > 0
-                            ? <span className="text-accent-cyan">{formatNumber(entry.rewardEarned)} FBiT</span>
+                            ? <span className="text-accent-cyan">
+                                {formatNumber(entry.rewardEarned)} FBiT{' '}
+                                <UsdValue amount={entry.rewardEarned} priceUsd={fbitPriceUsd} className="text-[10px]" />
+                              </span>
                             : <span className="text-text-muted">—</span>
                           }
                         </td>
@@ -532,6 +543,7 @@ export default function ReferralPanel() {
                   <span className="text-accent-cyan">{formatNumber(teamTotalStaked)}</span>
                   <span className="text-text-muted"> FBiT</span>
                 </p>
+                <UsdValue amount={teamTotalStaked} priceUsd={fbitPriceUsd} className="text-[11px]" />
               </div>
             </div>
             {nextTier && (
@@ -675,7 +687,9 @@ export default function ReferralPanel() {
                       </div>
                       <div className="text-right shrink-0">
                         <p className="font-mono text-sm font-semibold text-accent-amber">+{formatNumber(tx.amount, 8)}</p>
-                        <p className="text-text-muted text-[10px]">FBiT</p>
+                        <p className="text-text-muted text-[10px]">
+                          FBiT <UsdValue amount={tx.amount} priceUsd={fbitPriceUsd} />
+                        </p>
                       </div>
                       <div className="text-right shrink-0 hidden sm:block">
                         <p className="text-text-secondary text-xs">
@@ -757,7 +771,10 @@ export default function ReferralPanel() {
                         </td>
                         <td className="py-3 text-right font-mono text-xs">
                           {entry.stakedAmount > 0
-                            ? <span className="text-brand-400">{formatNumber(entry.stakedAmount)} FBiT</span>
+                            ? <span className="text-brand-400">
+                                {formatNumber(entry.stakedAmount)} FBiT{' '}
+                                <UsdValue amount={entry.stakedAmount} priceUsd={fbitPriceUsd} className="text-[10px]" />
+                              </span>
                             : <span className="text-text-muted">—</span>
                           }
                         </td>
@@ -788,6 +805,7 @@ export default function ReferralPanel() {
                 <div>
                   <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Total Referral Rewards (on-chain)</p>
                   <p className="font-display font-bold text-2xl text-accent-amber">{formatNumber(totalRewards, 8)} FBiT</p>
+                  <UsdValue amount={totalRewards} priceUsd={fbitPriceUsd} className="text-[11px]" />
                 </div>
                 <div className="text-right">
                   <p className="text-text-muted text-xs mb-1">Network Depth</p>

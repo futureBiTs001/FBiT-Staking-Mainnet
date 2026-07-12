@@ -18,6 +18,8 @@ import {
 import { getExplorerTxUrl } from '@/lib/config';
 import { checkRateLimit, sanitizeErrorMessage } from '@/lib/security';
 import ContractSetupNotice from '@/components/ui/ContractSetupNotice';
+import UsdValue from '@/components/ui/UsdValue';
+import { useTokenPrice } from '@/hooks/useTokenPrice';
 import { LOCK_PERIOD, TEAM_TARGET_TIERS, type PlatformStats } from '@/types';
 import { solanaGetTokenBalance } from '@/lib/contracts/solana';
 import { polygonGetTokenBalance } from '@/lib/contracts/polygon';
@@ -37,6 +39,8 @@ export default function Dashboard() {
     loadOnChainData,
   } = useAppStore();
   const contract = useContract();
+  const { pairs: pricePairs } = useTokenPrice();
+  const fbitPriceUsd = pricePairs[0]?.priceUsd ? Number(pricePairs[0].priceUsd) : null;
 
   // Re-render every second so pending rewards tick live
   const [, setTick] = useState(0);
@@ -370,9 +374,11 @@ export default function Dashboard() {
 
       {/* Platform Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard label="Total Value Locked"   value={`${formatNumber(platformStats.totalStaked)} FBiT`} icon="◈" accent="brand" />
+        <StatCard label="Total Value Locked"   value={`${formatNumber(platformStats.totalStaked)} FBiT`} icon="◈" accent="brand"
+          usdSub={<UsdValue amount={platformStats.totalStaked} priceUsd={fbitPriceUsd} />} />
         <StatCard label="Total Users"          value={formatNumber(platformStats.totalUsers, 0)}          icon="◎" accent="purple" />
-        <StatCard label="Reward Pool"          value={`${formatNumber(platformStats.rewardPoolBalance)} FBiT`} icon="⬡" accent="cyan" />
+        <StatCard label="Reward Pool"          value={`${formatNumber(platformStats.rewardPoolBalance)} FBiT`} icon="⬡" accent="cyan"
+          usdSub={<UsdValue amount={platformStats.rewardPoolBalance} priceUsd={fbitPriceUsd} />} />
         <StatCard label="Current APY"          value={`${Math.round((platformStats.effectiveAPY || 1000) / 100)}%`} icon="%" accent="amber" />
       </div>
 
@@ -381,19 +387,25 @@ export default function Dashboard() {
         <div className="glass-card">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Total Staked</p>
           <p className="stat-value text-xl sm:text-2xl md:text-3xl">{formatNumber(totalUserStaked, 8)}</p>
-          <p className="text-text-secondary text-xs mt-1">FBiT Tokens</p>
+          <p className="text-text-secondary text-xs mt-1">
+            FBiT Tokens <UsdValue amount={totalUserStaked} priceUsd={fbitPriceUsd} />
+          </p>
         </div>
         <div className="glass-card">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Pending Rewards</p>
           <p className="stat-value text-xl sm:text-2xl md:text-3xl tabular-nums">
             {formatNumber(totalPending, 8)}
           </p>
-          <p className="text-text-secondary text-xs mt-1">{selectedNetwork === 'polygon' ? 'WFBIT' : 'FBiT'} Accruing</p>
+          <p className="text-text-secondary text-xs mt-1">
+            {selectedNetwork === 'polygon' ? 'WFBIT' : 'FBiT'} Accruing <UsdValue amount={totalPending} priceUsd={fbitPriceUsd} />
+          </p>
         </div>
         <div className="glass-card">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Total Claimed</p>
           <p className="stat-value text-xl sm:text-2xl md:text-3xl">{formatNumber(totalClaimed, 8)}</p>
-          <p className="text-text-secondary text-xs mt-1">FBiT Earned</p>
+          <p className="text-text-secondary text-xs mt-1">
+            FBiT Earned <UsdValue amount={totalClaimed} priceUsd={fbitPriceUsd} />
+          </p>
         </div>
         <div className="glass-card">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Wallet Balance</p>
@@ -402,7 +414,9 @@ export default function Dashboard() {
           ) : (
             <p className="stat-value text-xl sm:text-2xl md:text-3xl">{formatNumber(tokenBalance, 8)}</p>
           )}
-          <p className="text-text-secondary text-xs mt-1">FBiT Available</p>
+          <p className="text-text-secondary text-xs mt-1">
+            FBiT Available <UsdValue amount={tokenBalance} priceUsd={fbitPriceUsd} />
+          </p>
         </div>
       </div>
 
@@ -420,7 +434,9 @@ export default function Dashboard() {
           <p className="font-display font-bold text-2xl sm:text-3xl text-accent-cyan">
             {formatNumber(userAccount?.totalReferralRewards ?? 0, 8)}
           </p>
-          <p className="text-text-secondary text-xs mt-1">FBiT from referrals</p>
+          <p className="text-text-secondary text-xs mt-1">
+            FBiT from referrals <UsdValue amount={userAccount?.totalReferralRewards ?? 0} priceUsd={fbitPriceUsd} />
+          </p>
         </div>
         <div className="glass-card col-span-2 md:col-span-1 border border-brand-500/10 bg-linear-to-br from-brand-500/5 to-transparent">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Team Size</p>
@@ -481,10 +497,14 @@ export default function Dashboard() {
                         #{Number(stake.id) + 1}
                       </div>
                       <div>
-                        <p className="font-display font-semibold">{formatNumber(stake.amount)} FBiT</p>
+                        <p className="font-display font-semibold">
+                          {formatNumber(stake.amount)} FBiT{' '}
+                          <UsdValue amount={stake.amount} priceUsd={fbitPriceUsd} className="text-xs font-normal" />
+                        </p>
                         <p className="text-text-muted text-xs">{period.label} lock · {Math.round(liveApyBps / 100)}% APY (live)</p>
                         <p className="text-text-muted text-xs mt-0.5">
-                          Per 6h: <span className="text-brand-400 font-mono">+{formatNumber(daily, 8)} {selectedNetwork === 'polygon' ? 'WFBIT' : 'FBiT'}</span>
+                          Per 6h: <span className="text-brand-400 font-mono">+{formatNumber(daily, 8)} {selectedNetwork === 'polygon' ? 'WFBIT' : 'FBiT'}</span>{' '}
+                          <UsdValue amount={daily} priceUsd={fbitPriceUsd} />
                         </p>
                       </div>
                     </div>
@@ -499,6 +519,7 @@ export default function Dashboard() {
                             +{formatNumber(pending, 8)} {selectedNetwork === 'polygon' ? 'WFBIT' : 'FBiT'}
                           </p>
                         </div>
+                        <UsdValue amount={pending} priceUsd={fbitPriceUsd} className="text-[11px]" />
                         {claimable ? (
                           <p className="text-xs text-brand-400/70">Claim available now</p>
                         ) : (
@@ -548,7 +569,7 @@ export default function Dashboard() {
       </div>
 
       {/* Burn & PoS Emission */}
-      <BurnEmissionPanel stats={platformStats} network={selectedNetwork} />
+      <BurnEmissionPanel stats={platformStats} network={selectedNetwork} priceUsd={fbitPriceUsd} />
 
       {/* Team Target Bonus */}
       <TeamTargetBonusCard
@@ -556,6 +577,7 @@ export default function Dashboard() {
         teamSize={effectiveTeamSize}
         onChainBonusBps={userAccount?.currentTierBonusBps}
         liveTiers={platformStats.teamTiers as typeof TEAM_TARGET_TIERS[number][] | undefined}
+        priceUsd={fbitPriceUsd}
       />
 
       {/* Daily Claim Info */}
@@ -664,7 +686,7 @@ function ActionButton({
 
 // ─── Team Target Bonus Card ────────────────────────────────────────────────────
 
-function TeamTargetBonusCard({ teamTotalStaked, teamSize, onChainBonusBps, liveTiers }: { teamTotalStaked: number; teamSize: number; onChainBonusBps?: number; liveTiers?: typeof TEAM_TARGET_TIERS[number][] }) {
+function TeamTargetBonusCard({ teamTotalStaked, teamSize, onChainBonusBps, liveTiers, priceUsd }: { teamTotalStaked: number; teamSize: number; onChainBonusBps?: number; liveTiers?: typeof TEAM_TARGET_TIERS[number][]; priceUsd: number | null }) {
   const tiers = liveTiers ?? TEAM_TARGET_TIERS;
   // Find current and next tier using on-chain values when available
   const activeTierIndex = (() => {
@@ -750,7 +772,9 @@ function TeamTargetBonusCard({ teamTotalStaked, teamSize, onChainBonusBps, liveT
         <div className="rounded-xl bg-surface-800/40 border border-white/5 p-3">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Team Staked</p>
           <p className="font-display font-bold text-lg">{formatNumber(teamTotalStaked)}</p>
-          <p className="text-text-secondary text-xs mt-0.5">FBiT total</p>
+          <p className="text-text-secondary text-xs mt-0.5">
+            FBiT total <UsdValue amount={teamTotalStaked} priceUsd={priceUsd} />
+          </p>
         </div>
         <div className="rounded-xl bg-surface-800/40 border border-white/5 p-3">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Team Size</p>
@@ -767,6 +791,9 @@ function TeamTargetBonusCard({ teamTotalStaked, teamSize, onChainBonusBps, liveT
             <span className={`font-mono ${tierColorMap[nextTier.color]}`}>
               {formatNumber(teamTotalStaked)} / {formatNumber(nextTier.minTeamStaked)} FBiT
             </span>
+          </div>
+          <div className="flex justify-end">
+            <UsdValue amount={teamTotalStaked} priceUsd={priceUsd} className="text-[10px]" />
           </div>
           <div className="h-2 rounded-full bg-surface-800 overflow-hidden">
             <div
@@ -822,7 +849,7 @@ function TeamTargetBonusCard({ teamTotalStaked, teamSize, onChainBonusBps, liveT
   );
 }
 
-function BurnEmissionPanel({ stats, network }: { stats: PlatformStats; network: string }) {
+function BurnEmissionPanel({ stats, network, priceUsd }: { stats: PlatformStats; network: string; priceUsd: number | null }) {
   const posApy = Math.round((stats.effectiveAPY || 1000) / 100);
   const feeRate = (stats.burnBps ?? 0) / 100;
   const hasNetworkExtra = network === 'solana' || (network === 'polygon' && stats.remainingYears !== undefined);
@@ -842,7 +869,9 @@ function BurnEmissionPanel({ stats, network }: { stats: PlatformStats; network: 
         <div>
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Total Burned</p>
           <p className="font-display font-bold text-accent-rose text-lg sm:text-xl">{formatNumber(stats.totalBurned, 8)}</p>
-          <p className="text-text-secondary text-xs mt-0.5">FBiT permanently destroyed</p>
+          <p className="text-text-secondary text-xs mt-0.5">
+            FBiT permanently destroyed <UsdValue amount={stats.totalBurned} priceUsd={priceUsd} />
+          </p>
         </div>
         <div>
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Burn Rate</p>
@@ -860,7 +889,7 @@ function BurnEmissionPanel({ stats, network }: { stats: PlatformStats; network: 
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Annual Emission</p>
           <p className="font-display font-bold text-brand-400 text-lg sm:text-xl">{formatNumber(stats.annualEmission)}</p>
           <p className="text-text-secondary text-xs mt-0.5">
-            FBiT / year · Epoch {stats.halvingEpoch ?? 0}
+            FBiT / year · Epoch {stats.halvingEpoch ?? 0} <UsdValue amount={stats.annualEmission} priceUsd={priceUsd} />
           </p>
         </div>
         {/* Halving countdown — Solana only */}
@@ -884,7 +913,8 @@ function BurnEmissionPanel({ stats, network }: { stats: PlatformStats; network: 
                 {label}
               </p>
               <p className="text-text-secondary text-xs mt-0.5">
-                {overdue ? 'Emission will halve now' : `Emission → ${formatNumber((stats.annualEmission) / 2)} FBiT`}
+                {overdue ? 'Emission will halve now' : `Emission → ${formatNumber((stats.annualEmission) / 2)} FBiT`}{' '}
+                {!overdue && <UsdValue amount={stats.annualEmission / 2} priceUsd={priceUsd} />}
               </p>
             </div>
           );
@@ -916,7 +946,7 @@ function BurnEmissionPanel({ stats, network }: { stats: PlatformStats; network: 
   );
 }
 
-function StatCard({ label, value, icon, accent }: { label: string; value: string; icon: string; accent: string }) {
+function StatCard({ label, value, icon, accent, usdSub }: { label: string; value: string; icon: string; accent: string; usdSub?: React.ReactNode }) {
   const colors: Record<string, string> = {
     brand:  'from-brand-500/20 to-brand-500/5 text-brand-400 border-brand-500/10',
     purple: 'from-accent-purple/20 to-accent-purple/5 text-accent-purple border-accent-purple/10',
@@ -930,6 +960,7 @@ function StatCard({ label, value, icon, accent }: { label: string; value: string
         <span className="text-lg opacity-50">{icon}</span>
       </div>
       <p className="font-display font-bold text-base sm:text-xl md:text-2xl truncate">{value}</p>
+      {usdSub && <p className="text-[11px] mt-0.5">{usdSub}</p>}
     </div>
   );
 }
