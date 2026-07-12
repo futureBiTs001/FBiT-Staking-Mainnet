@@ -9,6 +9,8 @@ import { LOCK_PERIOD, StakeEntry } from '@/types';
 import { useContract } from '@/hooks/useContract';
 import { checkRateLimit, sanitizeErrorMessage, MAX_STAKE_AMOUNT, MIN_STAKE_AMOUNT } from '@/lib/security';
 import ContractSetupNotice from '@/components/ui/ContractSetupNotice';
+import UsdValue from '@/components/ui/UsdValue';
+import { useTokenPrice } from '@/hooks/useTokenPrice';
 import { solanaGetTokenBalance } from '@/lib/contracts/solana';
 import { polygonGetTokenBalance } from '@/lib/contracts/polygon';
 
@@ -16,6 +18,8 @@ export default function StakePanel() {
   const { address, solanaAddress, evmAddress, solanaReferrer, polygonReferrer } = useWallet();
   const { selectedNetwork, getWalletData, addStake, addTransaction, loadOnChainData } = useAppStore();
   const contract = useContract();
+  const { pairs: pricePairs } = useTokenPrice();
+  const fbitPriceUsd = pricePairs[0]?.priceUsd ? Number(pricePairs[0].priceUsd) : null;
 
   const [amount, setAmount] = useState('');
   const [isStaking, setIsStaking] = useState(false);
@@ -249,7 +253,8 @@ export default function StakePanel() {
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm text-text-secondary font-display">Amount</label>
               <span className="text-xs text-text-muted">
-                Balance: <span className="text-brand-400 font-mono">{formatNumber(tokenBalance)}</span> FBiT
+                Balance: <span className="text-brand-400 font-mono">{formatNumber(tokenBalance)}</span> FBiT{' '}
+                <UsdValue amount={tokenBalance} priceUsd={fbitPriceUsd} />
               </span>
             </div>
             <div className="relative">
@@ -326,17 +331,23 @@ export default function StakePanel() {
             <div>
               <p className="text-text-muted text-xs mb-1">Per 6h</p>
               <p className="font-mono text-brand-400 font-semibold">{formatNumber(estimatedRewards.perInterval)}</p>
-              <p className="text-text-muted text-[10px]">FBiT / interval</p>
+              <p className="text-text-muted text-[10px]">
+                FBiT / interval <UsdValue amount={estimatedRewards.perInterval} priceUsd={fbitPriceUsd} />
+              </p>
             </div>
             <div>
               <p className="text-text-muted text-xs mb-1">Daily</p>
               <p className="font-mono text-brand-400 font-semibold">{formatNumber(estimatedRewards.daily)}</p>
-              <p className="text-text-muted text-[10px]">FBiT / day</p>
+              <p className="text-text-muted text-[10px]">
+                FBiT / day <UsdValue amount={estimatedRewards.daily} priceUsd={fbitPriceUsd} />
+              </p>
             </div>
             <div>
               <p className="text-text-muted text-xs mb-1">Total ({lockDays} Days)</p>
               <p className="font-mono text-brand-400 font-semibold">{formatNumber(estimatedRewards.total)}</p>
-              <p className="text-text-muted text-[10px]">FBiT total</p>
+              <p className="text-text-muted text-[10px]">
+                FBiT total <UsdValue amount={estimatedRewards.total} priceUsd={fbitPriceUsd} />
+              </p>
             </div>
           </div>
           <div className="pt-3 border-t border-white/5 space-y-1.5">

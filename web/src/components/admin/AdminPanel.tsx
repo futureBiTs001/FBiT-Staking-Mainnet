@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { useWallet } from '@/context/WalletContext';
 import { isAdminAddress } from '@/context/WalletContext';
@@ -10,12 +10,15 @@ import { useContract } from '@/hooks/useContract';
 import { TEAM_TARGET_TIERS } from '@/types';
 import { checkRateLimit, isValidWalletAddress, isValidAmount, isValidBonusBps, sanitizeText, sanitizeErrorMessage } from '@/lib/security';
 import ContractSetupNotice from '@/components/ui/ContractSetupNotice';
-import { getAdConfig } from '@/lib/adConfig';
+import UsdValue from '@/components/ui/UsdValue';
+import { useTokenPrice } from '@/hooks/useTokenPrice';
 
 export default function AdminPanel() {
   const { address } = useWallet();
   const { selectedNetwork, platformStats, updatePlatformStats, addTransaction, getWalletData } = useAppStore();
   const contract = useContract();
+  const { pairs: pricePairs } = useTokenPrice();
+  const fbitPriceUsd = pricePairs[0]?.priceUsd ? Number(pricePairs[0].priceUsd) : null;
 
   // null = checking, true = initialized, false = not initialized
   const [platformInitialized, setPlatformInitialized] = useState<boolean | null>(null);
@@ -26,8 +29,13 @@ export default function AdminPanel() {
   const [referralRate, setReferralRate] = useState('');
   const [userAddress, setUserAddress]   = useState('');
   const [processing, setProcessing]       = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<'pool' | 'rates' | 'users' | 'tiers' | 'platform' | 'ads'>('pool');
+  const [activeSection, setActiveSection] = useState<'pool' | 'rates' | 'users' | 'tiers' | 'platform'>('pool');
   const [renounceConfirm, setRenounceConfirm] = useState(false);
+
+  // Blocked users list (no backend/indexer — fetched on demand by scanning on-chain state)
+  const [blockedUsers, setBlockedUsers]           = useState<{ address: string; totalStaked: number }[]>([]);
+  const [isFetchingBlocked, setIsFetchingBlocked] = useState(false);
+  const [hasFetchedBlocked, setHasFetchedBlocked] = useState(false);
 
   // Per-level referral percentages state (10 levels, default values in BPS)
   const DEFAULT_REF_PCT = [25, 50, 125, 150, 200, 325, 350, 425, 550, 800];
@@ -191,6 +199,35 @@ export default function AdminPanel() {
     const addr = sanitizeText(userAddress);
     if (!isValidWalletAddress(addr)) { toast.error('Invalid wallet address format.'); return; }
     run('unblock', () => contract.unblockUser(addr), `User ${addr.slice(0, 8)}… unblocked`);
+  };
+
+  const refreshBlockedUsers = useCallback(async () => {
+    setIsFetchingBlocked(true);
+    try {
+      const list = await contract.getBlockedUsers();
+      setBlockedUsers(list);
+    } catch {
+      toast.error('Failed to load blocked users list.');
+    } finally {
+      setIsFetchingBlocked(false);
+      setHasFetchedBlocked(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNetwork]);
+
+  // Auto-fetch the first time the User Mgmt tab is opened (and again on network switch)
+  useEffect(() => {
+    if (activeSection === 'users') {
+      setHasFetchedBlocked(false);
+      refreshBlockedUsers();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection, selectedNetwork]);
+
+  const handleUnblockFromList = (addr: string) => {
+    run('unblock', () => contract.unblockUser(addr), `User ${addr.slice(0, 8)}… unblocked`);
+    // Optimistically drop from the list; a full refresh will confirm shortly after the tx lands
+    setBlockedUsers((prev) => prev.filter((u) => u.address.toLowerCase() !== addr.toLowerCase()));
   };
 
   const handleTogglePause = () =>
@@ -395,7 +432,9 @@ export default function AdminPanel() {
             <p className="font-display font-bold text-2xl text-accent-amber">
               {formatNumber(platformStats.totalFeesCollected ?? 0)}
             </p>
-            <p className="text-text-muted text-xs mt-1">FBiT collected</p>
+            <p className="text-text-muted text-xs mt-1">
+              FBiT collected <UsdValue amount={platformStats.totalFeesCollected ?? 0} priceUsd={fbitPriceUsd} />
+            </p>
           </div>
           <div className="glass-card text-center p-5">
             <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-2">Fee Rate</p>
@@ -407,7 +446,9 @@ export default function AdminPanel() {
             <p className="font-display font-bold text-2xl text-accent-cyan">
               {formatNumber(walletData?.tokenBalance ?? 0)}
             </p>
-            <p className="text-text-muted text-xs mt-1">FBiT in wallet</p>
+            <p className="text-text-muted text-xs mt-1">
+              FBiT in wallet <UsdValue amount={walletData?.tokenBalance ?? 0} priceUsd={fbitPriceUsd} />
+            </p>
           </div>
         </div>
 
@@ -513,7 +554,7 @@ export default function AdminPanel() {
 
       {/* Section Tabs */}
       <div className="flex gap-1 p-1 rounded-xl bg-surface-800/50 border border-white/5 overflow-x-auto">
-        {(['pool', 'rates', 'tiers', 'users', 'platform', 'ads'] as const).map((s) => (
+        {(['pool', 'rates', 'tiers', 'users', 'platform'] as const).map((s) => (
           <button
             type="button"
             key={s}
@@ -524,7 +565,7 @@ export default function AdminPanel() {
                 : 'text-text-muted hover:text-text-secondary'
             }`}
           >
-            {s === 'pool' ? 'Reward Pool' : s === 'rates' ? 'Rates' : s === 'tiers' ? 'Team Tiers' : s === 'users' ? 'User Mgmt' : s === 'platform' ? 'Platform' : '📢 Ads'}
+            {s === 'pool' ? 'Reward Pool' : s === 'rates' ? 'Rates' : s === 'tiers' ? 'Team Tiers' : s === 'users' ? 'User Mgmt' : 'Platform'}
           </button>
         ))}
       </div>
@@ -580,20 +621,21 @@ export default function AdminPanel() {
             {/* Reserve Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {[
-                { label: 'Reserve',           value: `${formatNumber(platformStats.totalReserve ?? 0)} FBiT`,           color: 'text-brand-400' },
-                { label: 'Released Total',    value: `${formatNumber(platformStats.totalEmissionReleased ?? 0)} FBiT`,  color: 'text-accent-cyan' },
-                { label: 'Releasable Now',    value: `${formatNumber(platformStats.releasableEmission ?? 0)} FBiT`,     color: 'text-accent-amber' },
-                { label: 'Reward Pool',       value: `${formatNumber(platformStats.rewardPoolBalance)} FBiT`,           color: 'text-accent-purple' },
+                { label: 'Reserve',           value: `${formatNumber(platformStats.totalReserve ?? 0)} FBiT`,           color: 'text-brand-400',   usd: platformStats.totalReserve },
+                { label: 'Released Total',    value: `${formatNumber(platformStats.totalEmissionReleased ?? 0)} FBiT`,  color: 'text-accent-cyan', usd: platformStats.totalEmissionReleased },
+                { label: 'Releasable Now',    value: `${formatNumber(platformStats.releasableEmission ?? 0)} FBiT`,     color: 'text-accent-amber',usd: platformStats.releasableEmission },
+                { label: 'Reward Pool',       value: `${formatNumber(platformStats.rewardPoolBalance)} FBiT`,           color: 'text-accent-purple',usd: platformStats.rewardPoolBalance },
                 ...(selectedNetwork === 'polygon' && platformStats.remainingYears !== undefined ? [
-                  { label: 'Remaining Years', value: `${platformStats.remainingYears} yrs`,                            color: 'text-brand-400' },
+                  { label: 'Remaining Years', value: `${platformStats.remainingYears} yrs`,                            color: 'text-brand-400',   usd: undefined },
                 ] : []),
                 ...(selectedNetwork === 'polygon' && platformStats.maxPendingRewards !== undefined ? [
-                  { label: 'Max Pending',     value: `${formatNumber(platformStats.maxPendingRewards)} FBiT`,           color: 'text-accent-rose' },
+                  { label: 'Max Pending',     value: `${formatNumber(platformStats.maxPendingRewards)} FBiT`,           color: 'text-accent-rose', usd: platformStats.maxPendingRewards },
                 ] : []),
-              ].map(({ label, value, color }) => (
+              ].map(({ label, value, color, usd }) => (
                 <div key={label} className="p-3 rounded-xl bg-surface-800/40 border border-white/5 text-center">
                   <p className="text-text-muted text-[10px] font-display uppercase tracking-wider mb-1">{label}</p>
                   <p className={`font-mono font-semibold text-sm ${color}`}>{value}</p>
+                  {usd !== undefined && <UsdValue amount={usd} priceUsd={fbitPriceUsd} className="text-[10px] block mt-0.5" />}
                 </div>
               ))}
             </div>
@@ -1258,6 +1300,59 @@ export default function AdminPanel() {
             </div>
           </div>
 
+          {/* Blocked Users List */}
+          <div className="glass-card space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display font-semibold text-lg">
+                Blocked Users {hasFetchedBlocked && <span className="text-text-muted font-normal text-sm">({blockedUsers.length})</span>}
+              </h3>
+              <button
+                type="button"
+                onClick={refreshBlockedUsers}
+                disabled={isFetchingBlocked}
+                className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-white/5 transition-all"
+                title="Refresh blocked users list"
+              >
+                <span className={isFetchingBlocked ? 'inline-block animate-spin' : 'inline-block'}>↻</span>
+              </button>
+            </div>
+
+            {isFetchingBlocked ? (
+              <p className="text-text-muted text-sm text-center py-4 animate-pulse">Scanning on-chain state…</p>
+            ) : blockedUsers.length === 0 ? (
+              <p className="text-text-muted text-sm text-center py-4">
+                {hasFetchedBlocked ? 'No blocked users.' : 'Loading…'}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {blockedUsers.map(({ address: addr, totalStaked }) => (
+                  <div
+                    key={addr}
+                    className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-surface-800/40 border border-white/5"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-mono text-xs text-accent-rose truncate">{addr}</p>
+                      <p className="text-text-muted text-[11px] mt-0.5">{formatNumber(totalStaked)} FBiT staked</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleUnblockFromList(addr)}
+                      disabled={isRenounced || processing !== null}
+                      className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-display font-semibold bg-brand-500/10 text-brand-400 border border-brand-500/20 hover:bg-brand-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {busy('unblock') ? 'Unblocking…' : 'Unblock'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-text-muted text-[10px]">
+              {selectedNetwork === 'solana'
+                ? 'Scanned directly from on-chain program accounts — always complete and current.'
+                : 'Reconstructed from block/unblock events over the last ~2M blocks (~11 days). Older actions outside this window may not appear.'}
+            </p>
+          </div>
+
           {/* Update Team Stats — Solana only */}
           {selectedNetwork === 'solana' && (
             <div className="glass-card space-y-4 border border-accent-cyan/20">
@@ -1772,59 +1867,6 @@ export default function AdminPanel() {
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* ── Ads Management ── */}
-      {activeSection === 'ads' && (
-        <div className="space-y-4">
-
-          {/* Security Notice */}
-          <div className="glass-card border border-accent-cyan/20 bg-accent-cyan/5 space-y-2">
-            <h3 className="font-display font-semibold text-sm text-accent-cyan flex items-center gap-2">
-              🛡 Security Assessment
-            </h3>
-            <div className="space-y-1.5 text-xs text-text-secondary">
-              <p><span className="text-brand-400">✓ Safe:</span> Both Google AdSense and Adcash are globally trusted ad networks.</p>
-              <p><span className="text-brand-400">✓ Safe:</span> Ad scripts load <em>after</em> the page — they cannot delay or block your staking UI.</p>
-              <p><span className="text-brand-400">✓ Safe:</span> Your wallet, private keys, and smart contract are completely separate — ads have zero access to them.</p>
-              <p><span className="text-accent-amber">⚠ Note:</span> Ad networks collect user browser data (disclosed in our Privacy Policy). This is standard across all websites.</p>
-              <p><span className="text-accent-amber">⚠ Note:</span> Very rarely, ad networks can serve malicious ads (malvertising). Risk is low with Google/Adcash but not zero.</p>
-              <p><span className="text-accent-rose">✗ No Risk:</span> Ads cannot access Solana/Polygon wallets, sign transactions, or touch on-chain funds.</p>
-            </div>
-          </div>
-
-          {(() => {
-            const adConfig = getAdConfig();
-            const rows = [
-              { label: 'Coinzilla Display Banner', envVar: 'NEXT_PUBLIC_ADS_COINZILLA_BANNER_ZONE', slot: adConfig.coinzilla.banner },
-              { label: 'Coinzilla Sticky Bar',      envVar: 'NEXT_PUBLIC_ADS_COINZILLA_STICKY_ZONE', slot: adConfig.coinzilla.sticky },
-              { label: 'Coinzilla Native Ad',       envVar: 'NEXT_PUBLIC_ADS_COINZILLA_NATIVE_ZONE', slot: adConfig.coinzilla.native },
-              { label: 'Adcash Display Banner',     envVar: 'NEXT_PUBLIC_ADS_ADCASH_BANNER_ZONE',     slot: adConfig.adcash.displayBanner },
-              { label: 'Adcash In-Page Push',       envVar: 'NEXT_PUBLIC_ADS_ADCASH_PUSH_ZONE',       slot: adConfig.adcash.inPagePush },
-            ];
-            return (
-              <div className="glass-card space-y-2 border border-white/5">
-                <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-1">Ad Placements (read-only)</p>
-                {rows.map(({ label, envVar, slot }) => (
-                  <div key={label} className="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-800/40 border border-white/5 text-xs">
-                    <div>
-                      <span className="text-text-secondary">{label}</span>
-                      <p className="text-text-muted font-mono text-[10px] mt-0.5">{envVar}</p>
-                    </div>
-                    <span className={slot.enabled ? 'text-brand-400 font-semibold' : 'text-text-muted'}>
-                      {slot.enabled ? `● Active (zone ${slot.zoneId})` : '○ Off'}
-                    </span>
-                  </div>
-                ))}
-                <p className="text-xs text-text-muted mt-2">
-                  Ad zone IDs are set via environment variables in Vercel project settings (not editable here) —
-                  this app has no backend database, so a live in-panel toggle would only ever affect your own
-                  browser, not real visitors. Set the env var and redeploy to change a placement.
-                </p>
-              </div>
-            );
-          })()}
         </div>
       )}
     </div>

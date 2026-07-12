@@ -250,8 +250,10 @@ export default function Header() {
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '◈' },
+    { id: 'swap',      label: 'Swap',      icon: '⇄' },
     { id: 'stake',     label: 'Stake',     icon: '⬡' },
     { id: 'referral',  label: 'Referral',  icon: '◎' },
+    { id: 'calculator', label: 'Calculator', icon: '🧮' },
     { id: 'history',   label: 'History',   icon: '📋' },
     ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: '⚙' }] : []),
   ];

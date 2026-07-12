@@ -38,6 +38,7 @@ import {
   polygonSetReferralRewardRate,
   polygonBlockUser,
   polygonUnblockUser,
+  polygonGetBlockedUsers,
   polygonTogglePause,
   polygonSetAnnualEmission,
   polygonSetBurnBps,
@@ -66,6 +67,7 @@ import {
   solanaSetReferralPercentages,
   solanaBlockUser,
   solanaUnblockUser,
+  solanaGetBlockedUsers,
   solanaTogglePause,
   solanaSetAnnualEmission,
   solanaSetBurnBps,
@@ -121,6 +123,8 @@ export interface ContractHook {
   setReferralPercentages(percentages: [number,number,number,number,number,number,number,number,number,number]): Promise<{ txHash: string }>;
   blockUser(address: string): Promise<{ txHash: string }>;
   unblockUser(address: string): Promise<{ txHash: string }>;
+  /** Enumerates all currently-blocked users (no backend/indexer — scans on-chain state directly). */
+  getBlockedUsers(): Promise<{ address: string; totalStaked: number }[]>;
   togglePause(currentlyPaused: boolean): Promise<{ txHash: string }>;
   /**
    * Update the annual emission that governs PoS APY.
@@ -379,6 +383,14 @@ export function useContract(): ContractHook {
     [selectedNetwork]
   );
 
+  const getBlockedUsers = useCallback(
+    () => {
+      if (selectedNetwork === 'solana') return solanaGetBlockedUsers();
+      return polygonGetBlockedUsers();
+    },
+    [selectedNetwork]
+  );
+
   const togglePause = useCallback(
     (currentlyPaused: boolean) => {
       if (selectedNetwork === 'solana') return solanaTogglePause();
@@ -508,6 +520,7 @@ export function useContract(): ContractHook {
     setReferralPercentages,
     blockUser,
     unblockUser,
+    getBlockedUsers,
     togglePause,
     setAnnualEmission,
     setBurnBps,

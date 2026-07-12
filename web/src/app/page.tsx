@@ -2,16 +2,28 @@
 
 import React from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { Toaster } from 'react-hot-toast';
 import { useAppStore } from '@/lib/store';
 import { useBotGuard } from '@/hooks/useBotGuard';
 import Header from '@/components/layout/Header';
-import Dashboard from '@/components/staking/Dashboard';
-import StakePanel from '@/components/staking/StakePanel';
-import ReferralPanel from '@/components/referral/ReferralPanel';
-import AdminPanel from '@/components/admin/AdminPanel';
-import HistoryPanel from '@/components/history/HistoryPanel';
 import BotChallenge from '@/components/ui/BotChallenge';
+
+// Each tab's code (and its transitive deps — ethers, Anchor, recharts, the
+// Jupiter swap widget, etc.) is only fetched when that tab is actually opened,
+// instead of all six bundling into the initial page load.
+const TabLoading = () => (
+  <div className="glass-card flex items-center justify-center py-24 text-text-muted text-sm animate-pulse">
+    Loading…
+  </div>
+);
+const Dashboard    = dynamic(() => import('@/components/staking/Dashboard'),      { loading: TabLoading });
+const StakePanel   = dynamic(() => import('@/components/staking/StakePanel'),     { loading: TabLoading });
+const SwapPanel    = dynamic(() => import('@/components/market/SwapPanel'),       { loading: TabLoading });
+const ReferralPanel = dynamic(() => import('@/components/referral/ReferralPanel'), { loading: TabLoading });
+const CalculatorPanel = dynamic(() => import('@/components/staking/CalculatorPanel'), { loading: TabLoading });
+const AdminPanel   = dynamic(() => import('@/components/admin/AdminPanel'),       { loading: TabLoading });
+const HistoryPanel = dynamic(() => import('@/components/history/HistoryPanel'),   { loading: TabLoading });
 
 export default function AppPage() {
   const { activeTab, isAdmin } = useAppStore();
@@ -26,7 +38,9 @@ export default function AppPage() {
     switch (activeTab) {
       case 'dashboard': return <Dashboard />;
       case 'stake':     return <StakePanel />;
+      case 'swap':      return <SwapPanel />;
       case 'referral':  return <ReferralPanel />;
+      case 'calculator': return <CalculatorPanel />;
       case 'history':   return <HistoryPanel />;
       case 'admin':     return isAdmin ? <AdminPanel /> : <Dashboard />;
       default:          return <Dashboard />;
