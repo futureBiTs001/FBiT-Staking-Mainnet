@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 const EFFECTIVE_DATE = 'June 29, 2026';
-const CONTACT_EMAIL = 'parthkurrey740@gmail.com';
+const CONTACT_EMAIL = 'contact@futurebit.in';
 
 export default function TermsPage() {
   return (
