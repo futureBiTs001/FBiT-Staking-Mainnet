@@ -909,6 +909,18 @@ pub mod fbit_staking {
         Ok(())
     }
 
+    /// Admin-only cleanup: closes an empty UserAccount PDA, reclaiming its
+    /// rent-exempt SOL to the admin and decrementing platform.total_users so the
+    /// count reflects reality again. Requires total_staked == 0 as a safety
+    /// check — refuses to close an account that still has real value tied to it.
+    pub fn close_user_account(ctx: Context<CloseUserAccount>) -> Result<()> {
+        require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
+        require!(ctx.accounts.user_account.total_staked == 0, StakingError::InvalidAmount);
+        ctx.accounts.platform.total_users = ctx.accounts.platform.total_users.saturating_sub(1);
+        emit!(UserAccountClosed { user: ctx.accounts.user_account.owner });
+        Ok(())
+    }
+
     pub fn block_user(ctx: Context<AdminUserAction>) -> Result<()> {
         require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
         ctx.accounts.user_account.is_blocked = true;
@@ -1363,6 +1375,16 @@ pub struct AdminUserAction<'info> {
     pub authority:    Signer<'info>,
 }
 
+#[derive(Accounts)]
+pub struct CloseUserAccount<'info> {
+    #[account(mut, seeds = [b"platform"], bump = platform.bump)]
+    pub platform:     Account<'info, Platform>,
+    #[account(mut, close = authority)]
+    pub user_account: Account<'info, UserAccount>,
+    #[account(mut)]
+    pub authority:    Signer<'info>,
+}
+
 /// Used only by fix_bump — uses canonical `bump` (not stored platform.bump) so
 /// the seeds constraint passes even when platform.bump == 0.
 #[derive(Accounts)]
@@ -1403,6 +1425,7 @@ pub struct FixBump<'info> {
 #[event] pub struct StaleVaultBurned       { pub vault: Pubkey, pub mint: Pubkey, pub amount: u64 }
 #[event] pub struct StaleStakeVoided       { pub stake_entry: Pubkey, pub owner: Pubkey, pub amount: u64 }
 #[event] pub struct UserAccountReset       { pub user: Pubkey }
+#[event] pub struct UserAccountClosed      { pub user: Pubkey }
 
 // ===== ERRORS =====
 
