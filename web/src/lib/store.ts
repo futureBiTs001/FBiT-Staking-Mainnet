@@ -320,10 +320,15 @@ export const useAppStore = create<AppState>()(
       storage: createJSONStorage(() =>
         typeof window !== 'undefined' ? localStorage : (undefined as any)
       ),
-      // Only persist the data that must survive page refreshes
+      // Only persist the data that must survive page refreshes.
+      // networkPlatformStats is deliberately NOT persisted: it's a single fast
+      // on-chain fetch (see syncPlatformStats, called on every relevant page
+      // mount), and persisting it caused a recurring class of bugs — a stale
+      // cached number (from an older contract deploy, or a failed background
+      // sync) would sit there looking authoritative indefinitely instead of
+      // being replaced by a fresh, honest fetch on next load.
       partialize: (state) => ({
         walletStates: state.walletStates,
-        networkPlatformStats: state.networkPlatformStats,
         selectedNetwork: state.selectedNetwork,
       }),
       // Merge persisted platformStats with BASE defaults so new fields (e.g. totalBurned)
@@ -331,27 +336,15 @@ export const useAppStore = create<AppState>()(
       merge: (persisted: any, current) => {
         const p = persisted as any ?? {};
 
-        // Build per-network platform stats, merging with BASE defaults
-        const rawNet = p.networkPlatformStats ?? {};
+        // networkPlatformStats is intentionally NOT read from `persisted` — it was
+        // removed from partialize (see below) precisely because a stale cached
+        // value (old contract deploy, old on-chain config, or a failed background
+        // sync) would otherwise sit here looking authoritative indefinitely.
+        // Always start clean; syncPlatformStats (called on every relevant page
+        // mount) fills this in with a fresh on-chain fetch within moments.
         const networkPlatformStats: Record<NetworkType, PlatformStats> = {
-          solana: { ...BASE_PLATFORM_STATS, ...rawNet.solana },
+          solana: { ...BASE_PLATFORM_STATS },
         };
-
-        // Migrate: old burnBps 25% → 10%
-        for (const net of ['solana'] as NetworkType[]) {
-          if (networkPlatformStats[net].burnBps === 2500) networkPlatformStats[net].burnBps = 1000;
-          // Note: effectiveAPY is refreshed live on every syncPlatformStats — do not reset cached values
-
-          // minStakeAmount/maxStakePerUser/lockPeriodDays/claimIntervalSeconds are
-          // compile-time contract constants, never fetched live (solanaFetchPlatformStats
-          // never sets them) — so a stale persisted value from an older contract version
-          // (e.g. min 1 / max 500,000,000 FBiT, before they were changed to 0.1 / 250,000,000)
-          // would otherwise survive forever via the spread above. Always force current.
-          networkPlatformStats[net].minStakeAmount      = BASE_PLATFORM_STATS.minStakeAmount;
-          networkPlatformStats[net].maxStakePerUser     = BASE_PLATFORM_STATS.maxStakePerUser;
-          networkPlatformStats[net].lockPeriodDays      = BASE_PLATFORM_STATS.lockPeriodDays;
-          networkPlatformStats[net].claimIntervalSeconds = BASE_PLATFORM_STATS.claimIntervalSeconds;
-        }
 
         // Sanitize: strip stakes with non-numeric IDs (stale data from old versions)
         // Discard any Polygon wallet state (0x-keyed or "polygon:"-prefixed) — Polygon
