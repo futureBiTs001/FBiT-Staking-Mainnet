@@ -243,7 +243,7 @@ After renouncement, the former admin's address becomes `feeRecipient` and passiv
 
 ## 8. Admin Panel
 
-The Admin Panel is accessible only to wallet addresses listed in `NEXT_PUBLIC_ADMIN_ADDRESSES`. It provides:
+The Admin Panel is accessible only to wallet addresses whose SHA-256 hash is listed in `NEXT_PUBLIC_ADMIN_ADDRESS_HASHES`. It provides:
 
 ### Reward Pool Management
 | Action | Description |
@@ -521,8 +521,10 @@ All frontend configuration lives in `web/.env.local`:
 
 ```bash
 # ===== ADMIN ACCESS =====
-# Solana wallet addresses that can access the Admin Panel
-NEXT_PUBLIC_ADMIN_ADDRESSES=<solana_address>
+# SHA-256 hex digest(s) of the admin wallet address(es) — comma-separated. Never the
+# raw address, so it can't be read directly out of the public JS bundle. Generate with:
+#   node -e "console.log(require('crypto').createHash('sha256').update('YOUR_ADDRESS').digest('hex'))"
+NEXT_PUBLIC_ADMIN_ADDRESS_HASHES=<sha256_hex_digest>
 
 # ===== REOWN (WalletConnect) =====
 NEXT_PUBLIC_REOWN_PROJECT_ID=<your_project_id>
