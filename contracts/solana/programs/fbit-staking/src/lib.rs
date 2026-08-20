@@ -849,6 +849,90 @@ pub mod fbit_staking {
         Ok(())
     }
 
+    /// Admin-only cleanup: burns the ENTIRE balance of a stale token vault still owned
+    /// by the Platform PDA — e.g. the old reserve/stake/reward vault left behind by a
+    /// token migration (`set_token_mints`), which repoints the platform's mint pubkeys
+    /// but never moves the old vaults' balances. Hard-blocked by the account constraints
+    /// from ever touching a vault denominated in the CURRENT stake/reward mint — this can
+    /// only destroy tokens that are already orphaned relative to the live platform config,
+    /// never live user/reserve funds. Closes the vault afterward, returning its
+    /// rent-exempt SOL to the admin.
+    pub fn burn_stale_vault(ctx: Context<BurnStaleVault>) -> Result<()> {
+        require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
+        let amount = ctx.accounts.stale_vault.amount;
+        require!(amount > 0, StakingError::InvalidAmount);
+
+        let bump   = ctx.accounts.platform.bump;
+        let seeds  = &[b"platform".as_ref(), &[bump]];
+        let signer = &[&seeds[..]];
+
+        token::burn(CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            Burn {
+                mint:      ctx.accounts.stale_mint.to_account_info(),
+                from:      ctx.accounts.stale_vault.to_account_info(),
+                authority: ctx.accounts.platform.to_account_info(),
+            },
+            signer,
+        ), amount)?;
+
+        token::close_account(CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token::CloseAccount {
+                account:     ctx.accounts.stale_vault.to_account_info(),
+                destination: ctx.accounts.authority.to_account_info(),
+                authority:   ctx.accounts.platform.to_account_info(),
+            },
+            signer,
+        ))?;
+
+        emit!(StaleVaultBurned {
+            vault:  ctx.accounts.stale_vault.key(),
+            mint:   ctx.accounts.stale_mint.key(),
+            amount,
+        });
+        Ok(())
+    }
+
+    /// Admin-only cleanup: force-marks a stale (pre-migration) StakeEntry inactive
+    /// without moving any tokens. For StakeEntry records whose backing vault no
+    /// longer matches the platform's current stake_token_mint (orphaned by
+    /// `set_token_mints`) — these can never be resolved through the normal
+    /// `unstake()` path since its vault-mint constraint now points at the new
+    /// mint. Pair with `burn_stale_vault` for the orphaned vault that actually
+    /// held these entries' tokens.
+    pub fn void_stale_stake(ctx: Context<AdminStakeAction>) -> Result<()> {
+        require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
+        require!(ctx.accounts.stake_entry.is_active, StakingError::StakeNotActive);
+        ctx.accounts.stake_entry.is_active = false;
+        emit!(StaleStakeVoided {
+            stake_entry: ctx.accounts.stake_entry.key(),
+            owner:       ctx.accounts.stake_entry.owner,
+            amount:      ctx.accounts.stake_entry.amount,
+        });
+        Ok(())
+    }
+
+    /// Admin-only, one-time cleanup after the mint migration: zeroes a user's stale
+    /// accumulated stats (staked/earned/referral/team totals) left over from the
+    /// retired pre-migration token, giving them a clean slate under the new mint.
+    /// Leaves identity fields (owner, referrer, is_blocked, registered_at) and
+    /// `stake_count` (a monotonic PDA-seed counter — resetting it would risk
+    /// colliding with an already-existing StakeEntry PDA on the user's next stake)
+    /// untouched.
+    pub fn reset_user_account(ctx: Context<AdminUserAction>) -> Result<()> {
+        require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
+        let u = &mut ctx.accounts.user_account;
+        u.total_staked           = 0;
+        u.total_rewards_earned   = 0;
+        u.total_referral_rewards = 0;
+        u.referral_count         = 0;
+        u.team_size              = 0;
+        u.team_total_staked      = 0;
+        emit!(UserAccountReset { user: u.owner });
+        Ok(())
+    }
+
     pub fn block_user(ctx: Context<AdminUserAction>) -> Result<()> {
         require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
         ctx.accounts.user_account.is_blocked = true;
@@ -1266,6 +1350,31 @@ pub struct AdminAction<'info> {
 }
 
 #[derive(Accounts)]
+pub struct BurnStaleVault<'info> {
+    #[account(seeds = [b"platform"], bump = platform.bump)]
+    pub platform:  Account<'info, Platform>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    #[account(mut,
+        constraint = stale_vault.owner == platform.key() @ StakingError::InvalidVault,
+        constraint = stale_vault.mint  != platform.stake_token_mint  @ StakingError::InvalidMint,
+        constraint = stale_vault.mint  != platform.reward_token_mint @ StakingError::InvalidMint)]
+    pub stale_vault: Account<'info, TokenAccount>,
+    #[account(mut, address = stale_vault.mint)]
+    pub stale_mint:  Account<'info, Mint>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct AdminStakeAction<'info> {
+    #[account(seeds = [b"platform"], bump = platform.bump)]
+    pub platform:     Account<'info, Platform>,
+    #[account(mut)]
+    pub stake_entry:  Account<'info, StakeEntry>,
+    pub authority:    Signer<'info>,
+}
+
+#[derive(Accounts)]
 pub struct AdminUserAction<'info> {
     #[account(seeds = [b"platform"], bump = platform.bump)]
     pub platform:     Account<'info, Platform>,
@@ -1312,6 +1421,9 @@ pub struct FixBump<'info> {
 #[event] pub struct ReferralPercentagesUpdated { pub percentages: [u64; 10] }
 #[event] pub struct TokenMintsUpdated      { pub stake_token_mint: Pubkey, pub reward_token_mint: Pubkey }
 #[event] pub struct PlatformStatsReset     { pub authority: Pubkey }
+#[event] pub struct StaleVaultBurned       { pub vault: Pubkey, pub mint: Pubkey, pub amount: u64 }
+#[event] pub struct StaleStakeVoided       { pub stake_entry: Pubkey, pub owner: Pubkey, pub amount: u64 }
+#[event] pub struct UserAccountReset       { pub user: Pubkey }
 
 // ===== ERRORS =====
 
