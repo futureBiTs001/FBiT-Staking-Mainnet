@@ -655,6 +655,26 @@ npm start
 
 > These entries are a historical record and are left as originally written, including references to the Polygon deployment that was part of the platform at the time. The platform is Solana-only as of the most recent entries below.
 
+### v2.0 — August 2026
+
+**Polygon removed entirely.** The platform is now Solana-only across the contract, frontend, and documentation — see the legacy-era changelog entries below for what the removed Polygon deployment covered.
+
+- **Solana mainnet migration executed** — the staking program was upgraded in place (same Program ID, `8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp`) to a new fixed-supply FBiT SPL mint (9 decimals, 250,000,000 supply, mint authority renounced); the 120,000,000 FBiT emission reserve was funded, the annual emission rate was set to 12,000,000 FBiT/year, and all 10 Team Target Bonus tiers were pushed on-chain
+- **Critical fix: emission release could freeze permanently** — `release_emission` computed "tokens releasable so far" by applying the *current* annual emission rate across the *entire* elapsed time since the reserve was first funded. Any future rate change (e.g. via `set_annual_emission`, or the now-removed halving) would retroactively undercut that total below what had already been released, permanently reverting every subsequent release call. Fixed by tracking an incremental `last_release_time` instead — each call only ever applies the current rate to time elapsed since the last release
+- **New `reset_platform_stats` admin instruction** — a token-mint migration repoints the mint pubkeys but was leaving `total_staked`, `total_reserve`, `reward_pool_balance`, `total_burned`, and the emission clock as stale numbers denominated in the old mint's tokens/decimals; this instruction gives a clean, one-time reset after a migration so those counters can't corrupt reward-pool and emission math against the new (empty) vaults
+- **Halving mechanic removed** — `trigger_halving` and the automatic 4-year base-APY/emission halving are gone; annual emission is admin-adjustable via `set_annual_emission` only. The now-unused `halving_epoch`/`halving_start_time` fields are kept in the account layout (backward-compatible byte offsets) but are otherwise inert
+- **Team Target Bonus tiers rescaled** — Bronze now starts at 50,000 FBiT (was 2,500 after an earlier rescale, originally 50,000 FBiT pre-decimal-migration); Titan tops out at 100,000,000 FBiT / 40% of supply (previous top tiers of 500M–1B FBiT were mathematically unreachable against the 250M fixed supply)
+- **Solana build hygiene** — `overflow-checks = true` and the `idl-build` feature are now required for a clean `anchor build`, matching current Anchor CLI expectations
+- **Full Polygon removal** — deleted `contracts/polygon/` (Solidity contract, Hardhat config, deploy/diagnostic scripts) entirely; removed the network selector, EVM wallet connect path (`@reown/appkit-adapter-ethers`, `ethers`), Polygon admin-panel sections (Burn Unused Pool, Emergency Withdraw, halving schedule display), and all Polygon-specific contract helpers from the frontend
+- **New marketing landing page** at `/` — live protocol stats, token info, tokenomics breakdown, security/trust section, roadmap, 10-level referral and Team Target Bonus tables, FAQ, and a Canvas-based particle-globe hero animation; the original tabbed dashboard moved to `/app`. Added a step-by-step staking tutorial at `/guide`
+- **Admin login hint removed** — the visible "⚙ Admin Login" button and confirmation modal are gone; admin status now auto-detects silently whenever any wallet connects through the normal Connect flow (this already worked under the hood — the separate admin path was redundant, and it was the only place an admin backdoor was hinted at)
+- **Admin address hashed, not stored raw** — `NEXT_PUBLIC_ADMIN_ADDRESS_HASHES` (SHA-256 digests) replaces `NEXT_PUBLIC_ADMIN_ADDRESSES`, so the admin wallet can no longer be read directly out of the public JS bundle
+- **Bot-assess fail-open bypass closed** — rate-limit, bad-origin, and malformed-request failures on `/api/bot-assess` now return `risk: "medium"` instead of the old blanket `risk: "low"`, so a bot can't force a guaranteed-safe verdict by deliberately tripping one of those checks; genuine Anthropic API outages still fail open so real users are never blocked. Added a global per-instance rate cap to both AI API routes as a backstop against distributed abuse
+- **`sanitizeText` nested-tag bypass fixed** — HTML-stripping now runs to a fixed point instead of a single pass, closing a bypass via malformed markup like `<<script>script>`
+- **Dependency vulnerability patches** — `uuid`, `axios`, and `image-size` pinned via `overrides` to resolve a High-severity buffer-overflow CVE in the Solana RPC client chain and several Axios/image-size advisories (37 → 15 remaining locally, all in unreachable/low-risk transitive paths)
+- **Brand simplified to "FutureBit"** across the site (was "Future Bit (FBiT) Staking Mainnet")
+- **Buttons restyled** to Solana's official purple → green gradient (`#9945FF` → `#14F195`)
+
 ### v1.7 — July 2026
 
 - **AI Support Chat** — New floating widget (`web/src/components/chat/SupportChat.tsx`) backed by a rate-limited `/api/support-chat` route using Claude Haiku, scoped strictly to platform facts (APY, referrals, safety)
