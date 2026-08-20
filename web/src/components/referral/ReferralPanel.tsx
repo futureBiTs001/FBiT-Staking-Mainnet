@@ -604,8 +604,10 @@ export default function ReferralPanel() {
               })}
             </div>
             <div className="mt-4 pt-4 border-t border-white/5 flex justify-between text-sm">
-              <span className="text-text-muted">Max bonus (Titan)</span>
-              <span className="font-mono text-brand-400 font-bold">+10%</span>
+              <span className="text-text-muted">Max bonus ({activeTierList[activeTierList.length - 1]?.label ?? 'Titan'})</span>
+              <span className="font-mono text-brand-400 font-bold">
+                +{activeTierList[activeTierList.length - 1]?.bonusPercentage ?? 10}%
+              </span>
             </div>
           </div>
         </div>
