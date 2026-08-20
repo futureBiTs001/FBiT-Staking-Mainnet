@@ -141,7 +141,7 @@ export function isValidAmount(amount: number, maxDecimals = 9): boolean {
 
 /** Validate a raw token amount (before decimals scaling) — must be positive bigint-safe integer */
 export function isValidRawAmount(raw: bigint): boolean {
-  return raw > 0n && raw <= BigInt(MAX_STAKE_AMOUNT) * 1_000_000n;
+  return raw > 0n && raw <= BigInt(MAX_STAKE_AMOUNT) * 1_000_000_000n;
 }
 
 // ── 5. BPS Validation ─────────────────────────────────────────────────────────

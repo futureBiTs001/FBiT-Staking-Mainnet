@@ -341,6 +341,16 @@ export const useAppStore = create<AppState>()(
         for (const net of ['solana'] as NetworkType[]) {
           if (networkPlatformStats[net].burnBps === 2500) networkPlatformStats[net].burnBps = 1000;
           // Note: effectiveAPY is refreshed live on every syncPlatformStats — do not reset cached values
+
+          // minStakeAmount/maxStakePerUser/lockPeriodDays/claimIntervalSeconds are
+          // compile-time contract constants, never fetched live (solanaFetchPlatformStats
+          // never sets them) — so a stale persisted value from an older contract version
+          // (e.g. min 1 / max 500,000,000 FBiT, before they were changed to 0.1 / 250,000,000)
+          // would otherwise survive forever via the spread above. Always force current.
+          networkPlatformStats[net].minStakeAmount      = BASE_PLATFORM_STATS.minStakeAmount;
+          networkPlatformStats[net].maxStakePerUser     = BASE_PLATFORM_STATS.maxStakePerUser;
+          networkPlatformStats[net].lockPeriodDays      = BASE_PLATFORM_STATS.lockPeriodDays;
+          networkPlatformStats[net].claimIntervalSeconds = BASE_PLATFORM_STATS.claimIntervalSeconds;
         }
 
         // Sanitize: strip stakes with non-numeric IDs (stale data from old versions)
