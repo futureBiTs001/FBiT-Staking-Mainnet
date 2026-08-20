@@ -899,6 +899,12 @@ pub mod fbit_staking {
         u.referral_count         = 0;
         u.team_size              = 0;
         u.team_total_staked      = 0;
+        // Also clear the referrer link itself — a full fresh-start reset, not just
+        // the accumulated stats. Future stakes from this account pay no upline
+        // referral commission until the user registers a new referrer (registration
+        // is one-time, so in practice this account simply has no referrer going
+        // forward — matches the "wipe everything" intent this was run for).
+        u.referrer = None;
         emit!(UserAccountReset { user: u.owner });
         Ok(())
     }
