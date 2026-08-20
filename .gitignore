@@ -13,6 +13,7 @@ node_modules/
 web/.next/
 web/out/
 web/.vercel/
+.vercel/
 
 # Environment files (NEVER commit these)
 .env
