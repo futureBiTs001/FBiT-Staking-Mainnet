@@ -108,9 +108,9 @@ export interface ContractHook {
   /** Update a Team Target Bonus tier (index 0–9, minTeamStaked in token units, bonusBps max 1000) */
   setTeamTargetTier(index: number, minTeamStaked: number, bonusBps: number): Promise<{ txHash: string }>;
   /**
-   * Permanently renounce ownership — admin loses all control but earns a 25% passive
-   * fee from the reward pool on every claim/compound, paid directly to their wallet.
-   * Irreversible.
+   * Permanently renounce ownership — admin loses all control, but the standard 1%
+   * platform fee (stake/unstake/claim/compound) keeps flowing to their wallet
+   * instead of the next authority's. Irreversible.
    */
   renounceOwnership(): Promise<{ txHash: string }>;
   /** Withdraw tokens from the reward pool back to admin's wallet. */

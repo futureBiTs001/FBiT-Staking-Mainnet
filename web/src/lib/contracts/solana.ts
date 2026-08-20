@@ -792,13 +792,13 @@ export async function solanaClaimRewards(
   const userTokenAcc = ata(rewardMint, owner);
   const rewardVault  = getRewardVault();
 
-  // Resolve admin/fee-recipient accounts from the platform state fetched above.
-  let adminRewardAccount = userTokenAcc; // fallback: pass user's ATA (unused when renounced)
-  let feeRecipientTokenAccount = userTokenAcc; // fallback (unused when NOT renounced)
+  // Resolve the admin/fee-recipient account (1% fee) from the platform state
+  // fetched above — the authority's ATA normally, or the fee_recipient's ATA
+  // after renouncement (the fee still applies post-renounce).
+  let adminRewardAccount = userTokenAcc; // fallback
   if (fetchedPlatform.isRenounced && fetchedPlatform.feeRecipient) {
     const feeRecipientKey = new PublicKey(fetchedPlatform.feeRecipient.toString());
-    feeRecipientTokenAccount = ata(rewardMint, feeRecipientKey);
-    adminRewardAccount       = feeRecipientTokenAccount;
+    adminRewardAccount = ata(rewardMint, feeRecipientKey);
   } else {
     const authorityKey = new PublicKey(fetchedPlatform.authority.toString());
     adminRewardAccount = ata(rewardMint, authorityKey);
@@ -819,7 +819,6 @@ export async function solanaClaimRewards(
       rewardVault,
       adminRewardAccount,
       rewardTokenMint:            rewardMint,
-      feeRecipientTokenAccount,
       owner,
       tokenProgram:               TOKEN_PROGRAM_ID,
     })
@@ -871,13 +870,13 @@ export async function solanaCompoundRewards(
   const rewardMint  = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
   const rewardVault = getRewardVault();
 
-  // Resolve admin/fee-recipient accounts from the platform state fetched above.
-  let adminRewardAccount        = ata(rewardMint, owner); // fallback
-  let feeRecipientTokenAccount  = ata(rewardMint, owner); // fallback
+  // Resolve the admin/fee-recipient account (1% fee) from the platform state
+  // fetched above — the authority's ATA normally, or the fee_recipient's ATA
+  // after renouncement (the fee still applies post-renounce).
+  let adminRewardAccount = ata(rewardMint, owner); // fallback
   if (fetchedPlatform.isRenounced && fetchedPlatform.feeRecipient) {
     const feeRecipientKey = new PublicKey(fetchedPlatform.feeRecipient.toString());
-    feeRecipientTokenAccount = ata(rewardMint, feeRecipientKey);
-    adminRewardAccount       = feeRecipientTokenAccount;
+    adminRewardAccount = ata(rewardMint, feeRecipientKey);
   } else {
     const authorityKey = new PublicKey(fetchedPlatform.authority.toString());
     adminRewardAccount = ata(rewardMint, authorityKey);
@@ -895,7 +894,6 @@ export async function solanaCompoundRewards(
       rewardVault,
       adminRewardAccount,
       rewardTokenMint:           rewardMint,
-      feeRecipientTokenAccount,
       owner,
       tokenProgram:              TOKEN_PROGRAM_ID,
     })

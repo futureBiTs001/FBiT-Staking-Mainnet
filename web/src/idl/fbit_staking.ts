@@ -108,7 +108,6 @@ export type FbitStaking = {
         { "name": "rewardVault", "isMut": true, "isSigner": false },
         { "name": "adminRewardAccount", "isMut": true, "isSigner": false },
         { "name": "rewardTokenMint", "isMut": true, "isSigner": false },
-        { "name": "feeRecipientTokenAccount", "isMut": true, "isSigner": false },
         { "name": "owner", "isMut": false, "isSigner": true },
         { "name": "tokenProgram", "isMut": false, "isSigner": false }
       ],
@@ -125,7 +124,6 @@ export type FbitStaking = {
         { "name": "rewardVault", "isMut": true, "isSigner": false },
         { "name": "adminRewardAccount", "isMut": true, "isSigner": false },
         { "name": "rewardTokenMint", "isMut": true, "isSigner": false },
-        { "name": "feeRecipientTokenAccount", "isMut": true, "isSigner": false },
         { "name": "owner", "isMut": false, "isSigner": true },
         { "name": "tokenProgram", "isMut": false, "isSigner": false }
       ],
@@ -497,7 +495,6 @@ export const IDL: FbitStaking = {
         { "name": "rewardVault", "isMut": true, "isSigner": false },
         { "name": "adminRewardAccount", "isMut": true, "isSigner": false },
         { "name": "rewardTokenMint", "isMut": true, "isSigner": false },
-        { "name": "feeRecipientTokenAccount", "isMut": true, "isSigner": false },
         { "name": "owner", "isMut": false, "isSigner": true },
         { "name": "tokenProgram", "isMut": false, "isSigner": false }
       ],
@@ -514,7 +511,6 @@ export const IDL: FbitStaking = {
         { "name": "rewardVault", "isMut": true, "isSigner": false },
         { "name": "adminRewardAccount", "isMut": true, "isSigner": false },
         { "name": "rewardTokenMint", "isMut": true, "isSigner": false },
-        { "name": "feeRecipientTokenAccount", "isMut": true, "isSigner": false },
         { "name": "owner", "isMut": false, "isSigner": true },
         { "name": "tokenProgram", "isMut": false, "isSigner": false }
       ],

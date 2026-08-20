@@ -234,7 +234,7 @@ export default function AdminPanel() {
         updatePlatformStats({ isRenounced: true, feeRecipient: address ?? '' });
         return result;
       },
-      'Ownership renounced — 25% passive fee active',
+      'Ownership renounced — the 1% platform fee now goes to you automatically',
     );
   };
 
@@ -348,7 +348,7 @@ export default function AdminPanel() {
           <div className="glass-card max-w-sm w-full text-left border border-accent-amber/20 bg-accent-amber/5 space-y-1 mt-2">
             <p className="text-accent-amber text-xs font-display font-semibold">Passive Fee Mode Active</p>
             <p className="text-text-muted text-xs">
-              25% of every gross reward (claim & compound) is sent directly to your wallet from pool automatically — no action needed.
+              The standard 1% platform fee (on stake, unstake, claim, and compound) is sent directly to your wallet automatically — no action needed.
             </p>
           </div>
         )}
@@ -390,9 +390,9 @@ export default function AdminPanel() {
           <p className="font-display font-semibold text-accent-amber text-sm">Passive Fee Mode Active</p>
           <p className="text-text-secondary text-xs leading-relaxed">
             You have permanently renounced admin ownership. All platform controls are disabled.
-            A <span className="text-accent-amber font-semibold">25% passive fee</span> is automatically
-            sent to your wallet from the reward pool each time any user Claims or Compounds — no
-            action required on your part.
+            The standard <span className="text-accent-amber font-semibold">1% platform fee</span> — the
+            same fee that always applied on stake, unstake, claim, and compound — is automatically
+            sent to your wallet instead of the former admin's. No action required on your part.
           </p>
         </div>
 
@@ -409,8 +409,8 @@ export default function AdminPanel() {
           </div>
           <div className="glass-card text-center p-5">
             <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-2">Fee Rate</p>
-            <p className="font-display font-bold text-2xl text-brand-400">25%</p>
-            <p className="text-text-muted text-xs mt-1">of gross reward on every claim / compound</p>
+            <p className="font-display font-bold text-2xl text-brand-400">1%</p>
+            <p className="text-text-muted text-xs mt-1">of stake, unstake, claim & compound</p>
           </div>
           <div className="glass-card text-center p-5">
             <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-2">Your Balance</p>
@@ -1363,7 +1363,7 @@ export default function AdminPanel() {
                 <p className="text-text-muted text-sm mt-0.5">
                   {isRenounced
                     ? `Ownership permanently renounced. Fee recipient: ${platformStats.feeRecipient?.slice(0, 10)}…`
-                    : 'Permanently surrender admin control. Earn 25% passive fees forever. Irreversible.'}
+                    : 'Permanently surrender admin control. The standard 1% platform fee keeps flowing to you forever. Irreversible.'}
                 </p>
               </div>
               <AdminButton
@@ -1378,9 +1378,9 @@ export default function AdminPanel() {
             {!isRenounced && (
               <div className="text-xs text-text-muted p-3 rounded-xl bg-surface-800/40 border border-white/5 space-y-1">
                 <p><span className="text-accent-amber">●</span> You will permanently lose all admin privileges.</p>
-                <p><span className="text-brand-400">●</span> Burn still applies: 10% of user's gross reward is burned from their share on every claim / compound.</p>
-                <p><span className="text-accent-cyan">●</span> Additionally, you receive 25% of gross reward separately from the pool — user's share is untouched by this fee.</p>
-                <p><span className="text-accent-purple">●</span> Example: user earns 1 FBiT gross → 0.1 burned → user gets 0.9 FBiT · you get 0.25 FBiT from pool.</p>
+                <p><span className="text-accent-cyan">●</span> The same 1% platform fee that already applies on stake, unstake, claim, and compound keeps applying — it just routes to you instead of the former admin.</p>
+                <p><span className="text-brand-400">●</span> Burn still applies too: 10% of the remainder (after the 1% fee) is burned on every claim/compound.</p>
+                <p><span className="text-accent-purple">●</span> Example (claim): user earns 1 FBiT gross → 0.01 to you (1% fee) → 0.099 burned (10% of the rest) → user gets 0.891 FBiT.</p>
                 <p><span className="text-accent-rose">●</span> This action cannot be undone, even by deploying a new contract.</p>
               </div>
             )}
@@ -1403,8 +1403,8 @@ export default function AdminPanel() {
                   <p>By confirming, you agree to:</p>
                   <ul className="space-y-1.5 text-xs pl-3">
                     <li className="flex items-start gap-2"><span className="text-accent-rose mt-0.5">✕</span> Permanently lose all admin rights — fund pool, set rates, block users, pause platform, update APYs</li>
-                    <li className="flex items-start gap-2"><span className="text-accent-amber mt-0.5">🔥</span> Burn still applies: 10% of user's gross reward is burned from their share on every claim / compound</li>
-                    <li className="flex items-start gap-2"><span className="text-brand-400 mt-0.5">✓</span> You receive <strong className="text-white">25% of gross reward</strong> from pool — paid separately, no deduction from user (e.g. 1 FBiT gross → 0.9 to user, 0.25 to you from pool)</li>
+                    <li className="flex items-start gap-2"><span className="text-brand-400 mt-0.5">✓</span> The standard <strong className="text-white">1% platform fee</strong> (stake, unstake, claim, compound) keeps applying — it just routes to your wallet instead of the former admin's</li>
+                    <li className="flex items-start gap-2"><span className="text-accent-amber mt-0.5">🔥</span> Burn still applies too: 10% of the remainder (after the 1% fee) is burned on every claim/compound</li>
                     <li className="flex items-start gap-2"><span className="text-brand-400 mt-0.5">✓</span> Fees accumulate indefinitely with no further action required</li>
                   </ul>
                 </div>

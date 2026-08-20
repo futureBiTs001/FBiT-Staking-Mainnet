@@ -163,35 +163,20 @@ export default function Dashboard() {
 
       claimStakeReward(stakeId, net);
 
-      if (platformStats.isRenounced) {
-        // Post-renounce: admin additionally gets 25% of gross from pool (separate, not from user)
-        const adminFee = reward * 0.25;
-        addTransaction({
-          id: Date.now().toString(),
-          type: 'claim',
-          label: `Claimed ${formatNumber(net)} FBiT · ${formatNumber(burned)} burned · admin fee ${formatNumber(adminFee)} from pool`,
-          amount: net,
-          txHash,
-          timestamp: Date.now(),
-          status: 'success',
-          network: selectedNetwork,
-        });
-        toast.success(
-          `✓ Claimed ${formatNumber(net)} FBiT · ${formatNumber(burned)} burned 🔥 · admin fee: ${formatNumber(adminFee)} from pool`
-        );
-      } else {
-        addTransaction({
-          id: Date.now().toString(),
-          type: 'claim',
-          label: `Claimed ${formatNumber(net)} FBiT (burned ${formatNumber(burned)})`,
-          amount: net,
-          txHash,
-          timestamp: Date.now(),
-          status: 'success',
-          network: selectedNetwork,
-        });
-        toast.success(`✓ Claimed ${formatNumber(net)} FBiT · ${formatNumber(burned)} FBiT burned 🔥`);
-      }
+      // The 1% platform fee applies identically whether renounced or not — it
+      // just routes to fee_recipient instead of the former admin — so the
+      // claim message no longer needs to branch on renounced state.
+      addTransaction({
+        id: Date.now().toString(),
+        type: 'claim',
+        label: `Claimed ${formatNumber(net)} FBiT (burned ${formatNumber(burned)})`,
+        amount: net,
+        txHash,
+        timestamp: Date.now(),
+        status: 'success',
+        network: selectedNetwork,
+      });
+      toast.success(`✓ Claimed ${formatNumber(net)} FBiT · ${formatNumber(burned)} FBiT burned 🔥`);
     } catch (err: any) {
       console.error('[handleClaim] error:', err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -238,35 +223,20 @@ export default function Dashboard() {
 
       compoundStakeReward(stakeId, net);
 
-      if (platformStats.isRenounced) {
-        // Post-renounce: admin additionally gets 25% of gross from pool (separate, not from user)
-        const adminFee = reward * 0.25;
-        addTransaction({
-          id: Date.now().toString(),
-          type: 'compound',
-          label: `Compounded ${formatNumber(net, 8)} FBiT · ${formatNumber(burned, 8)} burned · admin fee ${formatNumber(adminFee)} from pool`,
-          amount: net,
-          txHash,
-          timestamp: Date.now(),
-          status: 'success',
-          network: selectedNetwork,
-        });
-        toast.success(
-          `↑ Compounded ${formatNumber(net, 8)} FBiT · ${formatNumber(burned, 8)} burned 🔥 · admin fee: ${formatNumber(adminFee)} from pool`
-        );
-      } else {
-        addTransaction({
-          id: Date.now().toString(),
-          type: 'compound',
-          label: `Compounded ${formatNumber(net, 8)} FBiT (burned ${formatNumber(burned, 8)})`,
-          amount: net,
-          txHash,
-          timestamp: Date.now(),
-          status: 'success',
-          network: selectedNetwork,
-        });
-        toast.success(`↑ Compounded ${formatNumber(net, 8)} FBiT · ${formatNumber(burned, 8)} FBiT burned 🔥`);
-      }
+      // The 1% platform fee applies identically whether renounced or not — it
+      // just routes to fee_recipient instead of the former admin — so the
+      // compound message no longer needs to branch on renounced state.
+      addTransaction({
+        id: Date.now().toString(),
+        type: 'compound',
+        label: `Compounded ${formatNumber(net, 8)} FBiT (burned ${formatNumber(burned, 8)})`,
+        amount: net,
+        txHash,
+        timestamp: Date.now(),
+        status: 'success',
+        network: selectedNetwork,
+      });
+      toast.success(`↑ Compounded ${formatNumber(net, 8)} FBiT · ${formatNumber(burned, 8)} FBiT burned 🔥`);
     } catch (err: any) {
       console.error('[handleCompound] error:', err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -883,13 +853,6 @@ function BurnEmissionPanel({ stats, network, priceUsd }: { stats: PlatformStats;
           <p className="font-display font-bold text-accent-amber text-lg sm:text-xl">{feeRate}%</p>
           <p className="text-text-secondary text-xs mt-0.5">Burned from user reward on claim / compound</p>
         </div>
-        {stats.isRenounced && (
-          <div>
-            <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Admin Fee</p>
-            <p className="font-display font-bold text-accent-purple text-lg sm:text-xl">25%</p>
-            <p className="text-text-secondary text-xs mt-0.5">Paid from pool to admin · user unaffected</p>
-          </div>
-        )}
         <div>
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Annual Emission</p>
           <p className="font-display font-bold text-brand-400 text-lg sm:text-xl">{formatNumber(stats.annualEmission)}</p>

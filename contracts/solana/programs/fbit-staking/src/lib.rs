@@ -10,9 +10,8 @@ pub const SECONDS_PER_DAY: i64 = 86400;
 pub const CLAIM_INTERVAL: i64 = 21600;           // 6 hours (4 intervals/day)
 pub const LOCK_PERIODS: [u64; 1] = [30];
 pub const DEFAULT_APY: [u64; 1] = [1_000]; // 10% — PoS minimum
-pub const PLATFORM_FEE_BPS:  u64 = 100;    // 1%
+pub const PLATFORM_FEE_BPS:  u64 = 100;    // 1% — applies always, including after renouncement (routes to fee_recipient instead of authority)
 pub const BURN_BPS:          u64 = 1000;   // 10% burn on every claim/compound
-pub const RENOUNCE_FEE_BPS:  u64 = 2500;  // 25% of gross reward to feeRecipient after renouncement
 pub const MAX_APY_BPS:       u64 = 30_000; // 300% max APY (safety ceiling)
 pub const MIN_FUND_LAMPORTS:  u64 = 100_000_000;                      // 0.1 FBiT  (9 decimals)
 pub const MAX_FUND_LAMPORTS:  u64 = 250_000_000 * 1_000_000_000;     // 250 M FBiT
@@ -337,9 +336,10 @@ pub mod fbit_staking {
         let _referrer  = ctx.accounts.user_account.referrer;
         let ref_rate   = ctx.accounts.platform.referral_reward_rate;
 
-        // When renounced, authority == Pubkey::default(): skip the 1 % stake fee
-        let fee           = if ctx.accounts.platform.is_renounced { 0 }
-                            else { amount.checked_mul(PLATFORM_FEE_BPS).unwrap().checked_div(10_000).unwrap() };
+        // Platform fee (1%) — applies always, whether renounced or not. Routes to
+        // admin_stake_account, which resolves to the authority's ATA normally or
+        // the fee_recipient's ATA after renouncement (see Stake account constraints).
+        let fee           = amount.checked_mul(PLATFORM_FEE_BPS).unwrap().checked_div(10_000).unwrap();
         let staked_amount = amount.checked_sub(fee).unwrap();
 
         let tp = ctx.accounts.token_program.to_account_info();
@@ -350,6 +350,10 @@ pub mod fbit_staking {
             token::transfer(CpiContext::new(tp.clone(), Transfer {
                 from: user_ta.clone(), to: ctx.accounts.admin_stake_account.to_account_info(), authority: owner_ai.clone(),
             }), fee)?;
+            if ctx.accounts.platform.is_renounced {
+                ctx.accounts.platform.total_fees_collected =
+                    ctx.accounts.platform.total_fees_collected.checked_add(fee).unwrap();
+            }
         }
         token::transfer(CpiContext::new(tp, Transfer {
             from: user_ta, to: ctx.accounts.stake_vault.to_account_info(), authority: owner_ai,
@@ -529,20 +533,15 @@ pub mod fbit_staking {
         let team_bonus     = gross_reward.checked_mul(team_bonus_bps).unwrap().checked_div(10_000).unwrap();
         let total_gross    = gross_reward.checked_add(team_bonus).unwrap();
 
-        // When renounced, skip 1% platform fee; pay 25% passive fee to fee_recipient instead
-        let fee         = if ctx.accounts.platform.is_renounced { 0 }
-                          else { total_gross.checked_mul(PLATFORM_FEE_BPS).unwrap().checked_div(10_000).unwrap() };
+        // Platform fee (1%) — applies always, whether renounced or not. Routes to
+        // admin_reward_account, which resolves to the authority's ATA normally or
+        // the fee_recipient's ATA after renouncement (see ClaimRewards account constraints).
+        let fee         = total_gross.checked_mul(PLATFORM_FEE_BPS).unwrap().checked_div(10_000).unwrap();
         let after_fee   = total_gross.checked_sub(fee).unwrap();
         let burn_amount = after_fee.checked_mul(ctx.accounts.platform.burn_bps).unwrap().checked_div(10_000).unwrap();
         let user_reward = after_fee.checked_sub(burn_amount).unwrap();
 
-        // Passive renounce fee: 25% of total_gross, drawn additionally from the pool
-        let renounce_fee = if ctx.accounts.platform.is_renounced {
-            total_gross.checked_mul(RENOUNCE_FEE_BPS).unwrap().checked_div(10_000).unwrap()
-        } else { 0 };
-
-        // Pool must cover: total_gross + renounce_fee (burn is within after_fee)
-        let total_required = total_gross.checked_add(renounce_fee).unwrap();
+        let total_required = total_gross;
         require!(ctx.accounts.platform.reward_pool_balance >= total_required, StakingError::InsufficientRewardPool);
 
         let bump    = ctx.accounts.platform.bump;
@@ -552,42 +551,31 @@ pub mod fbit_staking {
         let vault   = ctx.accounts.reward_vault.to_account_info();
         let plat_ai = ctx.accounts.platform.to_account_info();
 
-        if !ctx.accounts.platform.is_renounced && fee > 0 {
+        if fee > 0 {
             token::transfer(CpiContext::new_with_signer(tp.clone(), Transfer {
                 from: vault.clone(), to: ctx.accounts.admin_reward_account.to_account_info(), authority: plat_ai.clone(),
             }, signer), fee)?;
+            if ctx.accounts.platform.is_renounced {
+                ctx.accounts.platform.total_fees_collected =
+                    ctx.accounts.platform.total_fees_collected.checked_add(fee).unwrap();
+                emit!(RenounceFeeCollected {
+                    recipient:            ctx.accounts.platform.fee_recipient,
+                    claimant:             ctx.accounts.owner.key(),
+                    fee_amount:           fee,
+                    total_fees_collected: ctx.accounts.platform.total_fees_collected,
+                });
+            }
         }
         token::transfer(CpiContext::new_with_signer(tp.clone(), Transfer {
             from: vault.clone(), to: ctx.accounts.user_token_account.to_account_info(), authority: plat_ai.clone(),
         }, signer), user_reward)?;
 
         // Burn 1:1 equivalent from the reward vault
-        token::burn(CpiContext::new_with_signer(tp.clone(), Burn {
+        token::burn(CpiContext::new_with_signer(tp, Burn {
             mint:      ctx.accounts.reward_token_mint.to_account_info(),
-            from:      vault.clone(),
-            authority: plat_ai.clone(),
+            from:      vault,
+            authority: plat_ai,
         }, signer), burn_amount)?;
-
-        // Passive renounce fee — transfer directly to fee_recipient's token account
-        if ctx.accounts.platform.is_renounced && renounce_fee > 0 {
-            require!(
-                ctx.accounts.fee_recipient_token_account.owner == ctx.accounts.platform.fee_recipient,
-                StakingError::InvalidFeeRecipient
-            );
-            token::transfer(CpiContext::new_with_signer(tp, Transfer {
-                from:      vault,
-                to:        ctx.accounts.fee_recipient_token_account.to_account_info(),
-                authority: plat_ai,
-            }, signer), renounce_fee)?;
-            ctx.accounts.platform.total_fees_collected =
-                ctx.accounts.platform.total_fees_collected.checked_add(renounce_fee).unwrap();
-            emit!(RenounceFeeCollected {
-                recipient:           ctx.accounts.platform.fee_recipient,
-                claimant:            ctx.accounts.owner.key(),
-                fee_amount:          renounce_fee,
-                total_fees_collected: ctx.accounts.platform.total_fees_collected,
-            });
-        }
 
         ctx.accounts.stake_entry.last_claim_at = now;
         ctx.accounts.stake_entry.total_claimed =
@@ -638,20 +626,15 @@ pub mod fbit_staking {
         let team_bonus     = gross_reward.checked_mul(team_bonus_bps).unwrap().checked_div(10_000).unwrap();
         let total_gross    = gross_reward.checked_add(team_bonus).unwrap();
 
-        // When renounced, skip 1% platform fee; pay 25% passive fee to fee_recipient instead
-        let fee             = if ctx.accounts.platform.is_renounced { 0 }
-                              else { total_gross.checked_mul(PLATFORM_FEE_BPS).unwrap().checked_div(10_000).unwrap() };
+        // Platform fee (1%) — applies always, whether renounced or not. Routes to
+        // admin_reward_account, which resolves to the authority's ATA normally or
+        // the fee_recipient's ATA after renouncement (see CompoundRewards account constraints).
+        let fee             = total_gross.checked_mul(PLATFORM_FEE_BPS).unwrap().checked_div(10_000).unwrap();
         let after_fee       = total_gross.checked_sub(fee).unwrap();
         let burn_amount     = after_fee.checked_mul(ctx.accounts.platform.burn_bps).unwrap().checked_div(10_000).unwrap();
         let compound_amount = after_fee.checked_sub(burn_amount).unwrap();
 
-        // Passive renounce fee: 25% of total_gross, drawn additionally from the pool
-        let renounce_fee = if ctx.accounts.platform.is_renounced {
-            total_gross.checked_mul(RENOUNCE_FEE_BPS).unwrap().checked_div(10_000).unwrap()
-        } else { 0 };
-
-        // Pool must cover: total_gross + renounce_fee (burn is within after_fee)
-        let total_required = total_gross.checked_add(renounce_fee).unwrap();
+        let total_required = total_gross;
         require!(
             ctx.accounts.platform.reward_pool_balance >= total_required,
             StakingError::InsufficientRewardPool
@@ -664,39 +647,28 @@ pub mod fbit_staking {
         let vault   = ctx.accounts.reward_vault.to_account_info();
         let plat_ai = ctx.accounts.platform.to_account_info();
 
-        if !ctx.accounts.platform.is_renounced && fee > 0 {
+        if fee > 0 {
             token::transfer(CpiContext::new_with_signer(tp.clone(), Transfer {
                 from: vault.clone(), to: ctx.accounts.admin_reward_account.to_account_info(), authority: plat_ai.clone(),
             }, signer), fee)?;
+            if ctx.accounts.platform.is_renounced {
+                ctx.accounts.platform.total_fees_collected =
+                    ctx.accounts.platform.total_fees_collected.checked_add(fee).unwrap();
+                emit!(RenounceFeeCollected {
+                    recipient:            ctx.accounts.platform.fee_recipient,
+                    claimant:             ctx.accounts.owner.key(),
+                    fee_amount:           fee,
+                    total_fees_collected: ctx.accounts.platform.total_fees_collected,
+                });
+            }
         }
 
         // Burn 1:1 equivalent from the reward vault
-        token::burn(CpiContext::new_with_signer(tp.clone(), Burn {
+        token::burn(CpiContext::new_with_signer(tp, Burn {
             mint:      ctx.accounts.reward_token_mint.to_account_info(),
-            from:      vault.clone(),
-            authority: plat_ai.clone(),
+            from:      vault,
+            authority: plat_ai,
         }, signer), burn_amount)?;
-
-        // Passive renounce fee — transfer directly to fee_recipient's token account
-        if ctx.accounts.platform.is_renounced && renounce_fee > 0 {
-            require!(
-                ctx.accounts.fee_recipient_token_account.owner == ctx.accounts.platform.fee_recipient,
-                StakingError::InvalidFeeRecipient
-            );
-            token::transfer(CpiContext::new_with_signer(tp, Transfer {
-                from:      vault,
-                to:        ctx.accounts.fee_recipient_token_account.to_account_info(),
-                authority: plat_ai,
-            }, signer), renounce_fee)?;
-            ctx.accounts.platform.total_fees_collected =
-                ctx.accounts.platform.total_fees_collected.checked_add(renounce_fee).unwrap();
-            emit!(RenounceFeeCollected {
-                recipient:           ctx.accounts.platform.fee_recipient,
-                claimant:            ctx.accounts.owner.key(),
-                fee_amount:          renounce_fee,
-                total_fees_collected: ctx.accounts.platform.total_fees_collected,
-            });
-        }
 
         ctx.accounts.platform.reward_pool_balance =
             ctx.accounts.platform.reward_pool_balance.checked_sub(total_required).unwrap();
@@ -734,9 +706,10 @@ pub mod fbit_staking {
         require!(now >= ctx.accounts.stake_entry.unlock_at, StakingError::LockPeriodActive);
 
         let amount      = ctx.accounts.stake_entry.amount;
-        // When renounced, skip the 1 % unstake fee
-        let fee         = if ctx.accounts.platform.is_renounced { 0 }
-                          else { amount.checked_mul(PLATFORM_FEE_BPS).unwrap().checked_div(10_000).unwrap() };
+        // Platform fee (1%) — applies always, whether renounced or not. Routes to
+        // admin_stake_account, which resolves to the authority's ATA normally or
+        // the fee_recipient's ATA after renouncement (see Unstake account constraints).
+        let fee         = amount.checked_mul(PLATFORM_FEE_BPS).unwrap().checked_div(10_000).unwrap();
         let user_amount = amount.checked_sub(fee).unwrap();
 
         let bump    = ctx.accounts.platform.bump;
@@ -750,6 +723,10 @@ pub mod fbit_staking {
             token::transfer(CpiContext::new_with_signer(tp.clone(), Transfer {
                 from: vault.clone(), to: ctx.accounts.admin_stake_account.to_account_info(), authority: plat_ai.clone(),
             }, signer), fee)?;
+            if ctx.accounts.platform.is_renounced {
+                ctx.accounts.platform.total_fees_collected =
+                    ctx.accounts.platform.total_fees_collected.checked_add(fee).unwrap();
+            }
         }
         token::transfer(CpiContext::new_with_signer(tp, Transfer {
             from: vault, to: ctx.accounts.user_token_account.to_account_info(), authority: plat_ai,
@@ -1212,8 +1189,13 @@ pub struct Stake<'info> {
         constraint = stake_vault.owner == platform.key() @ StakingError::InvalidVault,
         constraint = stake_vault.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
     pub stake_vault:        Box<Account<'info, TokenAccount>>,
+    /// Receives the 1% platform fee — the authority's ATA normally, or the
+    /// fee_recipient's ATA after renouncement (fee still applies post-renounce).
     #[account(mut,
-        constraint = (platform.is_renounced || admin_stake_account.owner == platform.authority) @ StakingError::InvalidAdminAccount,
+        constraint = (
+            (platform.is_renounced  && admin_stake_account.owner == platform.fee_recipient) ||
+            (!platform.is_renounced && admin_stake_account.owner == platform.authority)
+        ) @ StakingError::InvalidAdminAccount,
         constraint = admin_stake_account.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
     pub admin_stake_account: Box<Account<'info, TokenAccount>>,
     /// Reward vault — pays multi-level referral rewards on stake (via remaining_accounts).
@@ -1248,21 +1230,18 @@ pub struct ClaimRewards<'info> {
         constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
         constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
     pub reward_vault:        Box<Account<'info, TokenAccount>>,
-    /// When not renounced: must be authority's reward-mint ATA (receives 1% fee).
-    /// When renounced: pass any valid reward-mint token account (fee is skipped).
+    /// Receives the 1% platform fee — the authority's ATA normally, or the
+    /// fee_recipient's ATA after renouncement (fee still applies post-renounce).
     #[account(mut,
         constraint = (
-            admin_reward_account.owner == platform.authority ||
-            platform.is_renounced
+            (platform.is_renounced  && admin_reward_account.owner == platform.fee_recipient) ||
+            (!platform.is_renounced && admin_reward_account.owner == platform.authority)
         ) @ StakingError::InvalidAdminAccount,
         constraint = admin_reward_account.mint == platform.reward_token_mint @ StakingError::InvalidMint)]
     pub admin_reward_account:          Box<Account<'info, TokenAccount>>,
     /// Reward token mint — required for the 1:1 burn CPI
     #[account(mut, constraint = reward_token_mint.key() == platform.reward_token_mint @ StakingError::InvalidMint)]
     pub reward_token_mint:             Box<Account<'info, Mint>>,
-    /// Receives the 25% passive renounce fee (only used when platform.is_renounced).
-    #[account(mut, constraint = fee_recipient_token_account.mint == platform.reward_token_mint @ StakingError::InvalidMint)]
-    pub fee_recipient_token_account:   Box<Account<'info, TokenAccount>>,
     pub owner:               Signer<'info>,
     pub token_program:       Program<'info, Token>,
 }
@@ -1282,21 +1261,18 @@ pub struct CompoundRewards<'info> {
         constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
         constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
     pub reward_vault:         Box<Account<'info, TokenAccount>>,
-    /// When not renounced: must be authority's reward-mint ATA (receives 1% fee).
-    /// When renounced: pass any valid reward-mint token account (fee is skipped).
+    /// Receives the 1% platform fee — the authority's ATA normally, or the
+    /// fee_recipient's ATA after renouncement (fee still applies post-renounce).
     #[account(mut,
         constraint = (
-            admin_reward_account.owner == platform.authority ||
-            platform.is_renounced
+            (platform.is_renounced  && admin_reward_account.owner == platform.fee_recipient) ||
+            (!platform.is_renounced && admin_reward_account.owner == platform.authority)
         ) @ StakingError::InvalidAdminAccount,
         constraint = admin_reward_account.mint == platform.reward_token_mint @ StakingError::InvalidMint)]
     pub admin_reward_account:          Box<Account<'info, TokenAccount>>,
     /// Reward token mint — required for the 1:1 burn CPI
     #[account(mut, constraint = reward_token_mint.key() == platform.reward_token_mint @ StakingError::InvalidMint)]
     pub reward_token_mint:             Box<Account<'info, Mint>>,
-    /// Receives the 25% passive renounce fee (only used when platform.is_renounced).
-    #[account(mut, constraint = fee_recipient_token_account.mint == platform.reward_token_mint @ StakingError::InvalidMint)]
-    pub fee_recipient_token_account:   Box<Account<'info, TokenAccount>>,
     pub owner:                Signer<'info>,
     pub token_program:        Program<'info, Token>,
 }
@@ -1320,8 +1296,13 @@ pub struct Unstake<'info> {
         constraint = stake_vault.owner == platform.key() @ StakingError::InvalidVault,
         constraint = stake_vault.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
     pub stake_vault:         Box<Account<'info, TokenAccount>>,
+    /// Receives the 1% platform fee — the authority's ATA normally, or the
+    /// fee_recipient's ATA after renouncement (fee still applies post-renounce).
     #[account(mut,
-        constraint = (platform.is_renounced || admin_stake_account.owner == platform.authority) @ StakingError::InvalidAdminAccount,
+        constraint = (
+            (platform.is_renounced  && admin_stake_account.owner == platform.fee_recipient) ||
+            (!platform.is_renounced && admin_stake_account.owner == platform.authority)
+        ) @ StakingError::InvalidAdminAccount,
         constraint = admin_stake_account.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
     pub admin_stake_account: Box<Account<'info, TokenAccount>>,
     pub owner:               Signer<'info>,
