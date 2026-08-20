@@ -25,8 +25,6 @@ export default function AdminPanel() {
 
   const [fundAmount, setFundAmount]         = useState('');
   const [reserveAmount, setReserveAmount]   = useState('');
-  const [rewardRate, setRewardRate]         = useState('');
-  const [referralRate, setReferralRate] = useState('');
   const [userAddress, setUserAddress]   = useState('');
   const [processing, setProcessing]       = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<'pool' | 'rates' | 'users' | 'tiers' | 'platform'>('pool');
@@ -154,16 +152,9 @@ export default function AdminPanel() {
     run('fund', () => contract.fundRewardPool(n), `Funded reward pool with ${formatNumber(n)} FBiT`);
   };
 
-  const handleSetRewardRate = () => {
-    const n = parseInt(rewardRate, 10);
-    if (!n || n <= 0) return;
-    run('rewardRate', () => contract.setRewardRate(n), `Reward rate updated to ${n / 100}%`);
-  };
-
-  const handleSetReferralRate = () => {
-    const n = parseInt(referralRate, 10);
-    if (!n || n <= 0) return;
-    run('referralRate', () => contract.setReferralRewardRate(n), `Referral rate updated to ${n / 100}%`);
+  const handleToggleReferralSystem = () => {
+    const next = platformStats.referralRewardRate > 0 ? 0 : 1;
+    run('referralRate', () => contract.setReferralRewardRate(next), `Referral system turned ${next > 0 ? 'ON' : 'OFF'}`);
   };
 
   const handleSetReferralPercentages = () => {
@@ -720,56 +711,26 @@ export default function AdminPanel() {
       {activeSection === 'rates' && (
         <div className="space-y-4">
           <div className="glass-card space-y-4">
-            <h3 className="font-display font-semibold text-lg">Reward Rate</h3>
+            <h3 className="font-display font-semibold text-lg">Referral System</h3>
             <p className="text-text-muted text-xs -mt-2">
-              Current: <span className="text-accent-purple font-mono">{platformStats.rewardRate / 100}%</span> ({platformStats.rewardRate} bps)
+              Master on/off switch for the entire 10-level referral system. This is <strong>not</strong> a
+              percentage — the contract only checks whether this value is zero or non-zero. The actual
+              per-level reward percentages are set separately below, under "Referral Level Percentages".
             </p>
-            <div>
-              <label className="text-sm text-text-secondary font-display mb-1 block">
-                New rate (basis points — 1000 = 10%)
-              </label>
-              <input
-                type="number"
-                value={rewardRate}
-                onChange={(e) => setRewardRate(e.target.value)}
-                placeholder={`Current: ${platformStats.rewardRate}`}
-                className="input-field font-mono"
-              />
+            <div className={`p-3 rounded-xl border text-sm font-display font-semibold text-center ${
+              platformStats.referralRewardRate > 0
+                ? 'bg-brand-500/10 border-brand-500/20 text-brand-400'
+                : 'bg-accent-rose/10 border-accent-rose/20 text-accent-rose'
+            }`}>
+              Referral System is currently {platformStats.referralRewardRate > 0 ? 'ON' : 'OFF'}
             </div>
             <AdminButton
-              label="Update Reward Rate"
+              label={platformStats.referralRewardRate > 0 ? 'Turn Referral System OFF' : 'Turn Referral System ON'}
               loadingLabel="Updating…"
-              onClick={handleSetRewardRate}
-              disabled={isRenounced || !rewardRate || parseInt(rewardRate) <= 0}
-              loading={busy('rewardRate')}
-              variant="purple"
-            />
-          </div>
-
-          <div className="glass-card space-y-4">
-            <h3 className="font-display font-semibold text-lg">Referral Reward Rate</h3>
-            <p className="text-text-muted text-xs -mt-2">
-              Current: <span className="text-accent-cyan font-mono">{platformStats.referralRewardRate / 100}%</span> ({platformStats.referralRewardRate} bps)
-            </p>
-            <div>
-              <label className="text-sm text-text-secondary font-display mb-1 block">
-                New rate (basis points)
-              </label>
-              <input
-                type="number"
-                value={referralRate}
-                onChange={(e) => setReferralRate(e.target.value)}
-                placeholder={`Current: ${platformStats.referralRewardRate}`}
-                className="input-field font-mono"
-              />
-            </div>
-            <AdminButton
-              label="Update Referral Rate"
-              loadingLabel="Updating…"
-              onClick={handleSetReferralRate}
-              disabled={isRenounced || !referralRate || parseInt(referralRate) <= 0}
+              onClick={handleToggleReferralSystem}
+              disabled={isRenounced}
               loading={busy('referralRate')}
-              variant="cyan"
+              variant={platformStats.referralRewardRate > 0 ? 'rose' : 'cyan'}
             />
           </div>
 
