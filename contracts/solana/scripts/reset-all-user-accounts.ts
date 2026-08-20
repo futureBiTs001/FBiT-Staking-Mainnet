@@ -65,21 +65,23 @@ async function main() {
     const { pubkey, account } = accounts[i];
     const d = account.data;
     const owner = new PublicKey(d.subarray(8, 40));
-    // Offsets: owner(32) totalStaked(8) totalRewardsEarned(8) totalReferralRewards(8)
+    // Offsets: owner(32) totalStaked(8) totalRewardsEarned(8) totalReferralRewards(8) hasReferrer(1)
     const totalStaked = d.readBigUInt64LE(40);
     const totalRewardsEarned = d.readBigUInt64LE(48);
     const totalReferralRewards = d.readBigUInt64LE(56);
+    const hasReferrer = d[64] === 1;
+    const referrer = hasReferrer ? new PublicKey(d.subarray(65, 97)).toBase58() : null;
 
     process.stdout.write(`  [${i + 1}/${accounts.length}] ${owner.toBase58()} (${pubkey.toBase58().slice(0, 8)}…) … `);
 
-    if (totalStaked === 0n && totalRewardsEarned === 0n && totalReferralRewards === 0n) {
+    if (totalStaked === 0n && totalRewardsEarned === 0n && totalReferralRewards === 0n && !hasReferrer) {
       console.log('already clean, skip');
       alreadyClean++;
       continue;
     }
 
     if (DRY_RUN) {
-      console.log(`would reset (staked=${totalStaked}, earned=${totalRewardsEarned}, referral=${totalReferralRewards})`);
+      console.log(`would reset (staked=${totalStaked}, earned=${totalRewardsEarned}, referral=${totalReferralRewards}, referrer=${referrer ?? 'none'})`);
       continue;
     }
 
