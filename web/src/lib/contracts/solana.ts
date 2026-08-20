@@ -402,33 +402,76 @@ export async function solanaIsPlatformInitialized(): Promise<boolean> {
   }
 }
 
+/**
+ * Reads the Platform account directly via raw bytes instead of Anchor's
+ * program.account.platform.fetch(). The installed @coral-xyz/anchor client
+ * (0.32.x) uses a newer IDL type-schema than this project's hand-written IDL
+ * (web/src/idl/fbit_staking.ts) — any Option<Pubkey> field (e.g. registerUser's
+ * `referrer` arg) throws "Cannot use 'in' operator to search for 'option' in
+ * publicKey" the moment `new Program(idl, provider)` runs, before any fetch
+ * even happens. getReadOnlyProgram() is unusable for this reason (same issue
+ * StakeEntry fetching already works around below — see its comment).
+ *
+ * Layout (offsets after the 8-byte discriminator), matching the Platform
+ * struct in contracts/solana/programs/fbit-staking/src/lib.rs:
+ *   8   authority             Pubkey (32)
+ *   40  reward_token_mint     Pubkey (32)
+ *   72  stake_token_mint      Pubkey (32)
+ *   104 reward_rate           u64 (8)
+ *   112 referral_reward_rate  u64 (8)
+ *   120 total_staked          u64 (8)
+ *   128 total_users           u64 (8)
+ *   136 reward_pool_balance   u64 (8)
+ *   144 is_paused             bool (1)
+ *   145 base_apy[1]           u64[1] (8)
+ *   153 team_tier_min_staked  u64[10] (80)
+ *   233 team_tier_bonus_bps   u64[10] (80)
+ *   313 total_burned          u64 (8)
+ *   321 halving_epoch         u64 (8)  — unused, kept for backward compat
+ *   329 halving_start_time    i64 (8)  — unused, kept for backward compat
+ *   337 is_renounced          bool (1)
+ *   338 fee_recipient         Pubkey (32)
+ *   370 total_fees_collected  u64 (8)
+ *   378 bump                  u8 (1)
+ *   379 total_reserve         u64 (8)
+ *   387 total_emission_released u64 (8)
+ *   395 emission_start_time   i64 (8)
+ *   403 annual_emission       u64 (8)
+ *   411 burn_bps              u64 (8)
+ *   419 referral_percentages  u64[10] (80)
+ *   499 last_release_time     i64 (8)
+ */
 export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> {
   try {
-    const program = getReadOnlyProgram();
+    const connection = getRpcConnection();
     const [pda] = platformPda();
-    const platform: any = await (program.account as any).platform.fetch(pda);
+    const info = await connection.getAccountInfo(pda);
+    if (!info) return null;
+    const d = info.data;
 
-    const totalStaked = fromLamports(platform.totalStaked);
+    const u64 = (off: number) => d.readBigUInt64LE(off);
+    const i64 = (off: number) => d.readBigInt64LE(off);
+    const u64ToNum = (off: number) => Number(u64(off));
+    const toFBiT = (off: number) => Number(u64(off)) / Number(SCALE);
+
+    const totalStakedRaw     = u64(120);
+    const annualEmissionRaw  = u64(403);
+    const totalReserve       = toFBiT(379);
+    const totalEmissionReleased = toFBiT(387);
+    const emissionStartTime  = Number(i64(395));
+    const lastReleaseTimeRaw = i64(499);
+    const lastReleaseTime    = lastReleaseTimeRaw !== 0n ? Number(lastReleaseTimeRaw) : emissionStartTime;
+    const annualEmission     = toFBiT(403);
+    const totalStaked        = toFBiT(120);
 
     // Live dynamic APY: annualEmission / totalStaked × 10000 (bps), same formula as on-chain.
-    // Falls back to baseApy[0] when emission is zero (admin hasn't funded yet).
-    let effectiveAPY = platform.baseApy
-      ? Math.min(30_000, Math.max(1_000, Number(platform.baseApy[0])))
-      : 1_000;
-    if (platform.annualEmission && platform.totalStaked) {
-      const emBN = new BN(platform.annualEmission.toString());
-      const stBN = new BN(platform.totalStaked.toString());
-      if (emBN.gtn(0) && stBN.gtn(0)) {
-        const raw = emBN.muln(10_000).div(stBN).toNumber();
-        effectiveAPY = Math.min(30_000, Math.max(1_000, raw));
-      }
+    // Falls back to baseApy[0] when emission or total_staked is zero.
+    const baseApy0 = u64ToNum(145);
+    let effectiveAPY = Math.min(30_000, Math.max(1_000, baseApy0 || 1_000));
+    if (annualEmissionRaw > 0n && totalStakedRaw > 0n) {
+      const raw = (annualEmissionRaw * 10_000n) / totalStakedRaw;
+      effectiveAPY = Math.min(30_000, Math.max(1_000, Number(raw)));
     }
-    const annualEmission        = platform.annualEmission        ? fromLamports(platform.annualEmission)        : 0;
-    const burnBps               = platform.burnBps               ? Number(platform.burnBps)                     : 0;
-    const totalReserve          = platform.totalReserve          ? fromLamports(platform.totalReserve)          : 0;
-    const totalEmissionReleased = platform.totalEmissionReleased ? fromLamports(platform.totalEmissionReleased) : 0;
-    const emissionStartTime     = platform.emissionStartTime     ? Number(platform.emissionStartTime)           : 0;
-    const lastReleaseTime       = platform.lastReleaseTime ? Number(platform.lastReleaseTime) : emissionStartTime;
 
     // Calculate releasable emission: proportional to elapsed time since the LAST
     // release, not since emission_start_time — stays correct even if annual_emission
@@ -441,43 +484,44 @@ export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> 
       releasableEmission = Math.max(0, Math.min(totalReserve, annualEmission * (elapsed / secondsYear)));
     }
 
-    // Build on-chain team tier config — merges static labels/colors with live minStaked/bonusBps
+    // Team tiers: merge static labels/colors with live minStaked/bonusBps
     const { TEAM_TARGET_TIERS: STATIC_TIERS } = await import('@/types');
-    let teamTiers: import('@/types').PlatformStats['teamTiers'] = undefined;
-    if (platform.teamTierMinStaked && platform.teamTierBonusBps) {
-      teamTiers = STATIC_TIERS.map((t, i) => {
-        const rawMin = platform.teamTierMinStaked[i];
-        const rawBps = platform.teamTierBonusBps[i];
-        const minTeamStaked = rawMin != null ? fromLamports(rawMin) : t.minTeamStaked;
-        const bonusBps      = rawBps != null ? Number(rawBps)       : t.bonusBps;
-        return { tier: t.tier, label: t.label, color: t.color, minTeamStaked, bonusBps, bonusPercentage: bonusBps / 100 };
-      });
-    }
+    const teamTiers: import('@/types').PlatformStats['teamTiers'] = STATIC_TIERS.map((t, i) => {
+      const minTeamStaked = toFBiT(153 + i * 8);
+      const bonusBps      = u64ToNum(233 + i * 8);
+      return {
+        tier: t.tier, label: t.label, color: t.color,
+        minTeamStaked: minTeamStaked || t.minTeamStaked,
+        bonusBps:      bonusBps || t.bonusBps,
+        bonusPercentage: (bonusBps || t.bonusBps) / 100,
+      };
+    });
+
+    const referralPercentages = Array.from({ length: 10 }, (_, i) => u64ToNum(419 + i * 8));
 
     return {
       totalStaked,
-      totalUsers:            platform.totalUsers ? Number(platform.totalUsers.toString()) : 0,
-      rewardPoolBalance:     fromLamports(platform.rewardPoolBalance),
-      rewardRate:            platform.rewardRate ? Number(platform.rewardRate.toString()) : 0,
-      referralRewardRate:    platform.referralRewardRate ? Number(platform.referralRewardRate.toString()) : 0,
-      isPaused:              platform.isPaused,
-      totalBurned:           fromLamports(platform.totalBurned),
+      totalUsers:            u64ToNum(128),
+      rewardPoolBalance:     toFBiT(136),
+      rewardRate:            u64ToNum(104),
+      referralRewardRate:    u64ToNum(112),
+      isPaused:              d[144] === 1,
+      totalBurned:           toFBiT(313),
       annualEmission,
-      burnBps,
+      burnBps:               u64ToNum(411),
       effectiveAPY,
-      isRenounced:           Boolean(platform.isRenounced),
-      feeRecipient:          platform.feeRecipient?.toString() ?? '',
-      totalFeesCollected:    fromLamports(platform.totalFeesCollected),
+      isRenounced:           d[337] === 1,
+      feeRecipient:          new PublicKey(d.subarray(338, 370)).toBase58(),
+      totalFeesCollected:    toFBiT(370),
       totalReserve,
       emissionStartTime,
       totalEmissionReleased,
       releasableEmission,
       teamTiers,
-      referralPercentages: Array.isArray((platform as any).referralPercentages)
-        ? (platform as any).referralPercentages.map((v: any) => Number(v.toString()))
-        : undefined,
+      referralPercentages: referralPercentages.some(v => v > 0) ? referralPercentages : undefined,
     };
-  } catch {
+  } catch (err) {
+    console.warn('[solanaFetchPlatformStats] failed:', err);
     return null;
   }
 }
