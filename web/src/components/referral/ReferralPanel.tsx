@@ -65,7 +65,12 @@ export default function ReferralPanel() {
     if (!address) return false;
     setIsRefreshing(true);
     try {
-      await contract.syncUserData();
+      // referralPercentages/teamTiers (live on-chain config, used below) live on
+      // platformStats — this panel never fetched it itself, relying on some other
+      // component (e.g. Dashboard) having already synced it in the same session.
+      // Opened directly, it silently fell back to the static REFERRAL_LEVELS /
+      // TEAM_TARGET_TIERS constants instead of the real current on-chain values.
+      await Promise.allSettled([contract.syncUserData(), contract.syncPlatformStats()]);
       setLastSyncAt(new Date());
       setIsRefreshing(false);
       return true;
