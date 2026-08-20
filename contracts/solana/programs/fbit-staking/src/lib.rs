@@ -799,13 +799,6 @@ pub mod fbit_staking {
         Ok(())
     }
 
-    pub fn set_reward_rate(ctx: Context<AdminAction>, new_rate: u64) -> Result<()> {
-        require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
-        ctx.accounts.platform.reward_rate = new_rate;
-        emit!(RewardRateUpdated { new_rate });
-        Ok(())
-    }
-
     pub fn set_referral_reward_rate(ctx: Context<AdminAction>, new_rate: u64) -> Result<()> {
         require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
         ctx.accounts.platform.referral_reward_rate = new_rate;
@@ -1406,7 +1399,6 @@ pub struct FixBump<'info> {
 #[event] pub struct RewardsCompounded      { pub user: Pubkey, pub amount: u64, pub fee: u64, pub new_stake: u64, pub timestamp: i64 }
 #[event] pub struct TokensUnstaked         { pub user: Pubkey, pub amount: u64, pub fee: u64, pub timestamp: i64 }
 #[event] pub struct ReferralReward         { pub staker: Pubkey, pub referrer: Pubkey, pub amount: u64, pub level: u8 }
-#[event] pub struct RewardRateUpdated      { pub new_rate: u64 }
 #[event] pub struct ReferralRateUpdated    { pub new_rate: u64 }
 #[event] pub struct LockPeriodAPYUpdated   { pub index: u8, pub apy: u64 }
 #[event] pub struct UserBlocked            { pub user: Pubkey }
