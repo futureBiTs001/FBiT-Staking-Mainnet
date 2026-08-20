@@ -117,6 +117,17 @@ export default function AdminPanel() {
       .catch(() => setPlatformInitialized(false));
   }, [contract.isLive]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Fetch live platform stats on mount and keep them fresh — platformStats is no
+  // longer persisted across reloads (see store.ts), and unlike Dashboard/StakePanel
+  // this panel had no sync-on-mount at all, so it only ever showed real numbers
+  // after an admin action fired one of the post-tx syncPlatformStats() calls below.
+  useEffect(() => {
+    if (!contract.isLive) return;
+    contract.syncPlatformStats().catch(() => {});
+    const id = setInterval(() => { contract.syncPlatformStats().catch(() => {}); }, 60_000);
+    return () => clearInterval(id);
+  }, [contract.isLive]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleInitializePlatform = () => {
     run('initPlatform', () => contract.initializePlatform(), 'Platform initialized successfully! Proceed to deposit reserve.');
     // Re-check after a short delay so the UI updates
