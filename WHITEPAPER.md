@@ -73,7 +73,7 @@ The platform is built with the **Anchor framework** on Solana, using Program Der
 
 FBiT is both the **stake token** and the **reward token**. This single-token design means all staking rewards are paid in the same asset users stake, eliminating impermanent loss from reward token divergence. The Solana program uses Program Derived Addresses (PDAs) for trustless vault management — staked and reward tokens are held in program-owned accounts, never by any individual wallet.
 
-> **Note:** the staking program will be upgraded in place to point at this token (same program ID, `8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp`) — the on-chain migration is planned but not yet executed as of this writing. See §12.
+> **Note:** the staking program was upgraded in place to point at this token (same program ID, `8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp`) on 2026-08-20 — the migration is live on mainnet. See §12.
 
 ---
 
@@ -386,7 +386,7 @@ These safeguards are verifiable directly on-chain (mint authority, liquidity poo
 | FBiT SPL Mint | `5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME` |
 | Program ID    | `8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp` |
 
-The same program ID will be retained across the token migration — the program is being upgraded in place rather than redeployed (see §3.1 note). As of this writing, the migration to the mint above is planned but not yet executed on-chain.
+The same program ID was retained across the token migration — the program was upgraded in place rather than redeployed (see §3.1 note). The migration to the mint above, the annual emission rate, the Team Target Bonus tiers, and the 120,000,000 FBiT reserve deposit are all live on mainnet as of 2026-08-20.
 
 ---
 
