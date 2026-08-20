@@ -657,6 +657,29 @@ npm start
 
 > These entries are a historical record and are left as originally written, including references to the Polygon deployment that was part of the platform at the time. The platform is Solana-only as of the most recent entries below.
 
+### v2.1 — August 2026
+
+**Critical security fix — orphaned pre-migration stakes could drain the reserve.** After the v2.0 mint migration, 19 StakeEntry accounts created under the *old* mint were still `is_active = true` with their lock periods long expired. `unstake()`/`claim_rewards()`/`compound_rewards()` only validate that the supplied vault matches the platform's *current* mint — they never check which mint an entry was originally staked under — so any of those 19 entries could call `unstake()` against the new shared stake/reward/reserve vault and receive real new-mint FBiT they never deposited under the new mint. The platform was paused immediately as a stopgap the moment this was found, then fully resolved:
+
+- **Three new admin instructions**, all hard-scoped to never touch live funds: `burn_stale_vault` (burns and closes a vault only if its mint differs from *both* the current stake and reward mint — cannot target the live vault), `void_stale_stake` (force-deactivates a StakeEntry without moving tokens), `reset_user_account` (zeroes a UserAccount's accumulated stats and referrer link)
+- **Cleanup executed on mainnet**: burned 228,334,553 orphaned old-mint FBiT from the old reserve vault and closed it; voided all 19 stale StakeEntry accounts; reset all 17 registered UserAccounts to a clean slate (stats and referrer links)
+- **`close_user_account`** added afterward to fully retire the now-empty UserAccount PDAs (reclaiming rent, decrementing `total_users`) rather than leaving zeroed-but-still-registered accounts behind
+- The platform remains paused as of this writing, pending the final cleanup upgrade landing and an explicit decision to resume normal operations — see the pinned project-state note for current status before assuming it's live
+
+**Renounce-ownership fee simplified.** The separate 25%-of-gross fee paid to `fee_recipient` after renouncement is gone. The same 1% platform fee that always applied on stake/unstake/claim/compound now just keeps applying after renouncement too — it routes to `fee_recipient` instead of the former authority, rather than being waived in favor of a bigger one-off cut. Removes an entire extra transfer and required account (`fee_recipient_token_account`) from claim/compound.
+
+**Dead code removed**: `set_reward_rate`/`reward_rate` was never read by any reward calculation (rewards are driven by `annual_emission`/`total_staked` via `get_effective_apy_bps`, not this field) — the setter instruction was removed and its Admin Panel UI replaced with an honest explanation. `referral_reward_rate`'s Admin Panel control was similarly rebuilt as a plain ON/OFF toggle — the contract only checks whether it's zero or non-zero to gate the whole 10-level referral system; the specific numeric value it held was never meaningful.
+
+**Frontend bug hunt — several panels never synced live data on their own.** Dashboard and the Stake tab already fetched fresh on-chain platform stats on mount; Admin Panel, Referral Panel, and the Calculator tab did not — they only ever showed real numbers after some *other* tab's sync call happened to run first in the same session, otherwise silently showing zero/default values (Reserve, Annual Emission, Releasable Now, live referral percentages, and team tiers all affected). All three now sync on mount and on a refresh interval, matching the existing Dashboard/Stake pattern.
+
+**Root cause of the recurring "shows 0 instead of the real value" reports**: `networkPlatformStats` was being persisted to `localStorage` via Zustand's `persist` middleware. A stale cached number — from an older contract deploy, an old on-chain config, or simply a background sync that failed silently — would sit there looking authoritative indefinitely instead of being replaced by a fresh fetch. Stopped persisting it entirely; every page load now starts from neutral defaults and gets corrected by a live fetch within moments, closing the whole class of bug (this had separately caused wrong Min/Max stake limits, a stale Annual Emission figure, and a stale Total Burned figure, all fixed piecemeal before the root cause was found).
+
+**On-chain burn rate corrected to match the frontend's displayed 10%** — a client-side "migration" workaround had been silently overriding a genuine on-chain `burn_bps` of 2,500 (25%) to display 1,000 (10%) instead, meaning users were told 10% while 25% of their reward was actually being burned on every claim. Fixed on-chain via `set_burn_bps(1000)` rather than making the display honest about the wrong value.
+
+**IDL/contract drift fixed**: the frontend's hand-written IDL still said "Claim too early - wait 12 hours" for an error the contract actually enforces at 6 hours (`CLAIM_INTERVAL = 21600`) — a leftover from an earlier contract version.
+
+**Deployment/tooling notes**: Vercel's production environment variables for the Solana mint/vault addresses were 95 days stale (still pointing at the pre-migration mint) despite the app code being current — env vars aren't part of a git deploy and have to be updated separately. Also hit and resolved a stale-build-cache Vercel deployment failure, and a Solana protocol quirk where extending a program's on-chain size requires a minimum 10,240-byte increment per `solana program extend` call (the `anchor upgrade` CLI doesn't request this automatically when the actual size delta is smaller).
+
 ### v2.0 — August 2026
 
 **Polygon removed entirely.** The platform is now Solana-only across the contract, frontend, and documentation — see the legacy-era changelog entries below for what the removed Polygon deployment covered.
