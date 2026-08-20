@@ -921,6 +921,22 @@ pub mod fbit_staking {
         Ok(())
     }
 
+    /// Admin-only cleanup: closes an inactive StakeEntry PDA, reclaiming its
+    /// rent-exempt SOL to the admin. Requires is_active == false — refuses to
+    /// close a stake that's still live (real principal a user could still
+    /// unstake). Closing (rather than just voiding) also removes the historical
+    /// `total_claimed` figure that voiding alone leaves behind, which was still
+    /// being summed into wallet-level "Total Claimed" displays after a reset.
+    pub fn close_stake_entry(ctx: Context<CloseStakeEntry>) -> Result<()> {
+        require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
+        require!(!ctx.accounts.stake_entry.is_active, StakingError::StakeNotActive);
+        emit!(StakeEntryClosed {
+            stake_entry: ctx.accounts.stake_entry.key(),
+            owner:       ctx.accounts.stake_entry.owner,
+        });
+        Ok(())
+    }
+
     pub fn block_user(ctx: Context<AdminUserAction>) -> Result<()> {
         require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
         ctx.accounts.user_account.is_blocked = true;
@@ -1385,6 +1401,16 @@ pub struct CloseUserAccount<'info> {
     pub authority:    Signer<'info>,
 }
 
+#[derive(Accounts)]
+pub struct CloseStakeEntry<'info> {
+    #[account(seeds = [b"platform"], bump = platform.bump)]
+    pub platform:    Account<'info, Platform>,
+    #[account(mut, close = authority)]
+    pub stake_entry: Account<'info, StakeEntry>,
+    #[account(mut)]
+    pub authority:   Signer<'info>,
+}
+
 /// Used only by fix_bump — uses canonical `bump` (not stored platform.bump) so
 /// the seeds constraint passes even when platform.bump == 0.
 #[derive(Accounts)]
@@ -1426,6 +1452,7 @@ pub struct FixBump<'info> {
 #[event] pub struct StaleStakeVoided       { pub stake_entry: Pubkey, pub owner: Pubkey, pub amount: u64 }
 #[event] pub struct UserAccountReset       { pub user: Pubkey }
 #[event] pub struct UserAccountClosed      { pub user: Pubkey }
+#[event] pub struct StakeEntryClosed       { pub stake_entry: Pubkey, pub owner: Pubkey }
 
 // ===== ERRORS =====
 
