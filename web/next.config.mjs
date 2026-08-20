@@ -19,6 +19,25 @@ const nextConfig = {
     position: 'bottom-right',
   },
 
+  // Clickjacking / MIME-sniffing protection — important for a wallet-connect dApp,
+  // where framing the page invisibly could trick a user into approving a malicious
+  // transaction. No CSP here: Reown AppKit's wallet modal loads WalletConnect relay
+  // iframes/scripts from domains that would need careful allowlisting to avoid
+  // silently breaking wallet connect.
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+        ],
+      },
+    ];
+  },
+
   // Keep webpack config for `next build --webpack` and dev fallback
   webpack: (config) => {
     config.resolve.fallback = {
