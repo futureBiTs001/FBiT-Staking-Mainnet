@@ -54,18 +54,10 @@ export default function AdminPanel() {
   const [tierMinStaked,    setTierMinStaked]    = useState(String(liveTiers[0].minTeamStaked));
   const [tierBonusBps,     setTierBonusBps]     = useState(String(liveTiers[0].bonusBps));
 
-  // Base fallback APY (Solana only — used when emission = 0)
+  // Base fallback APY (used when emission = 0)
   const [baseFallbackApyBps, setBaseFallbackApyBps] = useState('');
 
-  // Burn unused pool (Polygon only)
-  const [burnPoolAmount, setBurnPoolAmount] = useState('');
-
-  // Emergency withdraw (Polygon only, whenPaused)
-  const [emergencyToken,  setEmergencyToken]  = useState('');
-  const [emergencyTo,     setEmergencyTo]     = useState('');
-  const [emergencyAmount, setEmergencyAmount] = useState('');
-
-  // Update User Team Stats state (Solana only)
+  // Update User Team Stats state
   const [teamStatsAddress,      setTeamStatsAddress]      = useState('');
   const [teamStatsSize,         setTeamStatsSize]         = useState('');
   const [teamStatsTotalStaked,  setTeamStatsTotalStaked]  = useState('');
@@ -78,7 +70,7 @@ export default function AdminPanel() {
     successMsg: string
   ) => {
     // SECURITY: Re-verify admin identity and rate-limit on every sensitive action.
-    if (!address || !isAdminAddress(address)) {
+    if (!address || !(await isAdminAddress(address))) {
       toast.error('Security check failed: connected wallet is not an admin.');
       return;
     }
@@ -120,15 +112,12 @@ export default function AdminPanel() {
 
   // Check on-chain whether Platform PDA is initialized
   useEffect(() => {
-    if (selectedNetwork !== 'solana' || !contract.isLive) {
-      setPlatformInitialized(true); // Polygon is always "initialized"
-      return;
-    }
+    if (!contract.isLive) return;
     setPlatformInitialized(null);
     contract.isPlatformInitialized()
       .then(ok => setPlatformInitialized(ok))
       .catch(() => setPlatformInitialized(false));
-  }, [selectedNetwork, contract.isLive]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [contract.isLive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleInitializePlatform = () => {
     run('initPlatform', () => contract.initializePlatform(), 'Platform initialized successfully! Proceed to deposit reserve.');
@@ -138,18 +127,18 @@ export default function AdminPanel() {
     }, 5000);
   };
 
-  const RESERVE_MIN = 1;
-  const RESERVE_MAX = 800_000_000;
+  const RESERVE_MIN = 0.1;
+  const RESERVE_MAX = 250_000_000;
 
   const handleDepositReserve = () => {
     const n = parseFloat(reserveAmount);
     if (!n || n <= 0) return;
     if (n < RESERVE_MIN) {
-      toast.error('Minimum deposit is 1 FBiT');
+      toast.error(`Minimum deposit is ${RESERVE_MIN} FBiT`);
       return;
     }
     if (n > RESERVE_MAX) {
-      toast.error('Maximum deposit is 800,000,000 FBiT (800M)');
+      toast.error(`Maximum deposit is ${RESERVE_MAX.toLocaleString()} FBiT`);
       return;
     }
     run('reserve', () => contract.depositReserve(n), `Deposited ${formatNumber(n)} FBiT into auto-emission reserve`);
@@ -233,23 +222,6 @@ export default function AdminPanel() {
   const handleTogglePause = () =>
     run('pause', () => contract.togglePause(platformStats.isPaused), platformStats.isPaused ? 'Platform resumed' : 'Platform paused');
 
-  const handleBurnUnusedPool = () => {
-    const n = parseFloat(burnPoolAmount);
-    if (!isValidAmount(n)) { toast.error('Enter a valid amount to burn.'); return; }
-    run('burnPool', () => contract.burnUnusedPool(n), `Burned ${formatNumber(n)} WFBIT from unused pool`);
-  };
-
-  const handleEmergencyWithdraw = () => {
-    const token = sanitizeText(emergencyToken);
-    const to    = sanitizeText(emergencyTo);
-    const n     = parseFloat(emergencyAmount);
-    if (!isValidWalletAddress(token)) { toast.error('Invalid token address.'); return; }
-    if (!isValidWalletAddress(to))    { toast.error('Invalid recipient address.'); return; }
-    if (!isValidAmount(n))            { toast.error('Enter a valid amount.'); return; }
-    run('emergencyWithdraw', () => contract.emergencyWithdraw(token, to, n), `Emergency withdrew ${formatNumber(n)} tokens to ${to.slice(0, 8)}…`);
-  };
-
-
   const handleRenounceOwnership = () => {
     setRenounceConfirm(false);
     run(
@@ -280,7 +252,7 @@ export default function AdminPanel() {
   };
 
   const handleSyncAllTiers = async () => {
-    if (!address || !isAdminAddress(address)) {
+    if (!address || !(await isAdminAddress(address))) {
       toast.error('Security check failed: connected wallet is not an admin.');
       return;
     }
@@ -335,9 +307,6 @@ export default function AdminPanel() {
     }
     run('annualEmission', () => contract.setAnnualEmission(emission), `Annual emission updated to ${emission.toLocaleString()} FBiT/year`);
   };
-
-  const handleTriggerHalving = () =>
-    run('halving', () => contract.triggerHalving(), '4-year halving triggered — base APY halved');
 
   const handleSetBaseFallbackApy = () => {
     const bps = parseInt(baseFallbackApyBps, 10);
@@ -405,7 +374,7 @@ export default function AdminPanel() {
             <div>
               <h2 className="font-display font-bold text-xl">Admin Panel</h2>
               <p className="text-text-muted text-sm">
-                Fee Recipient · {selectedNetwork === 'solana' ? 'Solana' : 'Polygon'}
+                Fee Recipient · Solana
               </p>
             </div>
             <span className="px-3 py-1.5 rounded-lg text-xs font-display font-medium bg-accent-amber/10 text-accent-amber border border-accent-amber/20">
@@ -497,7 +466,7 @@ export default function AdminPanel() {
           <div>
             <h2 className="font-display font-bold text-xl">Admin Panel</h2>
             <p className="text-text-muted text-sm">
-              Manage the FBiT Staking platform on {selectedNetwork === 'solana' ? 'Solana' : 'Polygon'}
+              Manage the FBiT Staking platform on Solana
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -538,9 +507,6 @@ export default function AdminPanel() {
         {[
           { label: 'TVL',          value: formatNumber(platformStats.totalStaked),                                    color: 'text-brand-400' },
           { label: 'Users',        value: formatNumber(platformStats.totalUsers, 0),                                  color: 'text-accent-purple' },
-          ...(selectedNetwork === 'polygon' ? [
-            { label: 'Reserve',   value: formatNumber(platformStats.totalReserve ?? 0),                              color: 'text-brand-400' },
-          ] : []),
           { label: 'Reward Pool',  value: formatNumber(platformStats.rewardPoolBalance),                              color: 'text-accent-cyan' },
           { label: 'Current APY',  value: `${Math.round((platformStats.effectiveAPY ?? 1000) / 100)}%`,             color: 'text-accent-amber' },
           { label: 'Total Burned 🔥', value: formatNumber(platformStats.totalBurned ?? 0, 8),                        color: 'text-accent-rose' },
@@ -625,12 +591,6 @@ export default function AdminPanel() {
                 { label: 'Released Total',    value: `${formatNumber(platformStats.totalEmissionReleased ?? 0)} FBiT`,  color: 'text-accent-cyan', usd: platformStats.totalEmissionReleased },
                 { label: 'Releasable Now',    value: `${formatNumber(platformStats.releasableEmission ?? 0)} FBiT`,     color: 'text-accent-amber',usd: platformStats.releasableEmission },
                 { label: 'Reward Pool',       value: `${formatNumber(platformStats.rewardPoolBalance)} FBiT`,           color: 'text-accent-purple',usd: platformStats.rewardPoolBalance },
-                ...(selectedNetwork === 'polygon' && platformStats.remainingYears !== undefined ? [
-                  { label: 'Remaining Years', value: `${platformStats.remainingYears} yrs`,                            color: 'text-brand-400',   usd: undefined },
-                ] : []),
-                ...(selectedNetwork === 'polygon' && platformStats.maxPendingRewards !== undefined ? [
-                  { label: 'Max Pending',     value: `${formatNumber(platformStats.maxPendingRewards)} FBiT`,           color: 'text-accent-rose', usd: platformStats.maxPendingRewards },
-                ] : []),
               ].map(({ label, value, color, usd }) => (
                 <div key={label} className="p-3 rounded-xl bg-surface-800/40 border border-white/5 text-center">
                   <p className="text-text-muted text-[10px] font-display uppercase tracking-wider mb-1">{label}</p>
@@ -658,21 +618,21 @@ export default function AdminPanel() {
             {/* Deposit Reserve */}
             <div>
               <label className="text-sm text-text-secondary font-display mb-1 block">
-                Deposit Amount (FBiT) — Min: 1 · Max: 800,000,000
+                Deposit Amount (FBiT) — Min: {RESERVE_MIN} · Max: {RESERVE_MAX.toLocaleString()}
               </label>
               <input
                 type="number"
                 value={reserveAmount}
                 onChange={(e) => setReserveAmount(e.target.value)}
-                placeholder="e.g. 800000000"
-                min={1}
-                max={800_000_000}
+                placeholder={`e.g. ${RESERVE_MAX}`}
+                min={RESERVE_MIN}
+                max={RESERVE_MAX}
                 className="input-field font-mono"
               />
               {(() => {
                 const n = parseFloat(reserveAmount);
-                if (reserveAmount && n > 0 && n < RESERVE_MIN) return <p className="text-accent-rose text-xs mt-1">Minimum deposit is 1 FBiT</p>;
-                if (reserveAmount && n > RESERVE_MAX) return <p className="text-accent-rose text-xs mt-1">Maximum deposit is 800,000,000 FBiT (800M)</p>;
+                if (reserveAmount && n > 0 && n < RESERVE_MIN) return <p className="text-accent-rose text-xs mt-1">Minimum deposit is {RESERVE_MIN} FBiT</p>;
+                if (reserveAmount && n > RESERVE_MAX) return <p className="text-accent-rose text-xs mt-1">Maximum deposit is {RESERVE_MAX.toLocaleString()} FBiT</p>;
                 return null;
               })()}
             </div>
@@ -715,71 +675,43 @@ export default function AdminPanel() {
             </div>
           </div>}
 
-          {/* ── Fund Reward Pool — Solana: primary card; Polygon: collapsed fallback ── */}
-          {selectedNetwork === 'solana' ? (
-            <div className="glass-card space-y-4 border border-accent-cyan/20">
-              <div>
-                <h3 className="font-display font-semibold text-lg mb-1">Fund Reward Pool</h3>
-                <p className="text-text-muted text-xs leading-relaxed">
-                  Apne wallet se directly reward pool me FBiT daalo. Stakers ko yahan se rewards milenge.
-                </p>
-              </div>
-              <div>
-                <label className="text-sm text-text-secondary font-display mb-1 block">Amount (FBiT)</label>
-                <input
-                  type="number"
-                  value={fundAmount}
-                  onChange={(e) => setFundAmount(e.target.value)}
-                  placeholder="e.g. 800000000"
-                  min={1}
-                  className="input-field font-mono"
-                />
-                {fundAmount && parseFloat(fundAmount) > 0 && (
-                  <p className="text-xs text-text-muted mt-1">
-                    Pool badhkar <span className="text-brand-400 font-mono">{formatNumber(platformStats.rewardPoolBalance + parseFloat(fundAmount))} FBiT</span> ho jayega
-                  </p>
-                )}
-              </div>
-              <AdminButton
-                label={`Fund Reward Pool${fundAmount && parseFloat(fundAmount) > 0 ? ` — ${formatNumber(parseFloat(fundAmount))} FBiT` : ''}`}
-                loadingLabel="Funding…"
-                onClick={handleFund}
-                disabled={isRenounced || !fundAmount || parseFloat(fundAmount) <= 0}
-                loading={busy('fund')}
-                variant="cyan"
+          {/* ── Fund Reward Pool ── */}
+          <div className="glass-card space-y-4 border border-accent-cyan/20">
+            <div>
+              <h3 className="font-display font-semibold text-lg mb-1">Fund Reward Pool</h3>
+              <p className="text-text-muted text-xs leading-relaxed">
+                Apne wallet se directly reward pool me FBiT daalo. Stakers ko yahan se rewards milenge.
+              </p>
+            </div>
+            <div>
+              <label className="text-sm text-text-secondary font-display mb-1 block">Amount (FBiT)</label>
+              <input
+                type="number"
+                value={fundAmount}
+                onChange={(e) => setFundAmount(e.target.value)}
+                placeholder="e.g. 250000000"
+                min={0.1}
+                max={250_000_000}
+                className="input-field font-mono"
               />
-              {isRenounced && (
-                <p className="text-xs text-accent-rose">⚠ Ownership renounce hone ke baad direct funding disabled hai.</p>
+              {fundAmount && parseFloat(fundAmount) > 0 && (
+                <p className="text-xs text-text-muted mt-1">
+                  Pool badhkar <span className="text-brand-400 font-mono">{formatNumber(platformStats.rewardPoolBalance + parseFloat(fundAmount))} FBiT</span> ho jayega
+                </p>
               )}
             </div>
-          ) : (
-            <details className="glass-card space-y-4">
-              <summary className="font-display font-semibold text-sm text-text-secondary cursor-pointer select-none">
-                Manual Pool Top-Up (fallback)
-              </summary>
-              <p className="text-text-muted text-xs mt-2">
-                Add tokens directly to the reward pool. Use only if the auto-emission reserve was not funded.
-              </p>
-              <div>
-                <label className="text-sm text-text-secondary font-display mb-1 block">Amount (FBiT)</label>
-                <input
-                  type="number"
-                  value={fundAmount}
-                  onChange={(e) => setFundAmount(e.target.value)}
-                  placeholder="e.g. 100000"
-                  className="input-field font-mono"
-                />
-              </div>
-              <AdminButton
-                label="Fund Reward Pool"
-                loadingLabel="Funding…"
-                onClick={handleFund}
-                disabled={isRenounced || !fundAmount || parseFloat(fundAmount) <= 0}
-                loading={busy('fund')}
-                variant="cyan"
-              />
-            </details>
-          )}
+            <AdminButton
+              label={`Fund Reward Pool${fundAmount && parseFloat(fundAmount) > 0 ? ` — ${formatNumber(parseFloat(fundAmount))} FBiT` : ''}`}
+              loadingLabel="Funding…"
+              onClick={handleFund}
+              disabled={isRenounced || !fundAmount || parseFloat(fundAmount) <= 0}
+              loading={busy('fund')}
+              variant="cyan"
+            />
+            {isRenounced && (
+              <p className="text-xs text-accent-rose">⚠ Ownership renounce hone ke baad direct funding disabled hai.</p>
+            )}
+          </div>
 
         </div>
       )}
@@ -1443,335 +1375,6 @@ export default function AdminPanel() {
               Pausing the platform prevents all staking, claiming, and unstaking operations. Use only in emergencies.
             </p>
           </div>
-
-          {/* Halving Mechanism — Solana only, permissionless */}
-          {selectedNetwork === 'solana' && (() => {
-            const SECS_PER_PERIOD = 1460 * 24 * 60 * 60; // 4-year halving
-            const INITIAL_EMISSION = 1_000_000;
-            const MIN_VALID_TS = 1_000_000_000;  // Sep 2001
-            const MAX_VALID_TS = 4_102_444_800;  // Jan 2100
-            const epoch           = platformStats.halvingEpoch   ?? 0;
-            const hStartRaw       = platformStats.halvingStartTime ?? 0;
-            const hStart          = (hStartRaw >= MIN_VALID_TS && hStartRaw <= MAX_VALID_TS) ? hStartRaw : 0;
-            const nowSecs         = Math.floor(Date.now() / 1000);
-            const nextHalvingAt   = hStart > 0 ? hStart + (epoch + 1) * SECS_PER_PERIOD : 0;
-            const secsUntil       = nextHalvingAt > 0 ? nextHalvingAt - nowSecs : 0;
-            const halvingDue      = secsUntil <= 0 && hStart > 0;
-
-            const daysUntil    = Math.floor(secsUntil / 86400);
-            const hoursUntil   = Math.floor((secsUntil % 86400) / 3600);
-            const minsUntil    = Math.floor((secsUntil % 3600) / 60);
-            const countdownStr = halvingDue
-              ? '⚡ Halving overdue — ready to trigger!'
-              : nextHalvingAt > 0
-                ? `${daysUntil}d ${hoursUntil}h ${minsUntil}m`
-                : 'Not started';
-
-            // Back-calculate the epoch-0 emission from current on-chain value + halving epoch
-            const currentEmission = platformStats.annualEmission > 0 ? platformStats.annualEmission : INITIAL_EMISSION;
-            const initialEmission = currentEmission * Math.pow(2, epoch);
-
-            // Show 6 epochs in schedule table
-            const schedule = Array.from({ length: 6 }, (_, i) => ({
-              epoch: i,
-              emission: initialEmission / Math.pow(2, i),
-              active: i === epoch,
-            }));
-
-            return (
-              <div className="glass-card space-y-4 border border-accent-amber/20 bg-accent-amber/5">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div>
-                    <h3 className="font-display font-semibold text-lg flex items-center gap-2">
-                      ⚡ Halving Mechanism
-                      <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-accent-amber/20 text-accent-amber border border-accent-amber/30">
-                        Epoch {epoch}
-                      </span>
-                    </h3>
-                    <p className="text-text-muted text-xs mt-0.5">
-                      Reward emission halves every 4 years — 50% cut each cycle. Permissionless (auto-triggered by platform).
-                    </p>
-                  </div>
-                </div>
-
-                {/* Countdown */}
-                <div className={`p-3 rounded-xl border text-sm flex items-center gap-3 ${halvingDue ? 'bg-accent-rose/10 border-accent-rose/30' : 'bg-surface-800/40 border-white/5'}`}>
-                  <span className="text-xl">{halvingDue ? '🔴' : '⏱'}</span>
-                  <div>
-                    <p className={`font-display font-semibold text-sm ${halvingDue ? 'text-accent-rose' : 'text-text-primary'}`}>
-                      {halvingDue ? 'Halving Overdue' : 'Next Halving In'}
-                    </p>
-                    <p className={`font-mono text-xs mt-0.5 ${halvingDue ? 'text-accent-rose' : 'text-brand-400'}`}>
-                      {countdownStr}
-                    </p>
-                  </div>
-                  {halvingDue && (
-                    <div className="ml-auto">
-                      <AdminButton
-                        label="Trigger Now"
-                        loadingLabel="Triggering…"
-                        onClick={handleTriggerHalving}
-                        disabled={busy('halving')}
-                        loading={busy('halving')}
-                        variant="amber"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Emission Schedule */}
-                <div>
-                  <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-2">Emission Schedule (50% Halving Every 4 Years)</p>
-                  <div className="rounded-xl overflow-hidden border border-white/5">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="bg-surface-800/60 text-text-muted">
-                          <th className="text-left px-3 py-2 font-display">Year</th>
-                          <th className="text-right px-3 py-2 font-display">Annual Emission</th>
-                          <th className="text-right px-3 py-2 font-display">Daily Release</th>
-                          <th className="text-right px-3 py-2 font-display">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {schedule.map(({ epoch: ep, emission, active }) => (
-                          <tr key={ep} className={`border-t border-white/5 ${active ? 'bg-accent-amber/5' : ''}`}>
-                            <td className="px-3 py-2 font-mono text-text-secondary">Year {ep === 0 ? '1–4' : `${ep * 4 + 1}–${ep * 4 + 4}`}</td>
-                            <td className="px-3 py-2 text-right font-mono">
-                              <span className={active ? 'text-accent-amber font-bold' : 'text-text-secondary'}>
-                                {emission >= 1000 ? `${(emission / 1000).toFixed(0)}K` : emission.toFixed(0)} FBiT/yr
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 text-right font-mono text-text-muted">
-                              {(emission / 365).toFixed(0)} FBiT
-                            </td>
-                            <td className="px-3 py-2 text-right">
-                              {active
-                                ? <span className="px-2 py-0.5 rounded-full text-[10px] bg-accent-amber/20 text-accent-amber border border-accent-amber/30">● Active</span>
-                                : ep < epoch
-                                  ? <span className="text-text-muted">✓ Done</span>
-                                  : <span className="text-text-muted/40">Pending</span>
-                              }
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div className="text-xs text-text-muted space-y-1 p-3 rounded-xl bg-surface-800/40 border border-white/5">
-                  <p><span className="text-accent-amber">●</span> Auto-triggered by the platform when 4 years elapses — no admin action needed.</p>
-                  <p><span className="text-brand-400">●</span> Emission halves by 50% on every trigger — APY adjusts dynamically in real time.</p>
-                  <p><span className="text-accent-rose">●</span> Contract enforces the 1460-day time lock — early calls revert automatically.</p>
-                </div>
-
-                {/* Manual trigger (always available for non-overdue state as backup) */}
-                {!halvingDue && (
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-text-muted">Manual trigger (backup — contract rejects if time lock not met)</p>
-                    <AdminButton
-                      label="Force Trigger"
-                      loadingLabel="Triggering…"
-                      onClick={handleTriggerHalving}
-                      disabled={busy('halving')}
-                      loading={busy('halving')}
-                      variant="amber"
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* Halving Schedule — Polygon (client-side display, manual action required) */}
-          {selectedNetwork === 'polygon' && (() => {
-            const SECS_PER_YEAR    = 365 * 24 * 60 * 60;
-            const INITIAL_EMISSION = 1_000_000;
-            const hStart     = platformStats.emissionStartTime ?? 0;
-            const nowSecs    = Math.floor(Date.now() / 1000);
-            const yearsElapsed  = hStart > 0 ? Math.floor((nowSecs - hStart) / SECS_PER_YEAR) : 0;
-            const currentEpoch  = yearsElapsed;
-            const schedule = Array.from({ length: 6 }, (_, i) => ({
-              ep: i,
-              emission: INITIAL_EMISSION / Math.pow(2, i),
-              active: i === currentEpoch && hStart > 0,
-            }));
-            const suggestedEmission = INITIAL_EMISSION / Math.pow(2, currentEpoch);
-            const onChainEmission   = platformStats.annualEmission ?? 0;
-            const mismatch = hStart > 0 && Math.abs(onChainEmission - suggestedEmission) > 100;
-            return (
-              <div className="glass-card space-y-4 border border-accent-amber/20 bg-accent-amber/5">
-                <div>
-                  <h3 className="font-display font-semibold text-lg flex items-center gap-2">
-                    📅 Halving Schedule
-                    <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-accent-amber/20 text-accent-amber border border-accent-amber/30">
-                      Polygon
-                    </span>
-                  </h3>
-                  <p className="text-text-muted text-xs mt-0.5 leading-relaxed">
-                    Polygon has no on-chain halving. Use <span className="text-brand-400 font-mono">Rates → Annual Emission</span> each year to manually apply the halving schedule below.
-                  </p>
-                </div>
-
-                {/* Current state */}
-                {hStart > 0 ? (
-                  <div className={`p-3 rounded-xl border text-xs ${mismatch ? 'bg-accent-rose/10 border-accent-rose/30' : 'bg-surface-800/40 border-white/5'}`}>
-                    {mismatch ? (
-                      <>
-                        <p className="font-display font-semibold text-accent-rose mb-1">⚠ Emission Mismatch</p>
-                        <p className="text-text-muted">
-                          Year {currentEpoch + 1} suggests <span className="text-accent-amber font-mono font-semibold">{suggestedEmission.toLocaleString()} FBiT/year</span>.
-                          On-chain: <span className="font-mono text-text-secondary">{onChainEmission.toLocaleString()} FBiT/year</span>.
-                          Update via <span className="text-brand-400">Rates → Annual Emission</span>.
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-text-muted">
-                        Year {currentEpoch + 1} of schedule · <span className="text-accent-amber font-mono">{onChainEmission.toLocaleString()} FBiT/year</span> ✓
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-xs text-accent-amber p-3 rounded-xl bg-accent-amber/5 border border-accent-amber/20">
-                    ⚠ Emission clock not started — deposit reserve tokens to begin.
-                  </p>
-                )}
-
-                {/* Emission Schedule Table */}
-                <div>
-                  <p className="text-xs text-text-muted font-display uppercase tracking-wider mb-2">Emission Schedule (50% Halving Each Year)</p>
-                  <div className="rounded-xl overflow-hidden border border-white/5">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="bg-surface-800/60 text-text-muted">
-                          <th className="text-left px-3 py-2 font-display">Year</th>
-                          <th className="text-right px-3 py-2 font-display">Annual Emission</th>
-                          <th className="text-right px-3 py-2 font-display">Daily Release</th>
-                          <th className="text-right px-3 py-2 font-display">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {schedule.map(({ ep, emission, active }) => (
-                          <tr key={ep} className={`border-t border-white/5 ${active ? 'bg-accent-amber/5' : ''}`}>
-                            <td className="px-3 py-2 font-mono text-text-secondary">Year {ep + 1}</td>
-                            <td className="px-3 py-2 text-right font-mono">
-                              <span className={active ? 'text-accent-amber font-bold' : 'text-text-secondary'}>
-                                {emission >= 1000 ? `${(emission / 1000).toFixed(0)}K` : emission.toFixed(0)} FBiT
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 text-right font-mono text-text-muted">
-                              {(emission / 365).toFixed(0)} FBiT
-                            </td>
-                            <td className="px-3 py-2 text-right">
-                              {active
-                                ? <span className="px-2 py-0.5 rounded-full text-[10px] bg-accent-amber/20 text-accent-amber border border-accent-amber/30">● Active</span>
-                                : ep < currentEpoch && hStart > 0
-                                  ? <span className="text-text-muted">✓ Done</span>
-                                  : <span className="text-text-muted/40">Pending</span>
-                              }
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div className="text-xs text-text-muted space-y-1 p-3 rounded-xl bg-surface-800/40 border border-white/5">
-                  <p><span className="text-accent-amber">●</span> Unlike Solana, Polygon halving is a manual admin action — call <span className="font-mono text-brand-400">setAnnualEmission</span> each year.</p>
-                  <p><span className="text-brand-400">●</span> Reserve runway: <span className="text-text-secondary font-mono">{(platformStats.remainingYears ?? 0)} years</span> remaining at current emission rate.</p>
-                  <p><span className="text-accent-cyan">●</span> Max pending rewards across all stakers: <span className="font-mono text-text-secondary">{formatNumber(platformStats.maxPendingRewards ?? 0)} FBiT</span>.</p>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Burn Unused Pool — Polygon only */}
-          {selectedNetwork === 'polygon' && (
-            <div className="p-4 rounded-xl bg-surface-800/50 border border-white/5 space-y-3">
-              <div>
-                <p className="font-display font-medium">Burn Unused Pool</p>
-                <p className="text-text-muted text-sm mt-0.5">
-                  Permanently burn excess WFBIT from the reward pool. Tokens go to the dead address.
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  placeholder="Amount to burn"
-                  value={burnPoolAmount}
-                  onChange={e => setBurnPoolAmount(e.target.value)}
-                  className="flex-1 bg-surface-700 border border-white/10 rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-400/50"
-                />
-                <AdminButton
-                  label="Burn"
-                  loadingLabel="Burning…"
-                  onClick={handleBurnUnusedPool}
-                  disabled={isRenounced || !burnPoolAmount || parseFloat(burnPoolAmount) <= 0 || busy('burnPool')}
-                  loading={busy('burnPool')}
-                  variant="rose"
-                />
-              </div>
-              <p className="text-xs text-text-muted">
-                Pool balance: <span className="text-text-secondary font-mono">{formatNumber(platformStats.rewardPoolBalance)} WFBIT</span>
-              </p>
-            </div>
-          )}
-
-          {/* Emergency Withdraw — Polygon only, requires paused state */}
-          {selectedNetwork === 'polygon' && (
-            <div className={`p-4 rounded-xl border space-y-3 ${platformStats.isPaused ? 'bg-accent-amber/5 border-accent-amber/20' : 'bg-surface-800/30 border-white/5 opacity-60'}`}>
-              <div>
-                <p className="font-display font-medium flex items-center gap-2">
-                  🚨 Emergency Withdraw
-                  {!platformStats.isPaused && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-surface-700 text-text-muted border border-white/10 font-normal">
-                      Requires Paused
-                    </span>
-                  )}
-                </p>
-                <p className="text-text-muted text-sm mt-0.5">
-                  Withdraw any token from the contract. Only available when platform is paused.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  placeholder="Token address (0x…)"
-                  value={emergencyToken}
-                  onChange={e => setEmergencyToken(e.target.value)}
-                  disabled={!platformStats.isPaused}
-                  className="w-full bg-surface-700 border border-white/10 rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-400/50 disabled:opacity-40"
-                />
-                <input
-                  type="text"
-                  placeholder="Recipient address (0x…)"
-                  value={emergencyTo}
-                  onChange={e => setEmergencyTo(e.target.value)}
-                  disabled={!platformStats.isPaused}
-                  className="w-full bg-surface-700 border border-white/10 rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-400/50 disabled:opacity-40"
-                />
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    placeholder="Amount"
-                    value={emergencyAmount}
-                    onChange={e => setEmergencyAmount(e.target.value)}
-                    disabled={!platformStats.isPaused}
-                    className="flex-1 bg-surface-700 border border-white/10 rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-400/50 disabled:opacity-40"
-                  />
-                  <AdminButton
-                    label="Withdraw"
-                    loadingLabel="Withdrawing…"
-                    onClick={handleEmergencyWithdraw}
-                    disabled={!platformStats.isPaused || busy('emergencyWithdraw')}
-                    loading={busy('emergencyWithdraw')}
-                    variant="rose"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Renounce Ownership */}
           <div className={`p-4 rounded-xl border space-y-3 ${isRenounced ? 'bg-surface-800/20 border-white/5 opacity-60' : 'bg-accent-rose/5 border-accent-rose/20'}`}>

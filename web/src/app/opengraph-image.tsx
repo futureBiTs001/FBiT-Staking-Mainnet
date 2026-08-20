@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og';
 
 export const runtime = 'edge';
-export const alt = 'FBiT Staking — Earn 247% APY on Solana & Polygon';
+export const alt = 'FBiT Staking — Earn up to 300% APY on Solana';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -73,7 +73,7 @@ export default function OgImage() {
           marginBottom: 40,
           display: 'flex',
         }}>
-          Earn up to 247% APY on Solana &amp; Polygon
+          Earn up to 300% APY on Solana
         </div>
 
         {/* Stats row */}

@@ -14,24 +14,29 @@ pub const PLATFORM_FEE_BPS:  u64 = 100;    // 1%
 pub const BURN_BPS:          u64 = 1000;   // 10% burn on every claim/compound
 pub const RENOUNCE_FEE_BPS:  u64 = 2500;  // 25% of gross reward to feeRecipient after renouncement
 pub const MAX_APY_BPS:       u64 = 30_000; // 300% max APY (safety ceiling)
-pub const MIN_FUND_LAMPORTS:  u64 = 1_000_000;                    // 1 FBiT  (6 decimals)
-pub const MAX_FUND_LAMPORTS:  u64 = 800_000_000 * 1_000_000;     // 800 M FBiT
-pub const MIN_STAKE_LAMPORTS: u64 = 1_000_000;                    // 1 FBiT minimum per stake
-pub const MAX_STAKE_LAMPORTS: u64 = 500_000_000 * 1_000_000;     // 500 M FBiT maximum per stake
+pub const MIN_FUND_LAMPORTS:  u64 = 100_000_000;                      // 0.1 FBiT  (9 decimals)
+pub const MAX_FUND_LAMPORTS:  u64 = 250_000_000 * 1_000_000_000;     // 250 M FBiT
+pub const MIN_STAKE_LAMPORTS: u64 = 100_000_000;                      // 0.1 FBiT minimum per stake
+pub const MAX_STAKE_LAMPORTS: u64 = 250_000_000 * 1_000_000_000;     // 250 M FBiT maximum per stake
 
-// Default team target tier thresholds (6 decimals = multiply by 10^6)
-// Tier 1: 50K tokens → 2%  …  Tier 10: 1B tokens → 10%
+// Default team target tier thresholds (9 decimals = multiply by 10^9).
+// Bronze starts at 50K FBiT; Titan tops out at 100M FBiT (40% of the 250M fixed
+// supply) — very ambitious, but reachable as reward emission and secondary-market
+// circulation grow over time, unlike a naive 250M top tier which would require
+// staking the entire fixed supply (impossible: liquidity + reserve alone already
+// account for 247M of it, permanently outside user wallets).
+// Tier 1: 50K tokens → 2%  …  Tier 10: 100M tokens → 10%
 pub const DEFAULT_TEAM_MIN_STAKED: [u64; 10] = [
-    50_000_u64        * 1_000_000,   //   50 K
-    150_000_u64       * 1_000_000,   //  150 K
-    500_000_u64       * 1_000_000,   //  500 K
-    1_000_000_u64     * 1_000_000,   //    1 M
-    5_000_000_u64     * 1_000_000,   //    5 M
-    10_000_000_u64    * 1_000_000,   //   10 M
-    50_000_000_u64    * 1_000_000,   //   50 M
-    100_000_000_u64   * 1_000_000,   //  100 M
-    500_000_000_u64   * 1_000_000,   //  500 M
-    1_000_000_000_u64 * 1_000_000,   //    1 B
+    50_000_u64      * 1_000_000_000,   //   50 K
+    100_000_u64     * 1_000_000_000,   //  100 K
+    250_000_u64     * 1_000_000_000,   //  250 K
+    500_000_u64     * 1_000_000_000,   //  500 K
+    1_000_000_u64   * 1_000_000_000,   //    1 M
+    2_500_000_u64   * 1_000_000_000,   //    2.5 M
+    5_000_000_u64   * 1_000_000_000,   //    5 M
+    10_000_000_u64  * 1_000_000_000,   //   10 M
+    20_000_000_u64  * 1_000_000_000,   //   20 M
+    100_000_000_u64 * 1_000_000_000,   //  100 M
 ];
 pub const DEFAULT_TEAM_BONUS_BPS: [u64; 10] = [200, 300, 400, 500, 600, 700, 750, 850, 900, 1000];
 
@@ -98,6 +103,8 @@ pub mod fbit_staking {
         p.team_tier_bonus_bps  = DEFAULT_TEAM_BONUS_BPS;
         p.bump                 = ctx.bumps.platform;
         p.total_burned         = 0;
+        // halving_epoch / halving_start_time: unused — kept only for backward-compatible
+        // account byte-layout with the currently deployed v1 program (see Platform struct).
         p.halving_epoch        = 0;
         p.halving_start_time   = Clock::get()?.unix_timestamp;
         // Renouncement (inactive at launch)
@@ -108,6 +115,7 @@ pub mod fbit_staking {
         p.total_reserve           = 0;
         p.total_emission_released = 0;
         p.emission_start_time     = 0;
+        p.last_release_time       = 0;
         // Settable emission & burn rate
         p.annual_emission = 0;
         p.burn_bps        = BURN_BPS; // default 10%
@@ -136,7 +144,9 @@ pub mod fbit_staking {
 
         // Start emission clock on first deposit
         if ctx.accounts.platform.emission_start_time == 0 {
-            ctx.accounts.platform.emission_start_time = Clock::get()?.unix_timestamp;
+            let now = Clock::get()?.unix_timestamp;
+            ctx.accounts.platform.emission_start_time = now;
+            ctx.accounts.platform.last_release_time   = now;
         }
 
         ctx.accounts.platform.total_reserve =
@@ -152,6 +162,16 @@ pub mod fbit_staking {
 
     /// Permissionless: release accumulated emission from reserve into reward pool.
     /// Anyone can call — the math determines how much is available.
+    ///
+    /// Uses an INCREMENTAL clock (`last_release_time`) rather than measuring from
+    /// `emission_start_time` on every call. This stays correct even if `annual_emission`
+    /// is changed mid-flight (via `set_annual_emission`): applying the *current* rate
+    /// retroactively across the *entire* elapsed history (the old formula) would compute
+    /// a lower "should have released by now" total than what was already released under
+    /// a higher prior rate — permanently blocking further releases. Measuring only the
+    /// time since the last release avoids this: each call only ever applies the current
+    /// rate to the time elapsed since it was last checked, regardless of how many rate
+    /// changes happened in between.
     pub fn release_emission(ctx: Context<ReleaseEmission>) -> Result<()> {
         require!(!ctx.accounts.platform.is_paused, StakingError::PlatformPaused);
 
@@ -161,24 +181,18 @@ pub mod fbit_staking {
         require!(ctx.accounts.platform.total_reserve > 0, StakingError::ReserveNotFunded);
 
         let now       = Clock::get()?.unix_timestamp;
-        let elapsed   = (now - ctx.accounts.platform.emission_start_time).max(0) as u64;
+        let elapsed   = (now - ctx.accounts.platform.last_release_time).max(0) as u64;
         let secs_year = 365u64 * 86_400;
 
-        // Total that should have been released so far — use u128 to prevent overflow.
-        // annual (up to 8e14) * elapsed (up to ~1e10) = ~8e24 which exceeds u64::MAX (1.8e19).
-        let total_releasable: u64 = {
+        // Use u128 to prevent overflow: annual (up to 8e14) * elapsed (up to ~1e10)
+        // = ~8e24 which exceeds u64::MAX (1.8e19).
+        let release_amount: u64 = {
             let t = (annual as u128)
                 .saturating_mul(elapsed as u128)
                 .checked_div(secs_year as u128)
                 .unwrap_or(u128::MAX);
             t.min(ctx.accounts.platform.total_reserve as u128) as u64
         };
-        let already_released = ctx.accounts.platform.total_emission_released;
-
-        require!(total_releasable > already_released, StakingError::NoEmissionAvailable);
-
-        let available     = total_releasable.checked_sub(already_released).unwrap();
-        let release_amount = available.min(ctx.accounts.platform.total_reserve);
         require!(release_amount > 0, StakingError::NoEmissionAvailable);
 
         let bump   = ctx.accounts.platform.bump;
@@ -201,6 +215,7 @@ pub mod fbit_staking {
             ctx.accounts.platform.total_emission_released.checked_add(release_amount).unwrap();
         ctx.accounts.platform.reward_pool_balance =
             ctx.accounts.platform.reward_pool_balance.checked_add(release_amount).unwrap();
+        ctx.accounts.platform.last_release_time = now;
 
         emit!(EmissionReleased {
             amount:         release_amount,
@@ -431,7 +446,7 @@ pub mod fbit_staking {
                 }
 
                 // Mutable update: team_total_staked (always) + total_referral_rewards (if paying)
-                // Single write per ancestor — Polygon-style auto team tracking.
+                // Single write per ancestor — automatic team tracking.
                 {
                     let mut data = ref_user_ai.try_borrow_mut_data()
                         .map_err(|_| error!(StakingError::Unauthorized))?;
@@ -798,6 +813,42 @@ pub mod fbit_staking {
         Ok(())
     }
 
+    /// Admin: point the platform at a different stake/reward token mint.
+    /// Existing vaults stay bound to their original mint (SPL token accounts can't be
+    /// re-pointed) — callers must supply freshly created vaults for the new mint via
+    /// the accounts passed into stake/claim/etc. after this call.
+    pub fn set_token_mints(ctx: Context<AdminAction>, new_stake_mint: Pubkey, new_reward_mint: Pubkey) -> Result<()> {
+        require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
+        ctx.accounts.platform.stake_token_mint  = new_stake_mint;
+        ctx.accounts.platform.reward_token_mint = new_reward_mint;
+        emit!(TokenMintsUpdated { stake_token_mint: new_stake_mint, reward_token_mint: new_reward_mint });
+        Ok(())
+    }
+
+    /// Admin-only, one-time-use after `set_token_mints`: zero out the accumulated
+    /// financial counters that were denominated in the OLD mint's tokens/decimals.
+    /// `set_token_mints` only repoints the mint pubkeys — it does not (and must
+    /// not) move any tokens, so these counters are left stale, no longer matching
+    /// the real balance of the freshly created (empty) vaults for the new mint.
+    /// Left in place, they would corrupt `release_emission`/`claim_rewards` math
+    /// (e.g. treating an empty new reserve vault as if it still held the old
+    /// reserve balance). Does NOT touch identity/config fields (authority, mints,
+    /// rates, team tiers, referral percentages, total_users, is_renounced) —
+    /// only resets accumulated stats that are meaningless across a mint change.
+    pub fn reset_platform_stats(ctx: Context<AdminAction>) -> Result<()> {
+        require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
+        let p = &mut ctx.accounts.platform;
+        p.total_staked             = 0;
+        p.reward_pool_balance      = 0;
+        p.total_burned             = 0;
+        p.total_reserve            = 0;
+        p.total_emission_released  = 0;
+        p.emission_start_time      = 0;
+        p.last_release_time        = 0;
+        emit!(PlatformStatsReset { authority: ctx.accounts.authority.key() });
+        Ok(())
+    }
+
     pub fn block_user(ctx: Context<AdminUserAction>) -> Result<()> {
         require!(ctx.accounts.authority.key() == ctx.accounts.platform.authority, StakingError::Unauthorized);
         ctx.accounts.user_account.is_blocked = true;
@@ -852,7 +903,7 @@ pub mod fbit_staking {
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // HALVING — permissionless, callable once per year by anyone
+    // OWNERSHIP
     // ─────────────────────────────────────────────────────────────────────────────
 
     /// Permanently renounce admin ownership in exchange for a perpetual 25 % passive fee.
@@ -872,40 +923,6 @@ pub mod fbit_staking {
         emit!(OwnershipRenounced {
             former_owner,
             timestamp: Clock::get()?.unix_timestamp,
-        });
-        Ok(())
-    }
-
-    /// Trigger the 6-month halving. Halves base_apy AND annual_emission (Bitcoin-style).
-    /// New stakes created after the halving receive the reduced APY.
-    /// Existing stakes keep their locked-in APY.
-    pub fn trigger_halving(ctx: Context<TriggerHalving>) -> Result<()> {
-        let now                   = Clock::get()?.unix_timestamp;
-        let halving_epoch         = ctx.accounts.platform.halving_epoch;
-        let start_time            = ctx.accounts.platform.halving_start_time;
-        let seconds_per_period: i64 = 1460 * SECONDS_PER_DAY; // 4-year halving
-        let next_halving          = start_time + (halving_epoch as i64 + 1) * seconds_per_period;
-
-        require!(now >= next_halving, StakingError::HalvingNotDue);
-
-        // Halve base_apy (fallback APY when emission = 0)
-        for i in 0..1 {
-            let halved = ctx.accounts.platform.base_apy[i] / 2;
-            ctx.accounts.platform.base_apy[i] = if halved == 0 { 1 } else { halved };
-        }
-
-        // Halve annual_emission (Bitcoin-style: fewer tokens emitted each period)
-        if ctx.accounts.platform.annual_emission > 0 {
-            let halved_emission = ctx.accounts.platform.annual_emission / 2;
-            ctx.accounts.platform.annual_emission = if halved_emission == 0 { 1 } else { halved_emission };
-        }
-
-        ctx.accounts.platform.halving_epoch = halving_epoch.checked_add(1).unwrap();
-
-        emit!(HalvingTriggered {
-            triggered_by: ctx.accounts.caller.key(),
-            halving_epoch: ctx.accounts.platform.halving_epoch,
-            timestamp: now,
         });
         Ok(())
     }
@@ -956,6 +973,8 @@ pub struct Platform {
     pub team_tier_min_staked: [u64; 10],
     pub team_tier_bonus_bps:  [u64; 10],
     pub total_burned:         u64,
+    // Unused — the halving mechanic was removed. Kept for backward-compatible
+    // account byte-layout with the currently deployed v1 program; do not repurpose.
     pub halving_epoch:        u64,
     pub halving_start_time:   i64,
     pub is_renounced:         bool,
@@ -970,8 +989,10 @@ pub struct Platform {
     pub burn_bps:                u64,
     // ── v3 field (reads as [0;10] from existing accounts; falls back to compile-time const) ──
     pub referral_percentages:    [u64; 10],
+    // ── v4 field: incremental emission-release clock (see release_emission) ──
+    pub last_release_time:       i64,
 }
-// space: 8 disc + 371 (v1) + 40 (v2) + 80 (v3 referral_percentages) = 499 — fits in 600
+// space: 8 disc + 371 (v1) + 40 (v2) + 80 (v3 referral_percentages) + 8 (v4) = 507 — fits in 600
 pub const PLATFORM_SPACE: usize = 600;
 
 #[account]
@@ -1238,13 +1259,6 @@ pub struct RenounceOwnership<'info> {
 }
 
 #[derive(Accounts)]
-pub struct TriggerHalving<'info> {
-    #[account(mut, seeds = [b"platform"], bump = platform.bump)]
-    pub platform: Account<'info, Platform>,
-    pub caller:   Signer<'info>,
-}
-
-#[derive(Accounts)]
 pub struct AdminAction<'info> {
     #[account(mut, seeds = [b"platform"], bump = platform.bump)]
     pub platform:  Account<'info, Platform>,
@@ -1293,10 +1307,11 @@ pub struct FixBump<'info> {
 #[event] pub struct TeamBonusApplied       { pub user: Pubkey, pub bonus_amount: u64 }
 #[event] pub struct UserTeamStatsUpdated   { pub user: Pubkey, pub team_size: u64, pub team_total_staked: u64 }
 #[event] pub struct TokensBurned           { pub user: Pubkey, pub burn_amount: u64, pub total_burned: u64 }
-#[event] pub struct HalvingTriggered       { pub triggered_by: Pubkey, pub halving_epoch: u64, pub timestamp: i64 }
 #[event] pub struct OwnershipRenounced     { pub former_owner: Pubkey, pub timestamp: i64 }
 #[event] pub struct RenounceFeeCollected       { pub recipient: Pubkey, pub claimant: Pubkey, pub fee_amount: u64, pub total_fees_collected: u64 }
 #[event] pub struct ReferralPercentagesUpdated { pub percentages: [u64; 10] }
+#[event] pub struct TokenMintsUpdated      { pub stake_token_mint: Pubkey, pub reward_token_mint: Pubkey }
+#[event] pub struct PlatformStatsReset     { pub authority: Pubkey }
 
 // ===== ERRORS =====
 
@@ -1323,17 +1338,16 @@ pub enum StakingError {
     #[msg("Invalid vault account")]                       InvalidVault,
     #[msg("Invalid user token account")]                  InvalidUserAccount,
     #[msg("APY exceeds maximum allowed value")]           APYTooHigh,
-    #[msg("Halving is not due yet — must wait 1 year")]   HalvingNotDue,
     #[msg("Ownership has already been renounced")]        AlreadyRenounced,
     #[msg("Fee recipient token account does not match")]  InvalidFeeRecipient,
-    #[msg("Deposit amount below minimum (1 FBiT)")]       BelowMinDeposit,
-    #[msg("Deposit amount above maximum (800 M FBiT)")]   AboveMaxDeposit,
+    #[msg("Deposit amount below minimum (0.1 FBiT)")]     BelowMinDeposit,
+    #[msg("Deposit amount above maximum (250 M FBiT)")]   AboveMaxDeposit,
     #[msg("Reserve vault not funded yet")]                ReserveNotFunded,
     #[msg("No emission available to release yet")]        NoEmissionAvailable,
     #[msg("Annual emission not configured")]              AnnualEmissionNotSet,
     #[msg("Burn BPS exceeds maximum (5000 = 50%)")]       BurnBpsTooHigh,
-    #[msg("Stake amount is below minimum (1 FBiT)")]      BelowMinStake,
-    #[msg("Stake amount exceeds maximum (500M FBiT)")]    AboveMaxStake,
+    #[msg("Stake amount is below minimum (0.1 FBiT)")]    BelowMinStake,
+    #[msg("Stake amount exceeds maximum (250M FBiT)")]    AboveMaxStake,
     #[msg("Invalid referral token account")]               InvalidReferralATA,
     #[msg("A valid referrer is required to register")]     ReferrerRequired,
     #[msg("Total referral BPS exceeds 50% maximum")]       ReferralPercentagesTooHigh,

@@ -21,7 +21,6 @@ web/.vercel/
 web/.env.local
 web/.env.testnet
 web/.env.mainnet
-contracts/polygon/.env
 
 # Solana keypair files (contain private keys)
 *.json.key
@@ -46,11 +45,6 @@ Thumbs.db
 # Solana build artifacts
 contracts/solana/target/
 contracts/solana/.anchor/
-
-# Hardhat / Polygon build artifacts
-contracts/polygon/artifacts/
-contracts/polygon/cache/
-contracts/polygon/node_modules/
 
 # TypeScript
 *.tsbuildinfo

@@ -15,6 +15,10 @@ export const maxDuration = 15;
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? '' });
 
 // ── Simple in-process rate limiter (15 req / min per IP) ──────────────────────
+// Caveat: this Map lives in a single warm function instance. Serverless platforms
+// can run several instances concurrently (each with its own empty Map), so a
+// distributed caller can exceed the per-IP limit by fanning out across instances.
+// The global cap below bounds the worst case per-instance regardless.
 const _rl = new Map<string, { count: number; reset: number }>();
 function checkRateLimit(ip: string): boolean {
   const now  = Date.now();
@@ -28,18 +32,30 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
+// ── Global cap across ALL callers on this instance (bounds worst-case Anthropic
+// spend even when per-IP tracking is bypassed via distributed/multi-instance abuse) ──
+let _globalCount = 0;
+let _globalReset = Date.now() + 60_000;
+const GLOBAL_LIMIT_PER_MIN = 300;
+function checkGlobalRateLimit(): boolean {
+  const now = Date.now();
+  if (now > _globalReset) { _globalCount = 0; _globalReset = now + 60_000; }
+  if (_globalCount >= GLOBAL_LIMIT_PER_MIN) return false;
+  _globalCount++;
+  return true;
+}
 
-const SYSTEM_PROMPT = `You are the support assistant embedded on the FBiT Staking website (stake.futurebit.in), a multi-chain DeFi staking platform. Answer only questions about this platform using the facts below. Keep answers short (2-4 sentences), friendly, and precise.
+
+const SYSTEM_PROMPT = `You are the support assistant embedded on the FBiT Staking website (stake.futurebit.in), a Solana DeFi staking platform. Answer only questions about this platform using the facts below. Keep answers short (2-4 sentences), friendly, and precise.
 
 == Platform facts ==
-- FBiT is a Solana SPL token (mint: CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu) used for staking.
-- Two supported chains: Solana Mainnet (stake FBiT via Phantom wallet) and Polygon Mainnet (stake WFBIT via MetaMask or WalletConnect).
-- Dynamic Proof-of-Stake APY: 10%-300% on Solana, 60%-250% on Polygon. APY adjusts automatically: fewer tokens staked → higher APY, and vice versa.
+- FBiT is a Solana SPL token (mint: 5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME, 9 decimals, 250,000,000 fixed supply, mint authority renounced) used for staking. Stake via Phantom, Solflare, or any Solana wallet.
+- Dynamic Proof-of-Stake APY: 10%-300%. APY adjusts automatically: fewer tokens staked → higher APY, and vice versa.
 - 10-level referral system, total commission 30% across all levels (Level 1: 0.25%, Level 2: 0.5%, Level 3: 1.25%, Level 4: 1.5%, Level 5: 2%, Level 6: 3.25%, Level 7: 3.5%, Level 8: 4.25%, Level 9: 5.5%, Level 10: 8%), paid automatically on-chain.
 - 10% burn mechanism on certain transactions (deflationary).
 - Team Target Bonuses exist for referral network growth milestones.
 - Non-custodial: staked tokens never leave the user's own wallet/contract custody they control. No KYC or personal data required.
-- Smart contracts are open-source and verifiable on Solana Explorer / Polygonscan.
+- Smart contracts are open-source and verifiable on Solana Explorer.
 
 == Rules ==
 - Never give financial, investment, tax, or legal advice — if asked "should I invest/stake", redirect to "I can explain how it works, but investment decisions are up to you."
@@ -58,6 +74,9 @@ const MAX_MESSAGES     = 12;
 const MAX_MSG_LENGTH   = 800;
 
 export async function POST(req: NextRequest) {
+  if (!checkGlobalRateLimit()) {
+    return NextResponse.json({ error: 'Too many requests. Please wait a moment.' }, { status: 429 });
+  }
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
   if (!checkRateLimit(ip)) {
     return NextResponse.json({ error: 'Too many requests. Please wait a moment.' }, { status: 429 });

@@ -1,22 +1,21 @@
 // ===== NETWORK TYPES =====
-export type NetworkType = 'solana' | 'polygon';
+export type NetworkType = 'solana';
 
 export type NetworkConfig = {
   name: string;
   type: NetworkType;
   rpcUrl: string;
-  chainId?: number;
   explorerUrl: string;
   contractAddress: string;
   stakeTokenAddress: string;
   rewardTokenAddress: string;
   stakeTokenSymbol: string;
   stakeTokenDecimals: number;
-  /** Solana only: token account that holds staked tokens (authority = platform PDA) */
+  /** Token account that holds staked tokens (authority = platform PDA) */
   stakeVaultAddress?: string;
-  /** Solana only: token account that holds reward tokens (authority = platform PDA) */
+  /** Token account that holds reward tokens (authority = platform PDA) */
   rewardVaultAddress?: string;
-  /** Solana only: token account that holds the long-term emission reserve (authority = platform PDA) */
+  /** Token account that holds the long-term emission reserve (authority = platform PDA) */
   reserveVaultAddress?: string;
 };
 
@@ -42,19 +41,20 @@ export const REFERRAL_LEVELS = [
 
 // ===== TEAM TARGET BONUS TIERS =====
 // 10-level bonus applied on top of staking rewards based on total team staked.
-// Tier 1 (Bronze)  : 50 K tokens → +2 %
-// Tier 10 (Titan)  : 1 B tokens  → +10 %
+// Fallback values only — live on-chain values (Platform.teamTierMinStaked/teamTierBonusBps)
+// override these when available. Mirrors DEFAULT_TEAM_MIN_STAKED/DEFAULT_TEAM_BONUS_BPS
+// in lib.rs — Bronze starts at 50K, Titan tops out at 100M (40% of the 250M fixed supply).
 export const TEAM_TARGET_TIERS = [
-  { tier: 1,  label: 'Bronze',   bonusPercentage: 2,   bonusBps: 200,  minTeamStaked: 250_000,          color: 'amber'   },
-  { tier: 2,  label: 'Silver',   bonusPercentage: 3,   bonusBps: 300,  minTeamStaked: 350_000,          color: 'slate'   },
-  { tier: 3,  label: 'Gold',     bonusPercentage: 4,   bonusBps: 400,  minTeamStaked: 500_000,          color: 'yellow'  },
-  { tier: 4,  label: 'Platinum', bonusPercentage: 5,   bonusBps: 500,  minTeamStaked: 1_000_000,       color: 'cyan'    },
-  { tier: 5,  label: 'Diamond',  bonusPercentage: 6,   bonusBps: 600,  minTeamStaked: 5_000_000,       color: 'purple'  },
-  { tier: 6,  label: 'Ruby',     bonusPercentage: 7,   bonusBps: 700,  minTeamStaked: 10_000_000,      color: 'rose'    },
-  { tier: 7,  label: 'Emerald',  bonusPercentage: 7.5, bonusBps: 750,  minTeamStaked: 50_000_000,      color: 'green'   },
-  { tier: 8,  label: 'Sapphire', bonusPercentage: 8.5, bonusBps: 850,  minTeamStaked: 100_000_000,     color: 'blue'    },
-  { tier: 9,  label: 'Obsidian', bonusPercentage: 9,   bonusBps: 900,  minTeamStaked: 500_000_000,     color: 'gray'    },
-  { tier: 10, label: 'Titan',    bonusPercentage: 10,  bonusBps: 1000, minTeamStaked: 1_000_000_000,   color: 'brand'   },
+  { tier: 1,  label: 'Bronze',   bonusPercentage: 2,   bonusBps: 200,  minTeamStaked: 50_000,       color: 'amber'   },
+  { tier: 2,  label: 'Silver',   bonusPercentage: 3,   bonusBps: 300,  minTeamStaked: 100_000,      color: 'slate'   },
+  { tier: 3,  label: 'Gold',     bonusPercentage: 4,   bonusBps: 400,  minTeamStaked: 250_000,      color: 'yellow'  },
+  { tier: 4,  label: 'Platinum', bonusPercentage: 5,   bonusBps: 500,  minTeamStaked: 500_000,      color: 'cyan'    },
+  { tier: 5,  label: 'Diamond',  bonusPercentage: 6,   bonusBps: 600,  minTeamStaked: 1_000_000,    color: 'purple'  },
+  { tier: 6,  label: 'Ruby',     bonusPercentage: 7,   bonusBps: 700,  minTeamStaked: 2_500_000,    color: 'rose'    },
+  { tier: 7,  label: 'Emerald',  bonusPercentage: 7.5, bonusBps: 750,  minTeamStaked: 5_000_000,    color: 'green'   },
+  { tier: 8,  label: 'Sapphire', bonusPercentage: 8.5, bonusBps: 850,  minTeamStaked: 10_000_000,   color: 'blue'    },
+  { tier: 9,  label: 'Obsidian', bonusPercentage: 9,   bonusBps: 900,  minTeamStaked: 20_000_000,   color: 'gray'    },
+  { tier: 10, label: 'Titan',    bonusPercentage: 10,  bonusBps: 1000, minTeamStaked: 100_000_000,  color: 'brand'   },
 ] as const;
 
 export type TeamTargetTier = typeof TEAM_TARGET_TIERS[number];
@@ -74,7 +74,7 @@ export interface UserAccount {
   teamTotalStaked: number; // total FBiT staked by entire team
   isBlocked: boolean;
   registeredAt: number;
-  /** On-chain team bonus BPS for this user (Polygon: from getTeamBonusBps; optional) */
+  /** On-chain team bonus BPS for this user (from getTeamBonusBps; optional) */
   currentTierBonusBps?: number;
 }
 
@@ -134,26 +134,14 @@ export interface PlatformStats {
   isRenounced: boolean;
   feeRecipient: string;       // address/pubkey of former admin
   totalFeesCollected: number; // cumulative passive fees paid out
-  /** Remaining full years of emission (Polygon only) */
-  remainingYears?: number;
-  /** Max possible pending rewards across all stakers right now (Polygon only) */
-  maxPendingRewards?: number;
-  /** Minimum stake amount in token units — read from contract (Polygon: MIN_STAKE_AMOUNT) */
+  /** Minimum stake amount in token units — read from contract */
   minStakeAmount?: number;
-  /** Max stake per user in token units — read from contract (Polygon: MAX_STAKE_PER_USER) */
+  /** Max stake per user in token units — read from contract */
   maxStakePerUser?: number;
-  /** Lock period in days — read from contract (Polygon: LOCK_PERIOD, already in days) */
+  /** Lock period in days — read from contract */
   lockPeriodDays?: number;
-  /** Minimum seconds between claims — read from contract (Polygon: CLAIM_INTERVAL = 21600 = 6h) */
+  /** Minimum seconds between claims — read from contract (CLAIM_INTERVAL = 21600 = 6h) */
   claimIntervalSeconds?: number;
-  /** Cumulative tokens burned via year-end pool burns (Polygon only) */
-  totalYearlyBurned?: number;
-  /** Unix timestamp of last year-end burn (Polygon only) */
-  lastYearBurnTime?: number;
-  /** Number of halvings that have already occurred (Solana only, 0 = no halving yet) */
-  halvingEpoch?: number;
-  /** Unix timestamp when the current halving epoch started — next halving = halvingStartTime + 365 days (Solana only) */
-  halvingStartTime?: number;
   /** On-chain team tier config — populated from Platform.teamTierMinStaked/teamTierBonusBps. Overrides TEAM_TARGET_TIERS constants when present. */
   teamTiers?: Array<{ tier: number; label: string; color: string; minTeamStaked: number; bonusBps: number; bonusPercentage: number }>;
   /** Per-level referral percentages in BPS from on-chain Platform.referralPercentages. Falls back to REFERRAL_LEVELS constants when absent. */

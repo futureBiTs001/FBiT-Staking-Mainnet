@@ -8,10 +8,7 @@
  *   3. depositReserve — 700M FBiT reserve vault mein
  *   4. setAnnualEmission — 1,000,000 FBiT/year
  *
- * SIRF YEH EK COMMAND (web/ folder se):
- *   node setup-all.js <phantom-base58-private-key>
- *
- * Ya keypair.json se bhi chal sakta hai:
+ * SIRF YEH EK COMMAND (web/ folder se) — keypair JSON file ka path do, raw private key nahi:
  *   node setup-all.js admin-keypair.json
  */
 
@@ -30,7 +27,7 @@ const path  = require('path');
 const PROGRAM_ID_STR  = '8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp';
 const TOKEN_MINT_STR  = 'CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu';
 const RESERVE_VAULT_STR = '851yeewTXCDVRW1CGNCQk9KJCavTj1mZMfTEJcjACAzH';
-const RPC_URL         = 'https://mainnet.helius-rpc.com/?api-key=2fca8858-977e-4caa-8eb8-c5f042a91002';
+const RPC_URL         = process.env.SOLANA_RPC_URL ?? (() => { throw new Error('SOLANA_RPC_URL env var is required'); })();
 const DECIMALS        = 6;
 const SCALE           = 10 ** DECIMALS;
 const BUMP_OFFSET     = 378;  // platform.bump field in Platform account bytes
@@ -49,8 +46,10 @@ const DISC_FIX_BUMP          = Buffer.from([ 55, 162,  45, 211, 135, 185,  66, 1
 const DISC_DEPOSIT_RESERVE   = Buffer.from([187,  75, 224,  96, 122, 233, 220, 121]);
 const DISC_SET_ANNUAL_EMISS  = Buffer.from([ 23, 188,  62,  60, 159,  23, 116, 166]);
 
-// New .so path (WSL format) — built May 12 with fix_bump instruction
-const SO_WSL_PATH = '/mnt/c/Users/myyy/OneDrive/Desktop/FBiT-Staking-TESTNET (1)/contracts/solana/target/sbpf-solana-solana/release/fbit_staking.so';
+// New .so path (WSL format), built with fix_bump instruction — override via env if your
+// checkout lives elsewhere.
+const SO_WSL_PATH = process.env.SO_WSL_PATH
+  ?? '/mnt/c/Users/$(whoami)/fbit-staking/contracts/solana/target/sbpf-solana-solana/release/fbit_staking.so';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -68,21 +67,15 @@ function ata(mint, owner) {
 }
 
 function loadKeypair(arg) {
-  // Detect: is it a file path or a raw base58 private key?
-  const looksLikeFile = arg.endsWith('.json') || fs.existsSync(arg);
-
-  let secretKey;
-  if (looksLikeFile) {
-    const raw = fs.readFileSync(arg, 'utf-8').trim();
-    if (raw.startsWith('[')) {
-      secretKey = Uint8Array.from(JSON.parse(raw));
-    } else {
-      secretKey = bs58.default ? bs58.default.decode(raw) : bs58.decode(raw);
-    }
-  } else {
-    // Treat as raw base58 private key (from Phantom Export)
-    secretKey = bs58.default ? bs58.default.decode(arg) : bs58.decode(arg);
+  // File-path only — a raw private key must never be passed as a CLI argument
+  // (it lands in shell history and is visible to other processes via ps/Task Manager).
+  if (!fs.existsSync(arg)) {
+    throw new Error(`Keypair file not found: ${arg}. Pass a path to a keypair JSON file, not a raw private key.`);
   }
+  const raw = fs.readFileSync(arg, 'utf-8').trim();
+  const secretKey = raw.startsWith('[')
+    ? Uint8Array.from(JSON.parse(raw))
+    : (bs58.default ? bs58.default.decode(raw) : bs58.decode(raw));
   return Keypair.fromSecretKey(secretKey);
 }
 
@@ -129,11 +122,10 @@ async function main() {
   if (!keypairArg) {
     console.log('');
     console.log('Usage:');
-    console.log('  node setup-all.js <phantom-base58-private-key>');
     console.log('  node setup-all.js admin-keypair.json');
     console.log('');
-    console.log('Phantom se private key kaise nikaalein:');
-    console.log('  Phantom → Settings → Security & Privacy → Export Private Key');
+    console.log('Phantom se exported private key ko ek local JSON keypair file me save karke uska path do —');
+    console.log('raw private key seedha command line pe kabhi mat pass karo (shell history me reh jaata hai).');
     console.log('');
     process.exit(0);
   }

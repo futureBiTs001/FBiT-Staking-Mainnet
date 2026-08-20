@@ -21,6 +21,10 @@
   --border-color: rgba(148, 163, 184, 0.1);
   --glow-green: rgba(0, 230, 118, 0.15);
   --glow-purple: rgba(168, 85, 247, 0.15);
+  /* Solana's official brand gradient — used for primary/secondary buttons */
+  --solana-purple: #9945FF;
+  --solana-green: #14F195;
+  --glow-solana: rgba(153, 69, 255, 0.25);
 }
 
 @layer base {
@@ -73,14 +77,14 @@
   }
 
   .btn-primary {
-    @apply px-6 py-3 rounded-xl font-display font-semibold text-surface-900 transition-all duration-300;
-    background: linear-gradient(135deg, #00E676, #00C853);
-    box-shadow: 0 4px 15px rgba(0, 230, 118, 0.3);
+    @apply px-6 py-3 rounded-xl font-display font-semibold text-white transition-all duration-300;
+    background: linear-gradient(90deg, var(--solana-purple), var(--solana-green));
+    box-shadow: 0 4px 15px var(--glow-solana);
   }
 
   .btn-primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(0, 230, 118, 0.4);
+    box-shadow: 0 8px 25px rgba(153, 69, 255, 0.35);
   }
 
   .btn-primary:active {
@@ -95,8 +99,8 @@
   }
 
   .btn-secondary:hover {
-    border-color: var(--brand-primary);
-    box-shadow: 0 0 20px var(--glow-green);
+    border-color: var(--solana-purple);
+    box-shadow: 0 0 20px var(--glow-solana);
   }
 
   .input-field {
@@ -135,12 +139,6 @@
     background: rgba(148, 85, 247, 0.15);
     color: #A855F7;
     border: 1px solid rgba(148, 85, 247, 0.3);
-  }
-
-  .network-badge.polygon {
-    background: rgba(130, 71, 229, 0.15);
-    color: #8247E5;
-    border: 1px solid rgba(130, 71, 229, 0.3);
   }
 }
 

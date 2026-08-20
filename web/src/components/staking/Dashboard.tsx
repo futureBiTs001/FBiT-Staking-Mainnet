@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { useWallet } from '@/context/WalletContext';
 import { useAppStore } from '@/lib/store';
@@ -22,12 +23,11 @@ import UsdValue from '@/components/ui/UsdValue';
 import { useTokenPrice } from '@/hooks/useTokenPrice';
 import { LOCK_PERIOD, TEAM_TARGET_TIERS, type PlatformStats } from '@/types';
 import { solanaGetTokenBalance } from '@/lib/contracts/solana';
-import { polygonGetTokenBalance } from '@/lib/contracts/polygon';
 
 type ActionKey = string;
 
 export default function Dashboard() {
-  const { address, solanaAddress, evmAddress } = useWallet();
+  const { address, solanaAddress } = useWallet();
   const {
     selectedNetwork,
     platformStats,
@@ -37,6 +37,7 @@ export default function Dashboard() {
     unstakeEntry,
     addTransaction,
     loadOnChainData,
+    setConnectGateOpen,
   } = useAppStore();
   const contract = useContract();
   const { pairs: pricePairs } = useTokenPrice();
@@ -58,13 +59,8 @@ export default function Dashboard() {
     setBalanceFetching(true);
     try {
       let bal = 0;
-      if (selectedNetwork === 'solana') {
-        const addr = solanaAddress ?? (address.startsWith('0x') ? null : address);
-        if (addr) bal = await solanaGetTokenBalance(addr);
-      } else {
-        const addr = evmAddress ?? (address.startsWith('0x') ? address : null);
-        if (addr) bal = await polygonGetTokenBalance(addr);
-      }
+      const addr = solanaAddress ?? address;
+      if (addr) bal = await solanaGetTokenBalance(addr);
       setTokenBalance(bal);
       loadOnChainData(address, { tokenBalance: bal });
     } catch (err) {
@@ -72,7 +68,7 @@ export default function Dashboard() {
     } finally {
       setBalanceFetching(false);
     }
-  }, [address, solanaAddress, evmAddress, selectedNetwork, loadOnChainData]);
+  }, [address, solanaAddress, selectedNetwork, loadOnChainData]);
 
   useEffect(() => {
     if (!address) { setTokenBalance(0); setBalanceFetching(false); return; }
@@ -340,15 +336,27 @@ export default function Dashboard() {
         <div className="w-20 h-20 rounded-2xl bg-linear-to-br from-brand-500/20 to-accent-purple/20 flex items-center justify-center mb-6 animate-float">
           <span className="text-4xl">◈</span>
         </div>
-        <h2 className="font-display text-2xl sm:text-3xl font-bold mb-3">Welcome to Future Bit (FBiT) Staking Mainnet</h2>
+        <h2 className="font-display text-2xl sm:text-3xl font-bold mb-3">Welcome to FutureBit</h2>
         <p className="text-text-secondary max-w-md mb-8">
           Connect your wallet to stake FBiT tokens, earn rewards up to 300% APY, and build your referral network.
         </p>
-        <div className="flex flex-wrap justify-center gap-3">
+        <div className="flex flex-wrap justify-center gap-3 mb-8">
           <div className="glass-card text-center py-3 px-6">
             <div className="text-brand-400 font-display font-bold text-lg">{Math.round((platformStats.effectiveAPY || 1000) / 100)}%</div>
             <div className="text-text-muted text-xs mt-0.5">{LOCK_PERIOD.label} · PoS · 10%–300%</div>
           </div>
+        </div>
+        <div className="flex flex-wrap justify-center gap-4">
+          <button
+            type="button"
+            onClick={() => setConnectGateOpen(true)}
+            className="btn-primary text-base px-8 py-3.5"
+          >
+            Connect Wallet
+          </button>
+          <Link href="/" className="btn-secondary text-base px-8 py-3.5">
+            ← Home
+          </Link>
         </div>
       </div>
     );
@@ -397,7 +405,7 @@ export default function Dashboard() {
             {formatNumber(totalPending, 8)}
           </p>
           <p className="text-text-secondary text-xs mt-1">
-            {selectedNetwork === 'polygon' ? 'WFBIT' : 'FBiT'} Accruing <UsdValue amount={totalPending} priceUsd={fbitPriceUsd} />
+            FBiT Accruing <UsdValue amount={totalPending} priceUsd={fbitPriceUsd} />
           </p>
         </div>
         <div className="glass-card">
@@ -503,7 +511,7 @@ export default function Dashboard() {
                         </p>
                         <p className="text-text-muted text-xs">{period.label} lock · {Math.round(liveApyBps / 100)}% APY (live)</p>
                         <p className="text-text-muted text-xs mt-0.5">
-                          Per 6h: <span className="text-brand-400 font-mono">+{formatNumber(daily, 8)} {selectedNetwork === 'polygon' ? 'WFBIT' : 'FBiT'}</span>{' '}
+                          Per 6h: <span className="text-brand-400 font-mono">+{formatNumber(daily, 8)} FBiT</span>{' '}
                           <UsdValue amount={daily} priceUsd={fbitPriceUsd} />
                         </p>
                       </div>
@@ -516,7 +524,7 @@ export default function Dashboard() {
                         <div className="flex items-center gap-1.5 sm:justify-end">
                           <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse shrink-0" />
                           <p className="text-brand-400 font-mono text-sm font-semibold tabular-nums">
-                            +{formatNumber(pending, 8)} {selectedNetwork === 'polygon' ? 'WFBIT' : 'FBiT'}
+                            +{formatNumber(pending, 8)} FBiT
                           </p>
                         </div>
                         <UsdValue amount={pending} priceUsd={fbitPriceUsd} className="text-[11px]" />
@@ -852,10 +860,7 @@ function TeamTargetBonusCard({ teamTotalStaked, teamSize, onChainBonusBps, liveT
 function BurnEmissionPanel({ stats, network, priceUsd }: { stats: PlatformStats; network: string; priceUsd: number | null }) {
   const posApy = Math.round((stats.effectiveAPY || 1000) / 100);
   const feeRate = (stats.burnBps ?? 0) / 100;
-  const hasNetworkExtra = network === 'solana' || (network === 'polygon' && stats.remainingYears !== undefined);
-  const colClass = stats.isRenounced
-    ? 'md:grid-cols-5'
-    : hasNetworkExtra ? 'md:grid-cols-5' : 'md:grid-cols-4';
+  const colClass = 'md:grid-cols-5';
 
   return (
     <div className="glass-card bg-linear-to-r from-accent-rose/5 to-accent-amber/5 border border-accent-rose/10">
@@ -889,51 +894,9 @@ function BurnEmissionPanel({ stats, network, priceUsd }: { stats: PlatformStats;
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Annual Emission</p>
           <p className="font-display font-bold text-brand-400 text-lg sm:text-xl">{formatNumber(stats.annualEmission)}</p>
           <p className="text-text-secondary text-xs mt-0.5">
-            FBiT / year · Epoch {stats.halvingEpoch ?? 0} <UsdValue amount={stats.annualEmission} priceUsd={priceUsd} />
+            FBiT / year <UsdValue amount={stats.annualEmission} priceUsd={priceUsd} />
           </p>
         </div>
-        {/* Halving countdown — Solana only */}
-        {network === 'solana' && (() => {
-          const SECS_PER_YEAR = 1460 * 24 * 60 * 60; // 4-year halving period (matches useContract)
-          const hStart = stats.halvingStartTime ?? 0;
-          // Guard: must be a plausible Unix timestamp (2001–2100). Rejects garbage on-chain values.
-          const MIN_VALID_TS = 1_000_000_000;  // Sep 2001
-          const MAX_VALID_TS = 4_102_444_800;  // Jan 2100
-          if (!hStart || hStart < MIN_VALID_TS || hStart > MAX_VALID_TS) return null;
-          const halvingEpoch = stats.halvingEpoch ?? 0;
-          const nowSecs   = Math.floor(Date.now() / 1000);
-          const secsLeft  = (hStart + (halvingEpoch + 1) * SECS_PER_YEAR) - nowSecs;
-          const overdue   = secsLeft <= 0;
-          const days      = Math.max(0, Math.floor(secsLeft / 86400));
-          const label     = overdue ? '⚡ Halving Due!' : `${days}d left`;
-          return (
-            <div>
-              <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Next Halving</p>
-              <p className={`font-display font-bold text-lg sm:text-xl ${overdue ? 'text-accent-rose' : 'text-accent-amber'}`}>
-                {label}
-              </p>
-              <p className="text-text-secondary text-xs mt-0.5">
-                {overdue ? 'Emission will halve now' : `Emission → ${formatNumber((stats.annualEmission) / 2)} FBiT`}{' '}
-                {!overdue && <UsdValue amount={stats.annualEmission / 2} priceUsd={priceUsd} />}
-              </p>
-            </div>
-          );
-        })()}
-        {/* Reserve Runway — Polygon only */}
-        {network === 'polygon' && stats.remainingYears !== undefined && (
-          <div>
-            <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Reserve Runway</p>
-            <p className={`font-display font-bold text-lg sm:text-xl ${
-              (stats.remainingYears ?? 0) <= 1 ? 'text-accent-rose' :
-              (stats.remainingYears ?? 0) <= 3 ? 'text-accent-amber' : 'text-brand-400'
-            }`}>
-              {stats.remainingYears} yr{stats.remainingYears !== 1 ? 's' : ''}
-            </p>
-            <p className="text-text-secondary text-xs mt-0.5">
-              Reserve lasts at current emission
-            </p>
-          </div>
-        )}
         <div>
           <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-1">Current APY</p>
           <p className="font-display font-bold text-lg sm:text-xl text-accent-cyan">

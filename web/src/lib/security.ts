@@ -4,7 +4,7 @@
  * Layers:
  *  1. Rate limiting     — burst-spam prevention per action key
  *  2. Input sanitization — XSS / injection stripping
- *  3. Address validation — strict format checks (EVM & Solana)
+ *  3. Address validation — strict format checks (Solana)
  *  4. Amount validation  — NaN, negative, overflow, precision guards
  *  5. Error sanitization — never leak internal stack traces to users
  *  6. Limits             — hard caps on stake/reward amounts
@@ -80,32 +80,37 @@ export function isAllowedOrigin(originHeader: string, allowlistEnv: string | und
 /**
  * Strip HTML tags, JS URL schemes, data: URLs, and inline event handlers.
  * Prevents stored-XSS if any value is rendered via innerHTML.
+ *
+ * Runs to a fixed point (repeats until the output stops changing) rather than a
+ * single pass — a single pass can be bypassed with nested/malformed markup like
+ * `<<script>script>` (stripping the inner tag once leaves a live `<script>` tag).
  */
 export function sanitizeText(value: string): string {
-  return value
-    .replace(/<[^>]*>/g, '')         // strip HTML tags
-    .replace(/javascript\s*:/gi, '') // strip js: URL scheme
-    .replace(/on\w+\s*=/gi, '')      // strip onerror=, onclick=, etc.
-    .replace(/data\s*:/gi, '')       // strip data: URLs
-    .replace(/vbscript\s*:/gi, '')   // strip vbscript: URL scheme
-    .trim();
+  let prev = value;
+  let current = value;
+  const MAX_PASSES = 10; // safety cap — fixed point is normally reached in 1-2 passes
+  for (let i = 0; i < MAX_PASSES; i++) {
+    current = prev
+      .replace(/<[^>]*>/g, '')         // strip HTML tags
+      .replace(/javascript\s*:/gi, '') // strip js: URL scheme
+      .replace(/on\w+\s*=/gi, '')      // strip onerror=, onclick=, etc.
+      .replace(/data\s*:/gi, '')       // strip data: URLs
+      .replace(/vbscript\s*:/gi, '');  // strip vbscript: URL scheme
+    if (current === prev) break;
+    prev = current;
+  }
+  return current.trim();
 }
 
 // ── 3. Address Validation ──────────────────────────────────────────────────────
-
-/** EVM address: 0x + 40 hex chars */
-export function isValidEVMAddress(addr: string): boolean {
-  return /^0x[0-9a-fA-F]{40}$/.test(addr.trim());
-}
 
 /** Solana address: base58, 32–44 chars */
 export function isValidSolanaAddress(addr: string): boolean {
   return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr.trim());
 }
 
-/** Accepts either EVM or Solana address */
 export function isValidWalletAddress(addr: string): boolean {
-  return isValidEVMAddress(addr) || isValidSolanaAddress(addr);
+  return isValidSolanaAddress(addr);
 }
 
 /** Solana SPL token mint address (same format as wallet) */
@@ -115,17 +120,17 @@ export function isValidSolanaMint(mint: string): boolean {
 
 // ── 4. Amount Validation ───────────────────────────────────────────────────────
 
-/** Maximum single stake — 500 million FBiT */
-export const MAX_STAKE_AMOUNT = 500_000_000;
+/** Maximum single stake — 250 million FBiT */
+export const MAX_STAKE_AMOUNT = 250_000_000;
 
-/** Minimum single stake — 1 FBiT */
-export const MIN_STAKE_AMOUNT = 1;
+/** Minimum single stake — 0.1 FBiT */
+export const MIN_STAKE_AMOUNT = 0.1;
 
 /**
  * Returns true when amount is a finite positive number within allowed range
  * and with at most maxDecimals decimal places.
  */
-export function isValidAmount(amount: number, maxDecimals = 6): boolean {
+export function isValidAmount(amount: number, maxDecimals = 9): boolean {
   if (!Number.isFinite(amount) || amount <= 0) return false;
   if (amount < MIN_STAKE_AMOUNT || amount > MAX_STAKE_AMOUNT) return false;
   const str = amount.toString();
@@ -201,7 +206,7 @@ export function sanitizeErrorMessage(err: unknown): string {
     raw.toLowerCase().includes('insufficient funds') ||
     raw.toLowerCase().includes('insufficient gas') ||
     raw.includes('InsufficientFunds')
-  ) return 'Insufficient POL for gas fees. Please add POL to your wallet and try again.';
+  ) return 'Insufficient SOL for network fees. Please add SOL to your wallet and try again.';
 
   // Network / RPC errors
   if (
@@ -212,20 +217,13 @@ export function sanitizeErrorMessage(err: unknown): string {
     raw.includes('connection refused')
   ) return 'Network error — please check your connection and try again.';
 
-  // Wrong network
-  if (raw.toLowerCase().includes('wrong network') || raw.toLowerCase().includes('switch your wallet to polygon'))
-    return raw.split('\n')[0].trim().slice(0, 120);
-
   // Solana contract error passthroughs
-  if (raw.includes('Stake amount is below minimum')) return 'Minimum stake is 1 FBiT.';
-  if (raw.includes('Stake amount exceeds maximum')) return 'Maximum stake is 500,000,000 FBiT.';
+  if (raw.includes('Stake amount is below minimum')) return 'Minimum stake is 0.1 FBiT.';
+  if (raw.includes('Stake amount exceeds maximum')) return 'Maximum stake is 250,000,000 FBiT.';
   if (raw.includes('Invalid referral token account')) return 'Invalid referral account. Please try again.';
-  if (raw.includes('BelowMinStake')) return 'Minimum stake is 1 FBiT.';
-  if (raw.includes('AboveMaxStake')) return 'Maximum stake is 500,000,000 FBiT.';
+  if (raw.includes('BelowMinStake')) return 'Minimum stake is 0.1 FBiT.';
+  if (raw.includes('AboveMaxStake')) return 'Maximum stake is 250,000,000 FBiT.';
   if (raw.includes('InvalidReferralATA')) return 'Invalid referral account. Please try again.';
-  // Polygon contract error passthroughs
-  if (raw.includes('Stake below minimum')) return 'Minimum stake is 1 FBiT.';
-  if (raw.includes('Stake exceeds maximum')) return 'Maximum stake is 500,000,000 FBiT.';
   if (raw.includes('pool fully reserved for pending')) return 'Cannot withdraw: reward pool is fully reserved for pending user rewards.';
   if (raw.includes('Cooldown') || raw.includes('cooldown') || raw.includes('claim interval') || raw.includes('Claim interval')) return 'Claim cooldown not met — please wait until the 6h interval has passed.';
   if (raw.includes('Insufficient reward') || raw.includes('insufficient reward')) return 'Reward pool has insufficient balance. Please try again later.';
@@ -261,7 +259,6 @@ export function warnMissingEnv(): void {
   const required = [
     'NEXT_PUBLIC_REOWN_PROJECT_ID',
     'NEXT_PUBLIC_SOLANA_STAKE_TOKEN_MINT',
-    'NEXT_PUBLIC_POLYGON_STAKE_TOKEN',
   ];
   for (const key of required) {
     const val = process.env[key];

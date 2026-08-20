@@ -25,11 +25,12 @@ import * as os from 'os';
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const PROGRAM_ID   = new PublicKey('8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp');
-const RPC_URL      = 'https://mainnet.helius-rpc.com/?api-key=2fca8858-977e-4caa-8eb8-c5f042a91002';
-const DECIMALS     = 1_000_000n;
+const RPC_URL      = process.env.SOLANA_RPC_URL ?? (() => { throw new Error('SOLANA_RPC_URL env var is required'); })();
+const DECIMALS     = 1_000_000_000n; // new mint is 9 decimals — only run this AFTER migrate-token.ts
 
-// 10 million FBiT per year → ~247% APY with current 4M staked
-const ANNUAL_EMISSION_FBIT = BigInt(process.env.ANNUAL_EMISSION_FBIT ?? '10000000');
+// 12 million FBiT per year against a 120M reserve → ~10-year runway.
+// See table: 5M staked → 240%, 12M → 100%, 40M → 30%, 60M → 20%, 120M+ → 10% (floor).
+const ANNUAL_EMISSION_FBIT = BigInt(process.env.ANNUAL_EMISSION_FBIT ?? '12000000');
 const ANNUAL_EMISSION_RAW  = ANNUAL_EMISSION_FBIT * DECIMALS;
 
 const DRY_RUN = process.env.DRY_RUN === '1';
@@ -119,13 +120,13 @@ async function main() {
     : 0;
 
   console.log('\n  ── Current State ────────────────────────────────────');
-  console.log(`  total_staked     : ${Number(currentTotalStaked) / 1_000_000} FBiT`);
-  console.log(`  total_reserve    : ${Number(currentTotalReserve) / 1_000_000} FBiT`);
-  console.log(`  annual_emission  : ${Number(currentAnnualEmission) / 1_000_000} FBiT/year`);
+  console.log(`  total_staked     : ${Number(currentTotalStaked) / Number(DECIMALS)} FBiT`);
+  console.log(`  total_reserve    : ${Number(currentTotalReserve) / Number(DECIMALS)} FBiT`);
+  console.log(`  annual_emission  : ${Number(currentAnnualEmission) / Number(DECIMALS)} FBiT/year`);
   console.log(`  current APY      : ${Number(currentApy) / 100}%`);
 
   console.log('\n  ── After This Change ────────────────────────────────');
-  console.log(`  annual_emission  : ${Number(ANNUAL_EMISSION_RAW) / 1_000_000} FBiT/year`);
+  console.log(`  annual_emission  : ${Number(ANNUAL_EMISSION_RAW) / Number(DECIMALS)} FBiT/year`);
   console.log(`  new APY          : ${Number(newApy) / 100}%  (with current staking)`);
   console.log(`  reserve runway   : ~${Math.round(runwayYears)} years`);
   console.log('');
@@ -158,7 +159,7 @@ async function main() {
 
   console.log(`\n✅  Done!`);
   console.log(`   TX : https://explorer.solana.com/tx/${sig}`);
-  console.log(`\n  annual_emission → ${Number(ANNUAL_EMISSION_RAW) / 1_000_000} FBiT/year`);
+  console.log(`\n  annual_emission → ${Number(ANNUAL_EMISSION_RAW) / Number(DECIMALS)} FBiT/year`);
   console.log(`  APY             → ~${Number(newApy) / 100}% (decreases as more users stake)`);
 }
 

@@ -37,7 +37,7 @@ interface TokenLogoProps {
  * TokenLogo
  *
  * Displays the FBiT token logo sourced from the smart contract's on-chain
- * metadata (Metaplex DAS for Solana, Trust Wallet / DexScreener for Polygon).
+ * metadata (Metaplex DAS, falling back to DexScreener).
  *
  * Falls back gracefully to a branded "F" badge when no logo is available.
  */

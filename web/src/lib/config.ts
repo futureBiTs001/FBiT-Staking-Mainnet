@@ -24,22 +24,10 @@ export const NETWORK_CONFIG: Record<string, NetworkConfig> = {
     stakeTokenAddress:  (process.env.NEXT_PUBLIC_SOLANA_STAKE_TOKEN_MINT  ?? '').trim(),
     rewardTokenAddress: (process.env.NEXT_PUBLIC_SOLANA_REWARD_TOKEN_MINT ?? '').trim(),
     stakeTokenSymbol:   'FBiT',
-    stakeTokenDecimals: 6,
+    stakeTokenDecimals: 9,
     stakeVaultAddress:   (process.env.NEXT_PUBLIC_SOLANA_STAKE_VAULT   ?? '').trim() || undefined,
     rewardVaultAddress:  (process.env.NEXT_PUBLIC_SOLANA_REWARD_VAULT  ?? '').trim() || undefined,
     reserveVaultAddress: (process.env.NEXT_PUBLIC_SOLANA_RESERVE_VAULT ?? '').trim() || undefined,
-  },
-  polygon: {
-    name: 'Polygon',
-    type: 'polygon',
-    rpcUrl:             (process.env.NEXT_PUBLIC_POLYGON_RPC_URL          ?? 'https://polygon-bor-rpc.publicnode.com').trim(),
-    chainId:            Number((process.env.NEXT_PUBLIC_POLYGON_CHAIN_ID  ?? '137').trim()),
-    explorerUrl:        'https://polygonscan.com',
-    contractAddress:    (process.env.NEXT_PUBLIC_POLYGON_CONTRACT_ADDRESS ?? '').trim(),
-    stakeTokenAddress:  (process.env.NEXT_PUBLIC_POLYGON_STAKE_TOKEN      ?? '').trim(),
-    rewardTokenAddress: (process.env.NEXT_PUBLIC_POLYGON_REWARD_TOKEN     ?? '').trim(),
-    stakeTokenSymbol:   'WFBIT',
-    stakeTokenDecimals: 6,
   },
 };
 

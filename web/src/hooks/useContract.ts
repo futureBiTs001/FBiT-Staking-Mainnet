@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useMemo } from 'react';
-import { useWallet, isAdminAddress } from '@/context/WalletContext';
+import { useWallet } from '@/context/WalletContext';
 import { useAppStore } from '@/lib/store';
 import { NETWORK_CONFIG } from '@/lib/config';
 import { getBotGuard } from '@/lib/botManagement';
@@ -23,33 +23,6 @@ function botCheck(actionType: string): void {
   const result = getBotGuard().canPerformAction(actionType);
   if (!result.allowed) throw new Error(result.reason ?? 'Action blocked by security system.');
 }
-
-import {
-  polygonFetchPlatformStats,
-  polygonStake,
-  polygonClaimRewards,
-  polygonCompoundRewards,
-  polygonUnstake,
-  polygonRenounceOwnership,
-  polygonFundRewardPool,
-  polygonDepositReserve,
-  polygonReleaseEmission,
-  polygonSetRewardRate,
-  polygonSetReferralRewardRate,
-  polygonBlockUser,
-  polygonUnblockUser,
-  polygonGetBlockedUsers,
-  polygonTogglePause,
-  polygonSetAnnualEmission,
-  polygonSetBurnBps,
-  polygonSetTeamTargetTier,
-  polygonBurnUnusedPool,
-  polygonEmergencyWithdraw,
-  polygonGetUserStakes,
-  polygonGetTokenBalance,
-  polygonGetUserAccount,
-  polygonGetReferralInfo,
-} from '@/lib/contracts/polygon';
 
 import {
   solanaInitializePlatform,
@@ -78,7 +51,6 @@ import {
   solanaGetUserAccount,
   solanaGetReferralInfo,
   solanaRefundRewardPool,
-  solanaTriggerHalving,
   solanaUpdateUserTeamStats,
   solanaSetBatchApy,
   solanaFixBump,
@@ -86,7 +58,7 @@ import {
 
 function isPlaceholderAddr(addr: string | undefined): boolean {
   if (!addr || addr.length < 10) return true;
-  // Reject obvious placeholder strings (e.g. YOUR_POLYGON_MAINNET_CONTRACT_ADDRESS)
+  // Reject obvious placeholder strings (e.g. YOUR_SOLANA_PROGRAM_ID)
   if (addr.toUpperCase().startsWith('YOUR_')) return true;
   return false;
 }
@@ -119,7 +91,7 @@ export interface ContractHook {
   fundRewardPool(amount: number): Promise<{ txHash: string }>;
   setRewardRate(rate: number): Promise<{ txHash: string }>;
   setReferralRewardRate(rate: number): Promise<{ txHash: string }>;
-  /** Update per-level referral percentages (BPS). Array of 10 values, total must be ≤ 5000 (50%). Solana only. */
+  /** Update per-level referral percentages (BPS). Array of 10 values, total must be ≤ 5000 (50%). */
   setReferralPercentages(percentages: [number,number,number,number,number,number,number,number,number,number]): Promise<{ txHash: string }>;
   blockUser(address: string): Promise<{ txHash: string }>;
   unblockUser(address: string): Promise<{ txHash: string }>;
@@ -141,39 +113,31 @@ export interface ContractHook {
    * Irreversible.
    */
   renounceOwnership(): Promise<{ txHash: string }>;
-  /** Withdraw tokens from the reward pool back to admin's wallet. Solana only. */
+  /** Withdraw tokens from the reward pool back to admin's wallet. */
   refundRewardPool(amount: number): Promise<{ txHash: string }>;
-  /** Trigger annual base-APY halving. Permissionless — anyone can call once per year. Solana only. */
-  triggerHalving(): Promise<{ txHash: string }>;
-  /** Set the fallback base APY BPS (1000–30000). Only active when emission=0. Solana only. */
+  /** Set the fallback base APY BPS (1000–30000). Only active when emission=0. */
   setBaseFallbackApy(apyBps: number): Promise<{ txHash: string }>;
-  /** Admin crank: set a user's team_size and team_total_staked on-chain. Solana only. */
+  /** Admin crank: set a user's team_size and team_total_staked on-chain. */
   updateUserTeamStats(userAddress: string, teamSize: number, teamTotalStaked: number): Promise<{ txHash: string }>;
-  /** Burn excess reward pool tokens. Polygon only. */
-  burnUnusedPool(amount: number): Promise<{ txHash: string }>;
-  /** Emergency withdraw any token from contract (onlyOwner + whenPaused). Polygon only. */
-  emergencyWithdraw(tokenAddress: string, toAddress: string, amount: number): Promise<{ txHash: string }>;
-  /** One-time setup: create the Platform PDA. Must be called before any other instruction. Solana only. */
+  /** One-time setup: create the Platform PDA. Must be called before any other instruction. */
   initializePlatform(rewardRate?: number, referralRewardRate?: number): Promise<{ txHash: string }>;
-  /** Check whether the Platform PDA has been initialized on-chain. Solana only. */
+  /** Check whether the Platform PDA has been initialized on-chain. */
   isPlatformInitialized(): Promise<boolean>;
-  /** Fix platform.bump = 0 bug in old deployed binary. Sets bump to canonical value (253). Solana only. */
+  /** Fix platform.bump = 0 bug in old deployed binary. Sets bump to canonical value (253). */
   fixBump(): Promise<{ txHash: string }>;
 }
 
 export function useContract(): ContractHook {
-  const { address, solanaAddress, evmAddress } = useWallet();
+  const { solanaAddress } = useWallet();
   const { selectedNetwork, updatePlatformStats, loadOnChainData } = useAppStore();
 
-  // Resolve the chain-specific address for the selected network
-  const chainAddress = selectedNetwork === 'solana'
-    ? (solanaAddress ?? (address && !address.startsWith('0x') ? address : null))
-    : (evmAddress   ?? (address && address.startsWith('0x')   ? address : null));
+  const chainAddress = solanaAddress;
+  const address = solanaAddress;
 
   const config = NETWORK_CONFIG[selectedNetwork];
 
   const isLive = useMemo(() => {
-    // Both chains need a deployed contract address and stake token mint.
+    // Needs a deployed contract address and stake token mint.
     if (isPlaceholderAddr(config.contractAddress)) return false;
     if (isPlaceholderAddr(config.stakeTokenAddress)) return false;
     // Vault addresses are NOT checked here — the vault helper functions
@@ -187,76 +151,48 @@ export function useContract(): ContractHook {
   // ── Staking ────────────────────────────────────────────────────────────────
 
   const stake = useCallback(
-    async (amount: number, referrer?: string) => {
+    (amount: number, referrer?: string) => {
       botCheck('stake');
-      if (selectedNetwork === 'solana') {
-        return solanaStake(amount, referrer);
-      }
-      const result = await polygonStake(amount, referrer);
-      return { ...result, stakedAt: Math.floor(Date.now() / 1000) };
+      return solanaStake(amount, referrer);
     },
-    [selectedNetwork]
+    []
   );
 
   const claimRewards = useCallback(
     (stakeId: number | string, stakedAt: number) => {
       botCheck('claim');
-      if (selectedNetwork === 'solana') return solanaClaimRewards(stakeId, stakedAt);
-      return polygonClaimRewards(stakeId);
+      return solanaClaimRewards(stakeId, stakedAt);
     },
-    [selectedNetwork]
+    []
   );
 
   const compoundRewards = useCallback(
     (stakeId: number | string, stakedAt: number) => {
       botCheck('compound');
-      if (selectedNetwork === 'solana') return solanaCompoundRewards(stakeId, stakedAt);
-      return polygonCompoundRewards(stakeId);
+      return solanaCompoundRewards(stakeId, stakedAt);
     },
-    [selectedNetwork]
+    []
   );
 
   const unstake = useCallback(
-    (stakeId: number | string, stakedAt: number) => {
+    (stakeId: number | string, _stakedAt: number) => {
       botCheck('unstake');
-      if (selectedNetwork === 'solana') return solanaUnstake(Number(stakeId));
-      return polygonUnstake(stakeId);
+      return solanaUnstake(Number(stakeId));
     },
-    [selectedNetwork]
+    []
   );
 
   // ── Sync ──────────────────────────────────────────────────────────────────
 
-  const SECS_PER_HALVING_PERIOD = 1460 * 24 * 60 * 60; // 4 years (1460 days) per halving cycle
-
   const syncPlatformStats = useCallback(async () => {
-    const stats =
-      selectedNetwork === 'solana'
-        ? await solanaFetchPlatformStats()
-        : await polygonFetchPlatformStats();
+    const stats = await solanaFetchPlatformStats();
     if (!stats) return;
 
     updatePlatformStats(stats);
 
     // Emission release is bundled as a pre-instruction inside every claim/compound
     // transaction — no separate background trigger needed or wanted here.
-
-    // Auto-halving: permissionless on-chain, but still requires a signed transaction
-    // from whoever calls it — restrict to admin wallets so ordinary visitors never
-    // see an unsolicited signature prompt when a halving becomes due.
-    if (selectedNetwork === 'solana' && chainAddress && isAdminAddress(chainAddress)) {
-      if (stats.halvingStartTime && stats.halvingStartTime > 0) {
-        const nowSecs      = Math.floor(Date.now() / 1000);
-        const halvingEpoch = stats.halvingEpoch ?? 0;
-        const halvingDue   = nowSecs >= stats.halvingStartTime + (halvingEpoch + 1) * SECS_PER_HALVING_PERIOD;
-        if (halvingDue) {
-          solanaTriggerHalving()
-            .then(() => solanaFetchPlatformStats().then(fresh => { if (fresh) updatePlatformStats(fresh); }))
-            .catch(() => { /* contract will revert if already triggered — safe to ignore */ });
-        }
-      }
-    }
-  }, [selectedNetwork, chainAddress, updatePlatformStats]);
+  }, [updatePlatformStats]);
 
   const syncUserData = useCallback(async () => {
     if (!address || !chainAddress) return;
@@ -268,15 +204,9 @@ export function useContract(): ContractHook {
 
       if (isLive) {
         const [stakesResult, userAccountResult, referralInfoResult] = await Promise.allSettled([
-          selectedNetwork === 'solana'
-            ? solanaGetUserStakes(chainAddress)
-            : polygonGetUserStakes(chainAddress),
-          selectedNetwork === 'solana'
-            ? solanaGetUserAccount(chainAddress)
-            : polygonGetUserAccount(chainAddress),
-          selectedNetwork === 'solana'
-            ? solanaGetReferralInfo(chainAddress)
-            : polygonGetReferralInfo(chainAddress),
+          solanaGetUserStakes(chainAddress),
+          solanaGetUserAccount(chainAddress),
+          solanaGetReferralInfo(chainAddress),
         ]);
         // Only overwrite stakes when the call succeeded AND returned non-null.
         // null means an RPC error — preserve whatever the store already has.
@@ -301,11 +231,7 @@ export function useContract(): ContractHook {
       }
 
       if (tokenConfigured) {
-        const balanceResult = await Promise.allSettled([
-          selectedNetwork === 'solana'
-            ? solanaGetTokenBalance(chainAddress)
-            : polygonGetTokenBalance(chainAddress),
-        ]);
+        const balanceResult = await Promise.allSettled([solanaGetTokenBalance(chainAddress)]);
         if (balanceResult[0].status === 'fulfilled') update.tokenBalance = balanceResult[0].value;
       }
 
@@ -315,193 +241,44 @@ export function useContract(): ContractHook {
     } catch (err) {
       console.warn('[useContract] syncUserData failed:', err);
     }
-  }, [address, chainAddress, isLive, config, selectedNetwork, loadOnChainData]);
+  }, [address, chainAddress, isLive, config, loadOnChainData]);
 
   // ── Admin ─────────────────────────────────────────────────────────────────
 
-  const depositReserve = useCallback(
-    (amount: number) => {
-      if (selectedNetwork === 'solana') return solanaDepositReserve(amount);
-      return polygonDepositReserve(amount);
-    },
-    [selectedNetwork]
-  );
-
-  const releaseEmission = useCallback(
-    () => {
-      if (selectedNetwork === 'solana') return solanaReleaseEmission();
-      return polygonReleaseEmission();
-    },
-    [selectedNetwork]
-  );
-
-  const fundRewardPool = useCallback(
-    (amount: number) => {
-      if (selectedNetwork === 'solana') return solanaFundRewardPool(amount);
-      return polygonFundRewardPool(amount);
-    },
-    [selectedNetwork]
-  );
-
-  const setRewardRate = useCallback(
-    (rate: number) => {
-      if (selectedNetwork === 'solana') return solanaSetRewardRate(rate);
-      return polygonSetRewardRate(rate);
-    },
-    [selectedNetwork]
-  );
-
-  const setReferralRewardRate = useCallback(
-    (rate: number) => {
-      if (selectedNetwork === 'solana') return solanaSetReferralRewardRate(rate);
-      return polygonSetReferralRewardRate(rate);
-    },
-    [selectedNetwork]
-  );
-
+  const depositReserve = useCallback((amount: number) => solanaDepositReserve(amount), []);
+  const releaseEmission = useCallback(() => solanaReleaseEmission(), []);
+  const fundRewardPool = useCallback((amount: number) => solanaFundRewardPool(amount), []);
+  const setRewardRate = useCallback((rate: number) => solanaSetRewardRate(rate), []);
+  const setReferralRewardRate = useCallback((rate: number) => solanaSetReferralRewardRate(rate), []);
   const setReferralPercentages = useCallback(
-    (percentages: [number,number,number,number,number,number,number,number,number,number]) => {
-      if (selectedNetwork === 'solana') return solanaSetReferralPercentages(percentages);
-      return Promise.reject(new Error('setReferralPercentages is only supported on Solana.'));
-    },
-    [selectedNetwork]
+    (percentages: [number,number,number,number,number,number,number,number,number,number]) =>
+      solanaSetReferralPercentages(percentages),
+    []
   );
-
-  const blockUser = useCallback(
-    (userAddress: string) => {
-      if (selectedNetwork === 'solana') return solanaBlockUser(userAddress);
-      return polygonBlockUser(userAddress);
-    },
-    [selectedNetwork]
-  );
-
-  const unblockUser = useCallback(
-    (userAddress: string) => {
-      if (selectedNetwork === 'solana') return solanaUnblockUser(userAddress);
-      return polygonUnblockUser(userAddress);
-    },
-    [selectedNetwork]
-  );
-
-  const getBlockedUsers = useCallback(
-    () => {
-      if (selectedNetwork === 'solana') return solanaGetBlockedUsers();
-      return polygonGetBlockedUsers();
-    },
-    [selectedNetwork]
-  );
-
-  const togglePause = useCallback(
-    (currentlyPaused: boolean) => {
-      if (selectedNetwork === 'solana') return solanaTogglePause();
-      return polygonTogglePause(currentlyPaused);
-    },
-    [selectedNetwork]
-  );
-
-  const setAnnualEmission = useCallback(
-    (annualEmission: number) => {
-      if (selectedNetwork === 'solana') return solanaSetAnnualEmission(annualEmission);
-      return polygonSetAnnualEmission(annualEmission);
-    },
-    [selectedNetwork]
-  );
-
-  const setBurnBps = useCallback(
-    (burnBps: number) => {
-      if (selectedNetwork === 'solana') return solanaSetBurnBps(burnBps);
-      return polygonSetBurnBps(burnBps);
-    },
-    [selectedNetwork]
-  );
-
+  const blockUser = useCallback((userAddress: string) => solanaBlockUser(userAddress), []);
+  const unblockUser = useCallback((userAddress: string) => solanaUnblockUser(userAddress), []);
+  const getBlockedUsers = useCallback(() => solanaGetBlockedUsers(), []);
+  const togglePause = useCallback((_currentlyPaused: boolean) => solanaTogglePause(), []);
+  const setAnnualEmission = useCallback((annualEmission: number) => solanaSetAnnualEmission(annualEmission), []);
+  const setBurnBps = useCallback((burnBps: number) => solanaSetBurnBps(burnBps), []);
   const setTeamTargetTier = useCallback(
-    (index: number, minTeamStaked: number, bonusBps: number) => {
-      if (selectedNetwork === 'solana') return solanaSetTeamTargetTier(index, minTeamStaked, bonusBps);
-      return polygonSetTeamTargetTier(index, minTeamStaked, bonusBps);
-    },
-    [selectedNetwork]
+    (index: number, minTeamStaked: number, bonusBps: number) => solanaSetTeamTargetTier(index, minTeamStaked, bonusBps),
+    []
   );
-
-  const renounceOwnership = useCallback(
-    () => {
-      if (selectedNetwork === 'solana') return solanaRenounceOwnership();
-      return polygonRenounceOwnership();
-    },
-    [selectedNetwork]
-  );
-
-  const refundRewardPool = useCallback(
-    (amount: number) => {
-      if (selectedNetwork === 'solana') return solanaRefundRewardPool(amount);
-      return Promise.reject(new Error('Refund reward pool is not supported on Polygon.'));
-    },
-    [selectedNetwork]
-  );
-
-  const triggerHalving = useCallback(
-    () => {
-      if (selectedNetwork === 'solana') return solanaTriggerHalving();
-      return Promise.reject(new Error('Trigger halving is not supported on Polygon.'));
-    },
-    [selectedNetwork]
-  );
-
+  const renounceOwnership = useCallback(() => solanaRenounceOwnership(), []);
+  const refundRewardPool = useCallback((amount: number) => solanaRefundRewardPool(amount), []);
   const updateUserTeamStats = useCallback(
-    (userAddress: string, teamSize: number, teamTotalStaked: number) => {
-      if (selectedNetwork === 'solana') return solanaUpdateUserTeamStats(userAddress, teamSize, teamTotalStaked);
-      return Promise.reject(new Error('Update user team stats is not supported on Polygon.'));
-    },
-    [selectedNetwork]
+    (userAddress: string, teamSize: number, teamTotalStaked: number) =>
+      solanaUpdateUserTeamStats(userAddress, teamSize, teamTotalStaked),
+    []
   );
-
-  const setBaseFallbackApy = useCallback(
-    (apyBps: number) => {
-      if (selectedNetwork === 'solana') return solanaSetBatchApy(apyBps);
-      return Promise.reject(new Error('Set base fallback APY is not supported on Polygon (use setAnnualEmission instead).'));
-    },
-    [selectedNetwork]
-  );
-
-  const burnUnusedPool = useCallback(
-    (amount: number) => {
-      if (selectedNetwork === 'solana') return Promise.reject(new Error('Burn unused pool is not supported on Solana.'));
-      return polygonBurnUnusedPool(amount);
-    },
-    [selectedNetwork]
-  );
-
-  const emergencyWithdraw = useCallback(
-    (tokenAddress: string, toAddress: string, amount: number) => {
-      if (selectedNetwork === 'solana') return Promise.reject(new Error('Emergency withdraw is not supported on Solana.'));
-      return polygonEmergencyWithdraw(tokenAddress, toAddress, amount);
-    },
-    [selectedNetwork]
-  );
-
+  const setBaseFallbackApy = useCallback((apyBps: number) => solanaSetBatchApy(apyBps), []);
   const initializePlatform = useCallback(
-    (rewardRate?: number, referralRewardRate?: number) => {
-      if (selectedNetwork === 'solana') return solanaInitializePlatform(rewardRate, referralRewardRate);
-      return Promise.reject(new Error('Initialize platform is not supported on Polygon.'));
-    },
-    [selectedNetwork]
+    (rewardRate?: number, referralRewardRate?: number) => solanaInitializePlatform(rewardRate, referralRewardRate),
+    []
   );
-
-  const isPlatformInitialized = useCallback(
-    () => {
-      if (selectedNetwork === 'solana') return solanaIsPlatformInitialized();
-      return Promise.resolve(true); // Polygon contracts are always "initialized"
-    },
-    [selectedNetwork]
-  );
-
-  const fixBump = useCallback(
-    () => {
-      if (selectedNetwork === 'solana') return solanaFixBump();
-      return Promise.reject(new Error('fixBump is only needed on Solana.'));
-    },
-    [selectedNetwork]
-  );
+  const isPlatformInitialized = useCallback(() => solanaIsPlatformInitialized(), []);
+  const fixBump = useCallback(() => solanaFixBump(), []);
 
   return {
     isLive,
@@ -527,11 +304,8 @@ export function useContract(): ContractHook {
     setTeamTargetTier,
     renounceOwnership,
     refundRewardPool,
-    triggerHalving,
     updateUserTeamStats,
     setBaseFallbackApy,
-    burnUnusedPool,
-    emergencyWithdraw,
     initializePlatform,
     isPlatformInitialized,
     fixBump,

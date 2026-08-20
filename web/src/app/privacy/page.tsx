@@ -24,7 +24,7 @@ export default function PrivacyPage() {
             }}>F</div>
             <span style={{ fontWeight: 700, fontSize: 18, color: '#f1f5f9' }}>FBiT Staking</span>
           </Link>
-          <Link href="/" style={{
+          <Link href="/app" style={{
             padding: '8px 20px', borderRadius: 8,
             background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)',
             color: '#00E676', textDecoration: 'none', fontSize: 14, fontWeight: 500,
@@ -51,7 +51,7 @@ export default function PrivacyPage() {
         <Section title="2. Information We Collect">
           <b style={{ color: '#f1f5f9' }}>a) Blockchain Data (Public)</b>
           <p style={{ marginTop: 8, marginBottom: 16 }}>
-            All staking transactions occur on public blockchains (Solana and Polygon). Your wallet address, transaction amounts,
+            All staking transactions occur on the public Solana blockchain. Your wallet address, transaction amounts,
             and staking history are publicly visible on-chain. We do not collect or store this data separately — it is inherently public.
           </p>
           <b style={{ color: '#f1f5f9' }}>b) Usage Data (Analytics)</b>
@@ -91,7 +91,7 @@ export default function PrivacyPage() {
             <li><b style={{ color: '#f1f5f9' }}>Google AdSense</b> — advertising. <a href="https://policies.google.com/technologies/ads" style={{ color: '#00E676' }}>AdSense Policy</a></li>
             <li><b style={{ color: '#f1f5f9' }}>Vercel</b> — hosting provider. May log server-side request metadata.</li>
             <li><b style={{ color: '#f1f5f9' }}>Helius RPC / Alchemy</b> — blockchain node providers used to read on-chain data.</li>
-            <li><b style={{ color: '#f1f5f9' }}>Phantom / MetaMask / WalletConnect</b> — third-party wallet providers with their own privacy policies.</li>
+            <li><b style={{ color: '#f1f5f9' }}>Phantom / Solflare / WalletConnect</b> — third-party wallet providers with their own privacy policies.</li>
           </ul>
         </Section>
 
@@ -125,7 +125,7 @@ export default function PrivacyPage() {
         <div style={{ marginTop: 64, paddingTop: 32, borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: 24, flexWrap: 'wrap' }}>
           <Link href="/about" style={{ color: '#64748b', textDecoration: 'none', fontSize: 14 }}>About Us</Link>
           <Link href="/terms" style={{ color: '#64748b', textDecoration: 'none', fontSize: 14 }}>Terms & Conditions</Link>
-          <Link href="/" style={{ color: '#64748b', textDecoration: 'none', fontSize: 14 }}>Launch App</Link>
+          <Link href="/app" style={{ color: '#64748b', textDecoration: 'none', fontSize: 14 }}>Launch App</Link>
         </div>
       </main>
     </div>

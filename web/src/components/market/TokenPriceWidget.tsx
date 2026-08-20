@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useAppStore } from '@/lib/store';
 import { formatNumber } from '@/lib/utils';
 import { useTokenPrice, DexPair } from '@/hooks/useTokenPrice';
 import TokenLogo from '@/components/ui/TokenLogo';
@@ -48,7 +47,6 @@ function TxBadge({ buys, sells }: { buys: number; sells: number }) {
 }
 
 export default function TokenPriceWidget() {
-  const { selectedNetwork } = useAppStore();
   const { pairs, logoUrl, lastUpdated, isLoading, source, refresh } = useTokenPrice();
   const [expanded, setExpanded] = useState(false);
 
@@ -67,9 +65,7 @@ export default function TokenPriceWidget() {
           <TokenLogo src={logoUrl} size="md" showLiveDot />
           <div>
             <p className="font-display font-semibold text-sm leading-tight">FBiT Market Price</p>
-            <p className="text-text-muted text-[11px]">
-              {selectedNetwork === 'solana' ? 'Solana DEXs' : 'Polygon DEXs'}
-            </p>
+            <p className="text-text-muted text-[11px]">Solana DEXs</p>
           </div>
 
           {/* Best price pill */}

@@ -257,14 +257,6 @@ export type FbitStaking = {
       "args": []
     },
     {
-      "name": "triggerHalving",
-      "accounts": [
-        { "name": "platform", "isMut": true, "isSigner": false },
-        { "name": "caller", "isMut": true, "isSigner": true }
-      ],
-      "args": []
-    },
-    {
       "name": "setReferralPercentages",
       "accounts": [
         { "name": "platform", "isMut": true, "isSigner": false },
@@ -313,7 +305,8 @@ export type FbitStaking = {
           { "name": "emissionStartTime", "type": "i64" },
           { "name": "annualEmission", "type": "u64" },
           { "name": "burnBps", "type": "u64" },
-          { "name": "referralPercentages", "type": { "array": ["u64", 10] } }
+          { "name": "referralPercentages", "type": { "array": ["u64", 10] } },
+          { "name": "lastReleaseTime", "type": "i64" }
         ]
       }
     },
@@ -378,20 +371,19 @@ export type FbitStaking = {
     { "code": 6017, "name": "InvalidVault", "msg": "Invalid vault account" },
     { "code": 6018, "name": "InvalidUserAccount", "msg": "Invalid user token account" },
     { "code": 6019, "name": "APYTooHigh", "msg": "APY exceeds maximum allowed value" },
-    { "code": 6020, "name": "HalvingNotDue", "msg": "Halving is not due yet" },
-    { "code": 6021, "name": "AlreadyRenounced", "msg": "Ownership has already been renounced" },
-    { "code": 6022, "name": "InvalidFeeRecipient", "msg": "Fee recipient token account does not match" },
-    { "code": 6023, "name": "BelowMinDeposit", "msg": "Deposit amount below minimum (1 FBiT)" },
-    { "code": 6024, "name": "AboveMaxDeposit", "msg": "Deposit amount above maximum (800 M FBiT)" },
-    { "code": 6025, "name": "ReserveNotFunded", "msg": "Reserve vault not funded yet" },
-    { "code": 6026, "name": "NoEmissionAvailable", "msg": "No emission available to release yet" },
-    { "code": 6027, "name": "AnnualEmissionNotSet", "msg": "Annual emission not configured" },
-    { "code": 6028, "name": "BurnBpsTooHigh", "msg": "Burn BPS exceeds maximum (5000 = 50%)" },
-    { "code": 6029, "name": "BelowMinStake", "msg": "Stake amount is below minimum (1 FBiT)" },
-    { "code": 6030, "name": "AboveMaxStake", "msg": "Stake amount exceeds maximum (500M FBiT)" },
-    { "code": 6031, "name": "InvalidReferralATA", "msg": "Invalid referral token account" },
-    { "code": 6032, "name": "ReferrerRequired", "msg": "A valid referrer is required to register" },
-    { "code": 6033, "name": "ReferralPercentagesTooHigh", "msg": "Total referral BPS exceeds 50% maximum" }
+    { "code": 6020, "name": "AlreadyRenounced", "msg": "Ownership has already been renounced" },
+    { "code": 6021, "name": "InvalidFeeRecipient", "msg": "Fee recipient token account does not match" },
+    { "code": 6022, "name": "BelowMinDeposit", "msg": "Deposit amount below minimum (0.1 FBiT)" },
+    { "code": 6023, "name": "AboveMaxDeposit", "msg": "Deposit amount above maximum (250 M FBiT)" },
+    { "code": 6024, "name": "ReserveNotFunded", "msg": "Reserve vault not funded yet" },
+    { "code": 6025, "name": "NoEmissionAvailable", "msg": "No emission available to release yet" },
+    { "code": 6026, "name": "AnnualEmissionNotSet", "msg": "Annual emission not configured" },
+    { "code": 6027, "name": "BurnBpsTooHigh", "msg": "Burn BPS exceeds maximum (5000 = 50%)" },
+    { "code": 6028, "name": "BelowMinStake", "msg": "Stake amount is below minimum (0.1 FBiT)" },
+    { "code": 6029, "name": "AboveMaxStake", "msg": "Stake amount exceeds maximum (250M FBiT)" },
+    { "code": 6030, "name": "InvalidReferralATA", "msg": "Invalid referral token account" },
+    { "code": 6031, "name": "ReferrerRequired", "msg": "A valid referrer is required to register" },
+    { "code": 6032, "name": "ReferralPercentagesTooHigh", "msg": "Total referral BPS exceeds 50% maximum" }
   ]
 };
 
@@ -654,14 +646,6 @@ export const IDL: FbitStaking = {
       "args": []
     },
     {
-      "name": "triggerHalving",
-      "accounts": [
-        { "name": "platform", "isMut": true, "isSigner": false },
-        { "name": "caller", "isMut": true, "isSigner": true }
-      ],
-      "args": []
-    },
-    {
       "name": "setReferralPercentages",
       "accounts": [
         { "name": "platform", "isMut": true, "isSigner": false },
@@ -710,7 +694,8 @@ export const IDL: FbitStaking = {
           { "name": "emissionStartTime", "type": "i64" },
           { "name": "annualEmission", "type": "u64" },
           { "name": "burnBps", "type": "u64" },
-          { "name": "referralPercentages", "type": { "array": ["u64", 10] } }
+          { "name": "referralPercentages", "type": { "array": ["u64", 10] } },
+          { "name": "lastReleaseTime", "type": "i64" }
         ]
       }
     },
@@ -775,19 +760,18 @@ export const IDL: FbitStaking = {
     { "code": 6017, "name": "InvalidVault", "msg": "Invalid vault account" },
     { "code": 6018, "name": "InvalidUserAccount", "msg": "Invalid user token account" },
     { "code": 6019, "name": "APYTooHigh", "msg": "APY exceeds maximum allowed value" },
-    { "code": 6020, "name": "HalvingNotDue", "msg": "Halving is not due yet" },
-    { "code": 6021, "name": "AlreadyRenounced", "msg": "Ownership has already been renounced" },
-    { "code": 6022, "name": "InvalidFeeRecipient", "msg": "Fee recipient token account does not match" },
-    { "code": 6023, "name": "BelowMinDeposit", "msg": "Deposit amount below minimum (1 FBiT)" },
-    { "code": 6024, "name": "AboveMaxDeposit", "msg": "Deposit amount above maximum (800 M FBiT)" },
-    { "code": 6025, "name": "ReserveNotFunded", "msg": "Reserve vault not funded yet" },
-    { "code": 6026, "name": "NoEmissionAvailable", "msg": "No emission available to release yet" },
-    { "code": 6027, "name": "AnnualEmissionNotSet", "msg": "Annual emission not configured" },
-    { "code": 6028, "name": "BurnBpsTooHigh", "msg": "Burn BPS exceeds maximum (5000 = 50%)" },
-    { "code": 6029, "name": "BelowMinStake", "msg": "Stake amount is below minimum (1 FBiT)" },
-    { "code": 6030, "name": "AboveMaxStake", "msg": "Stake amount exceeds maximum (500M FBiT)" },
-    { "code": 6031, "name": "InvalidReferralATA", "msg": "Invalid referral token account" },
-    { "code": 6032, "name": "ReferrerRequired", "msg": "A valid referrer is required to register" },
-    { "code": 6033, "name": "ReferralPercentagesTooHigh", "msg": "Total referral BPS exceeds 50% maximum" }
+    { "code": 6020, "name": "AlreadyRenounced", "msg": "Ownership has already been renounced" },
+    { "code": 6021, "name": "InvalidFeeRecipient", "msg": "Fee recipient token account does not match" },
+    { "code": 6022, "name": "BelowMinDeposit", "msg": "Deposit amount below minimum (0.1 FBiT)" },
+    { "code": 6023, "name": "AboveMaxDeposit", "msg": "Deposit amount above maximum (250 M FBiT)" },
+    { "code": 6024, "name": "ReserveNotFunded", "msg": "Reserve vault not funded yet" },
+    { "code": 6025, "name": "NoEmissionAvailable", "msg": "No emission available to release yet" },
+    { "code": 6026, "name": "AnnualEmissionNotSet", "msg": "Annual emission not configured" },
+    { "code": 6027, "name": "BurnBpsTooHigh", "msg": "Burn BPS exceeds maximum (5000 = 50%)" },
+    { "code": 6028, "name": "BelowMinStake", "msg": "Stake amount is below minimum (0.1 FBiT)" },
+    { "code": 6029, "name": "AboveMaxStake", "msg": "Stake amount exceeds maximum (250M FBiT)" },
+    { "code": 6030, "name": "InvalidReferralATA", "msg": "Invalid referral token account" },
+    { "code": 6031, "name": "ReferrerRequired", "msg": "A valid referrer is required to register" },
+    { "code": 6032, "name": "ReferralPercentagesTooHigh", "msg": "Total referral BPS exceeds 50% maximum" }
   ]
 };

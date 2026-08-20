@@ -8,8 +8,7 @@ import type { NetworkType, PlatformStats } from '@/types';
 
 // Whitepaper §6.1 dynamic APY bounds (basis points).
 const APY_BOUNDS: Record<NetworkType, { min: number; max: number }> = {
-  solana:  { min: 1_000, max: 30_000 }, // 10%–300%
-  polygon: { min: 6_000, max: 25_000 }, // 60%–250%
+  solana: { min: 1_000, max: 30_000 }, // 10%–300%
 };
 
 const INTERVALS_PER_DAY = 4;         // one claim/compound window every 6h

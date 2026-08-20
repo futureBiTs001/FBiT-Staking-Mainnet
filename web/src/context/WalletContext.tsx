@@ -9,85 +9,78 @@ type WalletType = 'reown';
 
 interface WalletContextType {
   connect: (walletType: WalletType) => Promise<void>;
-  adminConnect: () => Promise<void>;
   disconnect: () => void;
   address: string | null;
   solanaAddress: string | null;
-  evmAddress: string | null;
   isConnecting: boolean;
   walletType: WalletType | null;
   solanaReferrer: string | null;
-  polygonReferrer: string | null;
   setSolanaReferrer: (addr: string) => void;
-  setPolygonReferrer: (addr: string) => void;
 }
 
 const WalletContext = createContext<WalletContextType>({
   connect: async () => {},
-  adminConnect: async () => {},
   disconnect: () => {},
   address: null,
   solanaAddress: null,
-  evmAddress: null,
   isConnecting: false,
   walletType: null,
   solanaReferrer: null,
-  polygonReferrer: null,
   setSolanaReferrer: () => {},
-  setPolygonReferrer: () => {},
 });
 
 export const useWallet = () => useContext(WalletContext);
 
 // ── Admin address check ───────────────────────────────────────────────────────
 // SECURITY: Admin list is a UI gate only — real enforcement is the smart
-// contract's onlyOwner / onlyAuthority modifier. Set NEXT_PUBLIC_ADMIN_ADDRESSES
-// in .env.local as a comma-separated list of admin wallet addresses.
-const ADMIN_ADDRESSES = (process.env.NEXT_PUBLIC_ADMIN_ADDRESSES ?? '')
+// contract's onlyOwner / onlyAuthority modifier. Set NEXT_PUBLIC_ADMIN_ADDRESS_HASHES
+// in .env.local as a comma-separated list of SHA-256 hex digests (not raw addresses).
+//
+// Hashed rather than stored raw because NEXT_PUBLIC_* values are bundled directly
+// into the public JS — a raw address list would let anyone reading the deployed
+// bundle instantly identify the admin wallet as a phishing/social-engineering
+// target. Hashing doesn't add cryptographic access control (the real boundary is
+// the on-chain authority check), it just removes that free, zero-effort lookup.
+const ADMIN_ADDRESS_HASHES = (process.env.NEXT_PUBLIC_ADMIN_ADDRESS_HASHES ?? '')
   .split(',')
-  .map(a => a.trim())
+  .map(a => a.trim().toLowerCase())
   .filter(Boolean);
 
-function isAdminAddress(addr: string): boolean {
-  if (!addr || ADMIN_ADDRESSES.length === 0) return false;
-  // EVM: case-insensitive; Solana: case-sensitive (base58)
-  const isEVM = addr.startsWith('0x');
-  return ADMIN_ADDRESSES.some(a =>
-    isEVM ? a.toLowerCase() === addr.toLowerCase() : a === addr
-  );
+async function sha256Hex(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function isAdminAddress(addr: string): Promise<boolean> {
+  if (!addr || ADMIN_ADDRESS_HASHES.length === 0) return false;
+  const hash = await sha256Hex(addr); // Solana addresses are base58, case-sensitive
+  return ADMIN_ADDRESS_HASHES.includes(hash);
 }
 
 // Exported so the AdminPanel can re-verify on every sensitive action
 export { isAdminAddress };
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const { setWallet, setIsAdmin, setActiveTab, setSelectedNetwork } = useAppStore();
+  const { setWallet, setIsAdmin, setActiveTab } = useAppStore();
   const [address, setAddress]           = useState<string | null>(null);
   const [solanaAddress, setSolanaAddress] = useState<string | null>(null);
-  const [evmAddress, setEvmAddress]       = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [walletType, setWalletType]     = useState<WalletType | null>(null);
   const [solanaReferrer, setSolanaReferrerState] = useState<string | null>(null);
-  const [polygonReferrer, setPolygonReferrerState] = useState<string | null>(null);
 
   const walletTypeRef = useRef<WalletType | null>(null);
   useEffect(() => { walletTypeRef.current = walletType; }, [walletType]);
 
-  // Tracks whether the pending connection was initiated via the admin-only path
-  const isAdminConnectRef = useRef(false);
-
   useEffect(() => {
-    const SOL_KEY  = 'fbit-referrer-solana';
-    const POLY_KEY = 'fbit-referrer-polygon';
+    const SOL_KEY = 'fbit-referrer-solana';
 
     const fromUrl = getReferrerFromUrl();
     const isSolanaFromUrl = !!fromUrl && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(fromUrl);
-    const isEVMFromUrl    = !!fromUrl && /^0x[0-9a-fA-F]{40}$/.test(fromUrl);
 
-    // Each chain's referrer is resolved independently: a valid match from the
-    // URL wins and is persisted; otherwise fall back to whatever is already
-    // stored, so a malformed/unrelated `?ref=` param never wipes out a
-    // legitimately stored referrer for either chain.
+    // A valid match from the URL wins and is persisted; otherwise fall back
+    // to whatever is already stored, so a malformed/unrelated `?ref=` param
+    // never wipes out a legitimately stored referrer.
     if (isSolanaFromUrl) {
       setSolanaReferrerState(fromUrl);
       try { localStorage.setItem(SOL_KEY, fromUrl); } catch {}
@@ -95,16 +88,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       try {
         const sol = localStorage.getItem(SOL_KEY);
         if (sol && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(sol)) setSolanaReferrerState(sol);
-      } catch {}
-    }
-
-    if (isEVMFromUrl) {
-      setPolygonReferrerState(fromUrl);
-      try { localStorage.setItem(POLY_KEY, fromUrl); } catch {}
-    } else {
-      try {
-        const poly = localStorage.getItem(POLY_KEY);
-        if (poly && /^0x[0-9a-fA-F]{40}$/.test(poly)) setPolygonReferrerState(poly);
       } catch {}
     }
 
@@ -118,63 +101,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // ── Reown / WalletConnect subscriptions ─────────────────────────────────────
   useEffect(() => {
     if (!appKitModal) return;
-    const unsubAccount = appKitModal.subscribeAccount((account: { isConnected: boolean; address?: string }) => {
+    const unsubAccount = appKitModal.subscribeAccount(async (account: { isConnected: boolean; address?: string }) => {
       if (account.isConnected && account.address) {
-        const adminFlow = isAdminConnectRef.current;
-        isAdminConnectRef.current = false;
-
-        if (adminFlow && !isAdminAddress(account.address)) {
-          // Connected via admin path but not an admin wallet — reject immediately
-          appKitModal?.disconnect();
-          setIsConnecting(false);
-          // Dynamic import to avoid circular deps with toast at context level
-          import('react-hot-toast').then(({ default: toast }) => {
-            toast.error('This wallet is not an admin. Use the regular Connect button.');
-          });
-          return;
-        }
-
         // When a different wallet connects, clear any localStorage referrer so
         // stale referrers from a previous user's session are not inherited.
         if (prevAddressRef.current && prevAddressRef.current !== account.address) {
           setSolanaReferrerState(null);
-          setPolygonReferrerState(null);
-          try {
-            localStorage.removeItem('fbit-referrer-solana');
-            localStorage.removeItem('fbit-referrer-polygon');
-          } catch {}
+          try { localStorage.removeItem('fbit-referrer-solana'); } catch {}
         }
         prevAddressRef.current = account.address;
 
         setAddress(account.address);
+        setSolanaAddress(account.address);
         setWallet(account.address);
         setWalletType('reown');
-        setIsAdmin(isAdminAddress(account.address));
+        setIsAdmin(await isAdminAddress(account.address));
         setIsConnecting(false);
-
-        // Detect chain from CAIP format (e.g. "eip155:137:0x..." or "solana:...:base58")
-        // and auto-switch selectedNetwork so the correct dashboard opens immediately.
-        const caip = (account as any).caipAddress ?? '';
-        if (caip.startsWith('eip155:')) {
-          setEvmAddress(account.address);
-          setSelectedNetwork('polygon');
-        } else if (caip.startsWith('solana:')) {
-          setSolanaAddress(account.address);
-          setSelectedNetwork('solana');
-        } else {
-          // Fallback: detect by address format
-          if (account.address.startsWith('0x')) {
-            setEvmAddress(account.address);
-            setSelectedNetwork('polygon');
-          } else {
-            setSolanaAddress(account.address);
-            setSelectedNetwork('solana');
-          }
-        }
       } else if (!account.isConnected && walletTypeRef.current === 'reown') {
         setAddress(null);
         setSolanaAddress(null);
-        setEvmAddress(null);
         setWallet(null);
         setWalletType(null);
         setIsAdmin(false);
@@ -201,17 +146,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // ── Main connect entry-point ─────────────────────────────────────────────────
   const connect = useCallback(async (_type: WalletType) => {
     if (!appKitModal) throw new Error('WalletConnect is not available. Check your Reown project configuration.');
-    isAdminConnectRef.current = false;
-    setIsConnecting(true);
-    try { await appKitModal.disconnect(); } catch {}
-    clearWcSessions();
-    appKitModal.open({ view: 'Connect' });
-  }, []);
-
-  // ── Admin-only connect (bypasses referral gate; rejects non-admin wallets) ──
-  const adminConnect = useCallback(async () => {
-    if (!appKitModal) throw new Error('WalletConnect is not available. Check your Reown project configuration.');
-    isAdminConnectRef.current = true;
     setIsConnecting(true);
     try { await appKitModal.disconnect(); } catch {}
     clearWcSessions();
@@ -224,7 +158,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     clearWcSessions();
     setAddress(null);
     setSolanaAddress(null);
-    setEvmAddress(null);
     setWallet(null);
     setWalletType(null);
     setIsAdmin(false);
@@ -237,19 +170,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem('fbit-referrer-solana', addr); } catch {}
   }, []);
 
-  const savePolygonReferrer = useCallback((addr: string) => {
-    if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) return; // must be EVM 0x address
-    setPolygonReferrerState(addr);
-    try { localStorage.setItem('fbit-referrer-polygon', addr); } catch {}
-  }, []);
-
   return (
     <WalletContext.Provider value={{
-      connect, adminConnect, disconnect,
-      address, solanaAddress, evmAddress, isConnecting, walletType,
-      solanaReferrer, polygonReferrer,
+      connect, disconnect,
+      address, solanaAddress, isConnecting, walletType,
+      solanaReferrer,
       setSolanaReferrer: saveSolanaReferrer,
-      setPolygonReferrer: savePolygonReferrer,
     }}>
       {children}
     </WalletContext.Provider>

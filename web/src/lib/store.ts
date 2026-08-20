@@ -58,14 +58,10 @@ const BASE_PLATFORM_STATS: PlatformStats = {
   emissionStartTime: 0,
   totalEmissionReleased: 0,
   releasableEmission: 0,
-  halvingEpoch: 0,
-  halvingStartTime: 0,
-  minStakeAmount: 1,
-  maxStakePerUser: 500_000_000,
+  minStakeAmount: 0.1,
+  maxStakePerUser: 250_000_000,
   lockPeriodDays: 30,
   claimIntervalSeconds: 21600,
-  totalYearlyBurned: 0,
-  lastYearBurnTime: 0,
   isRenounced: false,
   feeRecipient: '',
   totalFeesCollected: 0,
@@ -97,6 +93,9 @@ interface AppState {
   setActiveTab: (tab: string) => void;
   isAdmin: boolean;
   setIsAdmin: (v: boolean) => void;
+  /** Opens the Connect Wallet modal from anywhere (Header owns the modal itself). */
+  connectGateOpen: boolean;
+  setConnectGateOpen: (v: boolean) => void;
 
   // Stake actions (operate on active wallet)
   addStake: (stake: StakeEntry) => void;
@@ -157,7 +156,7 @@ export const useAppStore = create<AppState>()(
       walletStates: {},
 
       // ── Platform (per-network)
-      networkPlatformStats: { solana: BASE_PLATFORM_STATS, polygon: BASE_PLATFORM_STATS },
+      networkPlatformStats: { solana: BASE_PLATFORM_STATS },
       platformStats: BASE_PLATFORM_STATS,
       updatePlatformStats: (partial) =>
         set(state => ({
@@ -178,6 +177,8 @@ export const useAppStore = create<AppState>()(
       setActiveTab: (tab) => set({ activeTab: tab }),
       isAdmin: false,
       setIsAdmin: (v) => set({ isAdmin: v }),
+      connectGateOpen: false,
+      setConnectGateOpen: (v) => set({ connectGateOpen: v }),
 
       // ── Stake actions
       addStake: (stake) => {
@@ -326,40 +327,31 @@ export const useAppStore = create<AppState>()(
         selectedNetwork: state.selectedNetwork,
       }),
       // Merge persisted platformStats with BASE defaults so new fields (e.g. totalBurned)
-      // are always present even when loading a pre-burn-halving saved state.
+      // are always present even when loading an older saved state.
       merge: (persisted: any, current) => {
         const p = persisted as any ?? {};
 
         // Build per-network platform stats, merging with BASE defaults
         const rawNet = p.networkPlatformStats ?? {};
         const networkPlatformStats: Record<NetworkType, PlatformStats> = {
-          solana:  { ...BASE_PLATFORM_STATS, ...rawNet.solana  },
-          polygon: { ...BASE_PLATFORM_STATS, ...rawNet.polygon },
+          solana: { ...BASE_PLATFORM_STATS, ...rawNet.solana },
         };
 
         // Migrate: old burnBps 25% → 10%
-        // Sanitize: strip invalid halvingStartTime (must be a plausible Unix ts: 2001–2100)
-        const MIN_VALID_TS = 1_000_000_000;
-        const MAX_VALID_TS = 4_102_444_800;
-        for (const net of ['solana', 'polygon'] as NetworkType[]) {
+        for (const net of ['solana'] as NetworkType[]) {
           if (networkPlatformStats[net].burnBps === 2500) networkPlatformStats[net].burnBps = 1000;
-          const hst = networkPlatformStats[net].halvingStartTime ?? 0;
-          if (hst && (hst < MIN_VALID_TS || hst > MAX_VALID_TS)) {
-            networkPlatformStats[net].halvingStartTime = 0;
-          }
           // Note: effectiveAPY is refreshed live on every syncPlatformStats — do not reset cached values
         }
 
         // Sanitize: strip stakes with non-numeric IDs (stale data from old versions)
-        const walletStates: Record<string, any> = p.walletStates ?? {};
-
-        // Migrate pre-v6 wallet keys: plain "address" → "${network}:address"
-        for (const key of Object.keys(walletStates)) {
-          if (!key.includes(':')) {
-            const network = key.startsWith('0x') ? 'polygon' : 'solana';
-            walletStates[`${network}:${key}`] = walletStates[key];
-            delete walletStates[key];
-          }
+        // Discard any Polygon wallet state (0x-keyed or "polygon:"-prefixed) — Polygon
+        // support has been removed from this app; only Solana wallet data survives.
+        const rawWalletStates: Record<string, any> = p.walletStates ?? {};
+        const walletStates: Record<string, any> = {};
+        for (const key of Object.keys(rawWalletStates)) {
+          if (key.startsWith('polygon:') || key.startsWith('0x')) continue;
+          const normalizedKey = key.includes(':') ? key : `solana:${key}`;
+          walletStates[normalizedKey] = rawWalletStates[key];
         }
         for (const addr of Object.keys(walletStates)) {
           const wd = walletStates[addr];
@@ -370,7 +362,9 @@ export const useAppStore = create<AppState>()(
           }
         }
 
-        const selectedNetwork: NetworkType = p.selectedNetwork ?? current.selectedNetwork;
+        // Force 'solana' regardless of what an old persisted session had — Polygon
+        // is no longer a valid network selection.
+        const selectedNetwork: NetworkType = 'solana';
 
         return {
           ...current,

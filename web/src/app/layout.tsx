@@ -41,7 +41,7 @@ const structuredData = {
       '@id': `${BASE_URL}/#website`,
       url: BASE_URL,
       name: 'FBiT Staking',
-      description: 'Multi-chain FBiT token staking platform on Solana and Polygon',
+      description: 'FBiT token staking platform on Solana',
       publisher: { '@id': `${BASE_URL}/#organization` },
     },
     {
@@ -52,19 +52,19 @@ const structuredData = {
       applicationCategory: 'FinanceApplication',
       operatingSystem: 'Web Browser',
       description:
-        'Stake FBiT tokens on Solana and WFBIT on Polygon. Earn up to 247% dynamic APY with 10-level referral commissions. Non-custodial, no KYC.',
+        'Stake FBiT tokens on Solana. Earn dynamic PoS APY (up to 300%, adjusts automatically with total staked) with 10-level referral commissions. Non-custodial, no KYC.',
       offers: {
         '@type': 'Offer',
-        description: 'Stake FBiT and earn up to 247% APY',
+        description: 'Stake FBiT and earn dynamic APY up to 300%',
         price: '0',
         priceCurrency: 'USD',
       },
       featureList: [
-        'Up to 247% Dynamic PoS APY',
+        'Dynamic PoS APY (up to 300%)',
         '10-Level Referral System',
         '10% Burn Mechanism',
         'Team Target Bonuses',
-        'Multi-Chain: Solana + Polygon',
+        'Built on Solana',
         'Non-Custodial',
         'No KYC Required',
       ],
@@ -77,7 +77,7 @@ const structuredData = {
           name: 'What is FBiT token?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'FBiT is the native utility token of the FutureBit staking platform. It is a Solana SPL token (mint: CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu) used for staking to earn dynamic Proof-of-Stake rewards.',
+            text: 'FBiT is the native utility token of the FutureBit staking platform. It is a Solana SPL token used for staking to earn dynamic Proof-of-Stake rewards.',
           },
         },
         {
@@ -85,15 +85,15 @@ const structuredData = {
           name: 'How much APY can I earn staking FBiT?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'FBiT staking offers dynamic APY currently at 247.33%. The APY adjusts automatically based on total tokens staked — when fewer tokens are staked, APY increases, and vice versa.',
+            text: 'FBiT staking offers a dynamic APY of up to 300% that adjusts automatically based on total tokens staked — when fewer tokens are staked, APY increases, and vice versa, down to a 10% floor. Check the Live Stats section on the home page for the current rate.',
           },
         },
         {
           '@type': 'Question',
-          name: 'Which blockchains does FBiT Staking support?',
+          name: 'Which blockchain does FBiT Staking run on?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'FBiT Staking supports two blockchains: Solana Mainnet (stake FBiT tokens using Phantom wallet) and Polygon Mainnet (stake WFBIT tokens using MetaMask or WalletConnect).',
+            text: 'FBiT Staking runs on Solana Mainnet — stake FBiT tokens using Phantom, Solflare, or any Solana wallet.',
           },
         },
         {
@@ -109,7 +109,7 @@ const structuredData = {
           name: 'Is FBiT staking safe?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'FBiT Staking is non-custodial — your tokens never leave your wallet. The smart contracts are open-source and verifiable on Solana Explorer and Polygonscan. No KYC or personal data is required.',
+            text: 'FBiT Staking is non-custodial — your tokens never leave your wallet. The smart contracts are open-source and verifiable on Solana Explorer. No KYC or personal data is required.',
           },
         },
       ],
@@ -121,19 +121,19 @@ export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
 
   title: {
-    default: 'FBiT Staking — Earn 247% APY on Solana & Polygon',
+    default: 'FBiT Staking — Earn Dynamic APY on Solana',
     template: '%s | FBiT Staking',
   },
   description:
-    'Stake FBiT tokens on Solana and WFBIT on Polygon. Earn up to 247% dynamic Proof-of-Stake APY, build a 10-level referral network, and get Team Target Bonuses. Non-custodial, open-source, no KYC.',
+    'Stake FBiT tokens on Solana. Earn dynamic Proof-of-Stake APY up to 300%, build a 10-level referral network, and get Team Target Bonuses. Non-custodial, open-source, no KYC.',
 
   keywords: [
-    'FBiT staking', 'FutureBit token', 'Solana staking', 'Polygon staking',
-    'WFBIT', 'DeFi staking', 'crypto staking', 'high APY staking',
+    'FBiT staking', 'FutureBit token', 'Solana staking',
+    'DeFi staking', 'crypto staking', 'high APY staking',
     '10 level referral crypto', 'passive crypto income', 'FBiT token',
-    'multi-chain staking', 'non-custodial staking', 'stake and earn',
+    'non-custodial staking', 'stake and earn',
     'crypto passive income India', 'best staking platform 2026',
-    'solana defi', 'polygon defi', 'FutureBit staking',
+    'solana defi', 'FutureBit staking',
   ],
 
   authors: [{ name: 'FutureBit', url: BASE_URL }],
@@ -144,15 +144,15 @@ export const metadata: Metadata = {
     type: 'website',
     url: BASE_URL,
     siteName: 'FBiT Staking',
-    title: 'FBiT Staking — Earn 247% APY on Solana & Polygon',
+    title: 'FBiT Staking — Earn Dynamic APY on Solana',
     description:
-      'Stake FBiT on Solana or WFBIT on Polygon. Up to 247% APY, 10-level referrals, deflationary burn. Non-custodial & open-source.',
+      'Stake FBiT on Solana. Dynamic APY up to 300%, 10-level referrals, deflationary burn. Non-custodial & open-source.',
     images: [
       {
         url: `${BASE_URL}/opengraph-image`,
         width: 1200,
         height: 630,
-        alt: 'FBiT Staking — Multi-Chain DeFi Platform',
+        alt: 'FBiT Staking — Solana DeFi Platform',
       },
     ],
     locale: 'en_US',
@@ -162,9 +162,9 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     site: '@FutureBiT_Token',
     creator: '@FutureBiT_Token',
-    title: 'FBiT Staking — Earn 247% APY on Solana & Polygon',
+    title: 'FBiT Staking — Earn Dynamic APY on Solana',
     description:
-      'Stake FBiT on Solana or WFBIT on Polygon. Up to 247% APY, 10-level referrals, deflationary burn.',
+      'Stake FBiT on Solana. Dynamic APY up to 300%, 10-level referrals, deflationary burn.',
     images: [`${BASE_URL}/opengraph-image`],
   },
 

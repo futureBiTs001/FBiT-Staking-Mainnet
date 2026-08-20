@@ -13,6 +13,12 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://stake.futurebit.in/guide</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://stake.futurebit.in/terms</loc>
     <lastmod>2026-07-06</lastmod>
     <changefreq>monthly</changefreq>

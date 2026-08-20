@@ -12,10 +12,9 @@ import ContractSetupNotice from '@/components/ui/ContractSetupNotice';
 import UsdValue from '@/components/ui/UsdValue';
 import { useTokenPrice } from '@/hooks/useTokenPrice';
 import { solanaGetTokenBalance } from '@/lib/contracts/solana';
-import { polygonGetTokenBalance } from '@/lib/contracts/polygon';
 
 export default function StakePanel() {
-  const { address, solanaAddress, evmAddress, solanaReferrer, polygonReferrer } = useWallet();
+  const { address, solanaAddress, solanaReferrer } = useWallet();
   const { selectedNetwork, getWalletData, addStake, addTransaction, loadOnChainData } = useAppStore();
   const contract = useContract();
   const { pairs: pricePairs } = useTokenPrice();
@@ -30,18 +29,12 @@ export default function StakePanel() {
   const fetchTokenBalance = useCallback(async () => {
     if (!address) return;
     try {
-      let bal = 0;
-      if (selectedNetwork === 'solana') {
-        const addr = solanaAddress ?? (address.startsWith('0x') ? null : address);
-        if (addr) bal = await solanaGetTokenBalance(addr);
-      } else {
-        const addr = evmAddress ?? (address.startsWith('0x') ? address : null);
-        if (addr) bal = await polygonGetTokenBalance(addr);
-      }
+      const addr = solanaAddress ?? address;
+      const bal  = addr ? await solanaGetTokenBalance(addr) : 0;
       setTokenBalance(bal);
       loadOnChainData(address, { tokenBalance: bal });
     } catch {}
-  }, [address, solanaAddress, evmAddress, selectedNetwork, loadOnChainData]);
+  }, [address, solanaAddress, loadOnChainData]);
 
   useEffect(() => {
     if (!address) { setTokenBalance(0); return; }
@@ -73,7 +66,7 @@ export default function StakePanel() {
   const existingStakes = walletData?.stakes ?? [];
   const stakeAmount = parseFloat(amount) || 0;
 
-  // Use contract-fetched limits when available (Polygon), fall back to security.ts constants
+  // Use contract-fetched limits when available, fall back to security.ts constants
   const platformStats = useAppStore(s => s.platformStats);
   const effectiveMin  = platformStats.minStakeAmount  ?? MIN_STAKE_AMOUNT;
   const effectiveMax  = platformStats.maxStakePerUser ?? MAX_STAKE_AMOUNT;
@@ -111,18 +104,15 @@ export default function StakePanel() {
       let stakedAt = Math.floor(Date.now() / 1000);
 
       if (!contract.isLive) throw new Error('Contract not configured. Set up your deployment addresses to execute on-chain transactions.');
-      const rawReferrer = selectedNetwork === 'solana' ? solanaReferrer : polygonReferrer;
-      // Validate referrer matches the current chain format before sending
+      const rawReferrer = solanaReferrer;
+      // Validate referrer matches the base58 Solana format before sending
       const isSolRef = rawReferrer && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(rawReferrer);
-      const isEvmRef = rawReferrer && /^0x[0-9a-fA-F]{40}$/.test(rawReferrer);
-      const referrer = (selectedNetwork === 'solana' ? isSolRef : isEvmRef) ? rawReferrer : undefined;
+      const referrer = isSolRef ? rawReferrer : undefined;
       const result = await contract.stake(stakeAmount, referrer ?? undefined);
       txHash = result.txHash;
-      // For Solana, stakeIndex is the monotonic on-chain stakeId (0, 1, 2…).
+      // stakeIndex is the monotonic on-chain stakeId (0, 1, 2…).
       // stakedAt is kept as local Unix timestamp for display only.
-      const stakeEntryId = selectedNetwork === 'solana'
-        ? (result.stakeIndex ?? existingStakes.length)
-        : existingStakes.length;
+      const stakeEntryId = result.stakeIndex ?? existingStakes.length;
       contract.syncPlatformStats().catch(() => {});
 
       const newStake: StakeEntry = {
@@ -178,7 +168,7 @@ export default function StakePanel() {
       void fetchTokenBalance();
 
       toast.success(`✓ Successfully staked ${formatNumber(stakeAmount)} FBiT!`, { id: toastId });
-      const activeReferrer = selectedNetwork === 'solana' ? solanaReferrer : polygonReferrer;
+      const activeReferrer = solanaReferrer;
       if (activeReferrer) {
         setTimeout(() => {
           toast(`Referral credited to ${activeReferrer.slice(0, 6)}…${activeReferrer.slice(-4)}`, {
@@ -226,8 +216,8 @@ export default function StakePanel() {
       <ContractSetupNotice />
 
       {/* Referral Banner */}
-      {(selectedNetwork === 'solana' ? solanaReferrer : polygonReferrer) && (() => {
-        const ref = selectedNetwork === 'solana' ? solanaReferrer! : polygonReferrer!;
+      {solanaReferrer && (() => {
+        const ref = solanaReferrer;
         return (
           <div className="glass-card bg-linear-to-r from-accent-purple/10 to-brand-500/10 border border-accent-purple/20">
             <div className="flex items-center gap-3">
@@ -354,7 +344,7 @@ export default function StakePanel() {
             {[
               ['Lock Period', `${lockDays} Days`],
               ['APY', `${effectiveAPY}% (PoS, 10%–300%)`],
-              ['Network', selectedNetwork === 'solana' ? 'Solana' : 'Polygon'],
+              ['Network', 'Solana'],
               ['Unlock Date', new Date(Date.now() + lockDays * 86400000).toLocaleDateString()],
             ].map(([k, v]) => (
               <div key={k} className="flex items-center justify-between text-xs">

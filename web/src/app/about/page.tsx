@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'About Us',
-  description: 'Learn about FutureBit and the FBiT multi-chain staking platform built on Solana and Polygon.',
+  description: 'Learn about FutureBit and the FBiT staking platform built on Solana.',
 };
 
 export default function AboutPage() {
@@ -21,7 +21,7 @@ export default function AboutPage() {
             }}>F</div>
             <span style={{ fontWeight: 700, fontSize: 18, color: '#f1f5f9' }}>FBiT Staking</span>
           </Link>
-          <Link href="/" style={{
+          <Link href="/app" style={{
             padding: '8px 20px', borderRadius: 8,
             background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)',
             color: '#00E676', textDecoration: 'none', fontSize: 14, fontWeight: 500,
@@ -37,27 +37,26 @@ export default function AboutPage() {
           About FutureBit
         </h1>
         <p style={{ color: '#00E676', fontSize: 15, marginBottom: 48, fontWeight: 500 }}>
-          Multi-Chain DeFi Staking Platform
+          Solana DeFi Staking Platform
         </p>
 
         <Section title="Who We Are">
           FutureBit is a decentralized finance project built to bring transparent, high-yield staking to everyday crypto users.
-          We launched the FBiT token on Solana — a fast, low-fee blockchain — and expanded to Polygon (as WFBIT) so users across multiple ecosystems can participate.
+          We launched the FBiT token on Solana — a fast, low-fee blockchain.
           Our mission is to make passive crypto income accessible without KYC, without custodians, and without complexity.
         </Section>
 
         <Section title="What We Do">
-          FBiT Staking is a non-custodial staking platform where users lock FBiT (on Solana) or WFBIT (on Polygon) to earn dynamic
-          Proof-of-Stake rewards. The smart contracts run fully on-chain — we never hold your tokens. Every stake, unstake, and reward
+          FBiT Staking is a non-custodial staking platform where users lock FBiT on Solana to earn dynamic
+          Proof-of-Stake rewards. The smart contract runs fully on-chain — we never hold your tokens. Every stake, unstake, and reward
           claim is a verifiable blockchain transaction.
         </Section>
 
         <Section title="Our Technology">
           <ul style={{ paddingLeft: 20, lineHeight: 2, color: 'var(--text-secondary)' }}>
             <li><b style={{ color: '#f1f5f9' }}>Solana Smart Contract</b> — written in Rust using the Anchor framework. Deployed on Solana Mainnet.</li>
-            <li><b style={{ color: '#f1f5f9' }}>Polygon Smart Contract</b> — EVM-compatible Solidity contract deployed on Polygon Mainnet.</li>
             <li><b style={{ color: '#f1f5f9' }}>10-Level Referral System</b> — on-chain referral commissions auto-distributed to up to 10 levels of referrers.</li>
-            <li><b style={{ color: '#f1f5f9' }}>Dynamic APY</b> — reward rate adjusts automatically based on total tokens staked (currently up to 247%).</li>
+            <li><b style={{ color: '#f1f5f9' }}>Dynamic APY</b> — reward rate adjusts automatically based on total tokens staked (up to 300%).</li>
             <li><b style={{ color: '#f1f5f9' }}>10% Burn Mechanism</b> — a portion of fees is burned to reduce supply and increase token value over time.</li>
           </ul>
         </Section>
@@ -66,8 +65,8 @@ export default function AboutPage() {
           <ul style={{ paddingLeft: 20, lineHeight: 2, color: 'var(--text-secondary)' }}>
             <li><b style={{ color: '#f1f5f9' }}>Name:</b> Future Bit Token</li>
             <li><b style={{ color: '#f1f5f9' }}>Symbol:</b> FBiT</li>
-            <li><b style={{ color: '#f1f5f9' }}>Network:</b> Solana (SPL Token) + Polygon (WFBIT ERC-20)</li>
-            <li><b style={{ color: '#f1f5f9' }}>Solana Mint:</b> CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu</li>
+            <li><b style={{ color: '#f1f5f9' }}>Network:</b> Solana (SPL Token)</li>
+            <li><b style={{ color: '#f1f5f9' }}>Solana Mint:</b> 5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME</li>
             <li><b style={{ color: '#f1f5f9' }}>Use Case:</b> Staking, referral rewards, team target bonuses</li>
           </ul>
         </Section>
@@ -91,7 +90,7 @@ export default function AboutPage() {
         <div style={{ marginTop: 64, paddingTop: 32, borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: 24, flexWrap: 'wrap' }}>
           <Link href="/terms" style={{ color: '#64748b', textDecoration: 'none', fontSize: 14 }}>Terms & Conditions</Link>
           <Link href="/privacy" style={{ color: '#64748b', textDecoration: 'none', fontSize: 14 }}>Privacy Policy</Link>
-          <Link href="/" style={{ color: '#64748b', textDecoration: 'none', fontSize: 14 }}>Launch App</Link>
+          <Link href="/app" style={{ color: '#64748b', textDecoration: 'none', fontSize: 14 }}>Launch App</Link>
         </div>
       </main>
     </div>

@@ -29,17 +29,17 @@ export interface TokenPriceData {
 
 // ── GeckoTerminal network IDs ─────────────────────────────────────────────────
 const GECKO_NETWORK: Record<string, string> = {
-  solana:  'solana',
-  polygon: 'polygon_pos',
+  solana: 'solana',
 };
 
 // ── Hardcoded FBiT pool addresses on Solana (always fetched first) ────────────
-// AroG3irz... (FBiT/SOL, Pumpswap) is the confirmed-correct live pool — pinned
-// to the front in parseGeckoPools() below regardless of liquidity ranking.
+// 5ZA1NsMv... is the live pool for the current FBiT mint — pinned to the front
+// in parseGeckoPools() below regardless of liquidity ranking.
 const FBIT_SOLANA_POOLS = [
-  'AroG3irzC96vcSbYxUHMsW9mSPimDSE5JhC1LzpMjApP',
+  '5ZA1NsMv9hviXTUPhxqXbbFqoMwYeaNvSegJiRQv9E2F',
 ];
-const PINNED_FBIT_POOL = FBIT_SOLANA_POOLS[0];
+/** Exported so other callers (e.g. the landing page stats row) price the same pool. */
+export const PINNED_FBIT_POOL = FBIT_SOLANA_POOLS[0];
 
 // ── GeckoTerminal multi-pool fetch ────────────────────────────────────────────
 async function fetchGeckoMultiPools(network: string, poolAddresses: string[]): Promise<DexPair[]> {

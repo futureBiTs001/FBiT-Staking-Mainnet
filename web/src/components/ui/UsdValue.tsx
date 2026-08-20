@@ -3,9 +3,9 @@
 import React from 'react';
 
 interface Props {
-  /** FBiT/WFBIT amount to convert. */
+  /** FBiT amount to convert. */
   amount: number;
-  /** Current FBiT/WFBIT price in USD (from useTokenPrice's best pair), or null/undefined while loading. */
+  /** Current FBiT price in USD (from useTokenPrice's best pair), or null/undefined while loading. */
   priceUsd: number | null | undefined;
   className?: string;
 }

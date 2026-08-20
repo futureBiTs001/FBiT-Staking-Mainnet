@@ -3,36 +3,34 @@
  * Sets base_apy[0] (fallback APY) to 1000 BPS (10%) on-chain.
  * Used when no one has staked yet (PoS formula needs total_staked > 0).
  *
- * Usage (from web/ folder):
- *   node set-fallback-apy.js <phantom-base58-private-key>
+ * Usage (from web/ folder) — pass a keypair JSON file path, not a raw private key:
+ *   node set-fallback-apy.js admin-keypair.json
  */
 
 const { Connection, PublicKey, Keypair } = require('@solana/web3.js');
 const { BN }   = require('@coral-xyz/anchor');
-const bs58     = require('bs58');
 const fs       = require('fs');
 
 const PROGRAM_ID_STR = '8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp';
-const RPC_URL        = 'https://mainnet.helius-rpc.com/?api-key=2fca8858-977e-4caa-8eb8-c5f042a91002';
+const RPC_URL        = process.env.SOLANA_RPC_URL ?? (() => { throw new Error('SOLANA_RPC_URL env var is required'); })();
 const NEW_APY_BPS    = 1000; // 10%
 
 const PROGRAM_ID = new PublicKey(PROGRAM_ID_STR);
 
 // ── Load keypair ─────────────────────────────────────────────────────────────
+// File-path only — a raw private key must never be passed as a CLI argument
+// (it lands in shell history and is visible to other processes via ps/Task Manager).
 const arg = process.argv[2];
 if (!arg) {
-  console.error('Usage: node set-fallback-apy.js <base58-private-key>');
+  console.error('Usage: node set-fallback-apy.js <path-to-keypair.json>');
   process.exit(1);
 }
 
 let keypair;
 try {
-  if (arg.endsWith('.json')) {
-    const raw = JSON.parse(fs.readFileSync(arg, 'utf8'));
-    keypair = Keypair.fromSecretKey(Uint8Array.from(raw));
-  } else {
-    keypair = Keypair.fromSecretKey(bs58.decode(arg));
-  }
+  if (!fs.existsSync(arg)) throw new Error(`Keypair file not found: ${arg}`);
+  const raw = JSON.parse(fs.readFileSync(arg, 'utf8'));
+  keypair = Keypair.fromSecretKey(Uint8Array.from(raw));
 } catch (e) {
   console.error('Keypair load failed:', e.message);
   process.exit(1);

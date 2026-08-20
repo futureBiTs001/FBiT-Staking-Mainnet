@@ -51,7 +51,6 @@ const IX_DISCRIMINATORS: Record<string, number[]> = {
   setReferralPercentages:     [230,  34, 112, 247,  80, 147, 223,  93],
   setBatchApy:                [109,  76,  87, 205, 176, 242, 123,  34],
   renounceOwnership:     [ 19, 143,  91,  79,  34, 168, 174, 125],
-  triggerHalving:        [  2, 170, 148,  87, 175, 253, 173,  80],
   updateUserTeamStats:   [137, 242, 244, 142, 224,  98, 192, 229],
   setLockPeriodApy:      [129,  70, 210,  21,  87, 145, 193, 150],
   fixBump:               [ 55, 162,  45, 211, 135, 185,  66, 103],
@@ -145,7 +144,7 @@ function getProgramId(): PublicKey {
   if (!addr) throw new Error('Solana program ID not configured. Set NEXT_PUBLIC_SOLANA_PROGRAM_ID in your .env.local');
   return new PublicKey(addr);
 }
-const DECIMALS   = 6;
+const DECIMALS   = 9;
 const SCALE      = 10 ** DECIMALS;
 
 // Referral commission percentages in BPS — mirrors the contract's REFERRAL_PERCENTAGES.
@@ -424,23 +423,22 @@ export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> 
         effectiveAPY = Math.min(30_000, Math.max(1_000, raw));
       }
     }
-    const halvingEpoch     = platform.halvingEpoch     ? Number(platform.halvingEpoch)     : 0;
-    const halvingStartTime = platform.halvingStartTime ? Number(platform.halvingStartTime) : 0;
-
     const annualEmission        = platform.annualEmission        ? fromLamports(platform.annualEmission)        : 0;
     const burnBps               = platform.burnBps               ? Number(platform.burnBps)                     : 0;
     const totalReserve          = platform.totalReserve          ? fromLamports(platform.totalReserve)          : 0;
     const totalEmissionReleased = platform.totalEmissionReleased ? fromLamports(platform.totalEmissionReleased) : 0;
     const emissionStartTime     = platform.emissionStartTime     ? Number(platform.emissionStartTime)           : 0;
+    const lastReleaseTime       = platform.lastReleaseTime ? Number(platform.lastReleaseTime) : emissionStartTime;
 
-    // Calculate releasable emission: proportional to elapsed time since emission start
+    // Calculate releasable emission: proportional to elapsed time since the LAST
+    // release, not since emission_start_time — stays correct even if annual_emission
+    // changes mid-flight (see release_emission's doc comment in lib.rs).
     let releasableEmission = 0;
     if (annualEmission > 0 && emissionStartTime > 0 && totalReserve > 0) {
-      const now          = Math.floor(Date.now() / 1000);
-      const elapsed      = Math.max(0, now - emissionStartTime);
-      const secondsYear  = 365 * 24 * 3600;
-      const released     = annualEmission * (elapsed / secondsYear);
-      releasableEmission = Math.max(0, Math.min(totalReserve, released - totalEmissionReleased));
+      const now         = Math.floor(Date.now() / 1000);
+      const elapsed     = Math.max(0, now - lastReleaseTime);
+      const secondsYear = 365 * 24 * 3600;
+      releasableEmission = Math.max(0, Math.min(totalReserve, annualEmission * (elapsed / secondsYear)));
     }
 
     // Build on-chain team tier config — merges static labels/colors with live minStaked/bonusBps
@@ -474,8 +472,6 @@ export async function solanaFetchPlatformStats(): Promise<PlatformStats | null> 
       emissionStartTime,
       totalEmissionReleased,
       releasableEmission,
-      halvingEpoch,
-      halvingStartTime,
       teamTiers,
       referralPercentages: Array.isArray((platform as any).referralPercentages)
         ? (platform as any).referralPercentages.map((v: any) => Number(v.toString()))
@@ -682,14 +678,17 @@ async function buildReleaseIxIfReady(program: any, platformData?: any): Promise<
   try {
     const [platPda] = platformPda();
     const platform: any = platformData ?? await (program.account as any).platform.fetch(platPda);
-    const annual    = platform.annualEmission  ? Number(new BN(platform.annualEmission.toString()))  : 0;
-    const reserve   = platform.totalReserve    ? Number(new BN(platform.totalReserve.toString()))    : 0;
-    const released  = platform.totalEmissionReleased ? Number(new BN(platform.totalEmissionReleased.toString())) : 0;
-    const start     = platform.emissionStartTime ? Number(platform.emissionStartTime) : 0;
+    const annual   = platform.annualEmission  ? Number(new BN(platform.annualEmission.toString()))  : 0;
+    const reserve  = platform.totalReserve    ? Number(new BN(platform.totalReserve.toString()))    : 0;
+    const start    = platform.emissionStartTime ? Number(platform.emissionStartTime) : 0;
+    // Incremental clock — mirrors the on-chain formula (rate-change-safe: only applies the
+    // current rate to time elapsed since the last release, never retroactively to the
+    // full reserve-funded history). lastReleaseTime falls back to emissionStartTime for
+    // any account fetched before this field existed.
+    const lastRelease = platform.lastReleaseTime ? Number(platform.lastReleaseTime) : start;
     if (annual === 0 || reserve === 0 || start === 0) return null;
-    const elapsed    = Math.max(0, Math.floor(Date.now() / 1000) - start);
-    const accrued    = annual * (elapsed / (365 * 24 * 3600));
-    const releasable = Math.max(0, Math.min(reserve, accrued - released));
+    const elapsed     = Math.max(0, Math.floor(Date.now() / 1000) - lastRelease);
+    const releasable  = Math.max(0, Math.min(reserve, annual * (elapsed / (365 * 24 * 3600))));
     if (releasable < SCALE) return null;
     return await (program.methods as any)
       .releaseEmission()
@@ -917,8 +916,8 @@ export async function solanaUnstake(stakeId: number): Promise<{ txHash: string }
 // ── Admin ──────────────────────────────────────────────────────────────────────
 
 export async function solanaFundRewardPool(amount: number): Promise<{ txHash: string }> {
-  if (amount < 1)           throw new Error('Minimum deposit is 1 FBiT');
-  if (amount > 800_000_000) throw new Error('Maximum deposit is 800,000,000 FBiT (800M)');
+  if (amount < 0.1)         throw new Error('Minimum deposit is 0.1 FBiT');
+  if (amount > 250_000_000) throw new Error('Maximum deposit is 250,000,000 FBiT (250M)');
   const program  = getProgram();
   const owner    = getOwner();
   const [platPda] = platformPda();
@@ -1010,7 +1009,7 @@ export async function solanaFixBump(): Promise<{ txHash: string }> {
 }
 
 export async function solanaDepositReserve(amount: number): Promise<{ txHash: string }> {
-  if (amount < 1) throw new Error('Minimum deposit is 1 FBiT');
+  if (amount < 0.1) throw new Error('Minimum deposit is 0.1 FBiT');
 
   const wallet     = getSolanaWallet();
   const authority  = getOwner();
@@ -1102,7 +1101,7 @@ export async function solanaReleaseEmission(): Promise<{ txHash: string }> {
   const [platPda] = platformPda();
 
   // Pre-check: verify that emission is actually available before spending SOL on tx fees.
-  // Mirrors the on-chain releasable = min(reserve, accrued - released) calculation.
+  // Mirrors the on-chain releasable = min(reserve, annual × elapsed-since-last-release) calculation.
   try {
     const platform: any = await (program.account as any).platform.fetch(platPda);
     const annualEmission = platform.annualEmission ? new BN(platform.annualEmission.toString()).toNumber() : 0;
@@ -1110,11 +1109,10 @@ export async function solanaReleaseEmission(): Promise<{ txHash: string }> {
     if (annualEmission === 0) throw new Error('Annual emission is not configured yet. Set annual emission first.');
     if (totalReserve   === 0) throw new Error('Reserve vault is empty. Deposit tokens first.');
     const emissionStart    = platform.emissionStartTime ? Number(platform.emissionStartTime) : 0;
-    const totalReleased    = platform.totalEmissionReleased ? new BN(platform.totalEmissionReleased.toString()).toNumber() : 0;
+    const lastRelease      = platform.lastReleaseTime ? Number(platform.lastReleaseTime) : emissionStart;
     if (emissionStart > 0) {
-      const elapsed    = Math.max(0, Math.floor(Date.now() / 1000) - emissionStart);
-      const accrued    = annualEmission * (elapsed / (365 * 24 * 3600));
-      const releasable = Math.max(0, Math.min(totalReserve, accrued - totalReleased));
+      const elapsed    = Math.max(0, Math.floor(Date.now() / 1000) - lastRelease);
+      const releasable = Math.max(0, Math.min(totalReserve, annualEmission * (elapsed / (365 * 24 * 3600))));
       if (releasable < SCALE) throw new Error('No emission available to release yet — wait for more time to accrue.');
     }
   } catch (err: any) {
@@ -1772,21 +1770,6 @@ export async function solanaGetFullReferralTree(ownerAddress: string): Promise<i
 }
 
 /**
- * Permissionless: trigger the annual base-APY halving.
- * Can only succeed once every 365 days; contract enforces the time lock.
- */
-export async function solanaTriggerHalving(): Promise<{ txHash: string }> {
-  const program   = getProgram();
-  const owner     = getOwner();
-  const [platPda] = platformPda();
-  const tx = await (program.methods as any)
-    .triggerHalving()
-    .accounts({ platform: platPda, caller: owner })
-    .rpc();
-  return { txHash: tx };
-}
-
-/**
  * Admin / crank: update a user's team_size and team_total_staked on-chain.
  * Called after indexing stake/unstake events.
  */
@@ -2026,6 +2009,19 @@ export async function solanaGetReferralOnChainHistory(
 const JUPITER_QUOTE_API = 'https://lite-api.jup.ag/swap/v1/quote';
 const JUPITER_SWAP_API  = 'https://lite-api.jup.ag/swap/v1/swap';
 
+// ── Platform fee (Jupiter Referral Program — referral.jup.ag) ─────────────────
+// Earns 1% of every swap. Referral Account: 4NNtPCmZyHyWhBfizg5qsTmkwDjjFD7NSJNb741WCdoj
+// Fee accounts are PDAs derived per-mint from that referral account (seeds:
+// ["referral_ata", referralAccount, mint] under REFER4ZgmyYx9c6He5XfaTMiGfdLwRnkV4RPp9t9iF3) —
+// each must be created once via contracts/solana/scripts/init-jupiter-fee-account.ts before
+// it can receive fees for a given mint. If the FBiT mint changes again in the future, a new
+// entry must be derived + initialized here.
+const JUPITER_PLATFORM_FEE_BPS = 100; // 1%
+const JUPITER_FEE_ACCOUNTS: Record<string, string> = {
+  '5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME': '13hrwob6eBoMfdvQbTEJpAqqm3kKtLuhuZqc9EtM1KcE', // FBiT
+  'So11111111111111111111111111111111111111112': '4aaKboEE2EsD46BR8wBhCuoLpnBiW2WcJNsUM3mx6bbB', // SOL
+};
+
 export interface JupiterQuote {
   inputMint:      string;
   outputMint:     string;
@@ -2047,14 +2043,17 @@ export async function jupiterGetQuote(
     inputMint, outputMint, amount: amountRaw,
     slippageBps: String(slippageBps),
   });
+  // Only request a platform fee when we have a matching fee account for the output mint —
+  // Jupiter requires the /swap call to supply a feeAccount whenever the quote had one.
+  if (JUPITER_FEE_ACCOUNTS[outputMint]) {
+    params.set('platformFeeBps', String(JUPITER_PLATFORM_FEE_BPS));
+  }
   const res = await fetch(`${JUPITER_QUOTE_API}?${params.toString()}`);
   const data = await res.json().catch(() => null);
   if (!res.ok || !data || data.error) {
     if (data?.errorCode === 'TOKEN_NOT_TRADABLE') {
       throw new Error(
-        'FBiT is not yet sellable via Jupiter — this is not a trust issue (FBiT\'s pool ' +
-        'liquidity is burned/locked, so it can never be rugged), the pool is just still small ' +
-        'in size. Buying FBiT with SOL still works; selling will unlock as pool liquidity grows.'
+        'This swap route is not available on Jupiter right now — please try again in a moment.'
       );
     }
     throw new Error(data?.error ?? 'No swap route found for this pair/amount.');
@@ -2075,6 +2074,8 @@ export async function jupiterExecuteSwap(quote: JupiterQuote): Promise<{ txHash:
   const wallet     = getSolanaWallet();
   const connection = getRpcConnection();
 
+  const feeAccount = JUPITER_FEE_ACCOUNTS[quote.outputMint];
+
   const swapRes = await fetch(JUPITER_SWAP_API, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2084,6 +2085,7 @@ export async function jupiterExecuteSwap(quote: JupiterQuote): Promise<{ txHash:
       wrapAndUnwrapSol:           true,
       dynamicComputeUnitLimit:    true,
       prioritizationFeeLamports:  'auto',
+      ...(feeAccount ? { feeAccount } : {}),
     }),
   });
   const swapData = await swapRes.json().catch(() => null);

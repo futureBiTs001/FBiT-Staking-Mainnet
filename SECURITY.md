@@ -21,7 +21,7 @@ Please include the following in your report:
 
 - Description of the vulnerability
 - Steps to reproduce the issue
-- Affected component (Solana contract, Polygon contract, or frontend)
+- Affected component (Solana contract or frontend)
 - Potential impact
 - Suggested fix (if any)
 
@@ -38,7 +38,6 @@ Please include the following in your report:
 ### In Scope
 
 - Solana Anchor program (`contracts/solana/`)
-- Polygon Solidity contract (`contracts/polygon/`)
 - Frontend wallet connection logic (`web/src/lib/reown.ts`, `web/src/context/WalletContext.tsx`)
 - Smart contract interactions (`web/src/lib/contracts/`)
 - Admin panel security (`web/src/components/admin/`)
@@ -53,12 +52,12 @@ Please include the following in your report:
 
 ## Smart Contract Security
 
-Both smart contracts implement the following protections:
+The Solana program implements the following protections:
 
-- **Reentrancy Guard** — prevents reentrancy attacks
-- **Access Control** — `onlyOwner` / `onlyAuthority` on all admin functions
+- **PDA-based account validation** — strict owner/seed/signer checks on every instruction
+- **Access Control** — authority checks on all admin instructions
 - **Emergency Pause** — instantly halts all operations if needed
-- **SafeERC20** — safe token transfers (Polygon)
+- **Checked Arithmetic** — overflow/underflow protection throughout
 - **Lock Period Enforcement** — prevents early unstaking
 - **Input Validation** — amount bounds checked on-chain
 
@@ -66,9 +65,9 @@ Both smart contracts implement the following protections:
 
 ## Known Limitations
 
-These are disclosed transparently rather than silently patched, since both live on a deployed mainnet contract holding real user funds — fixing them requires a new contract version and a migration plan, not a routine patch.
+These are disclosed transparently rather than silently patched, since the contract lives on a deployed mainnet contract holding real user funds — fixing this requires a new contract version and a migration plan, not a routine patch.
 
-- **Per-user stake cap is enforced per-call, not cumulatively** (both Solana and Polygon contracts): `stake()` checks the incoming amount against the 500M-FBiT ceiling, but never against the user's running `total_staked`. A user can exceed the intended per-user ceiling by splitting a large position across multiple `stake()` calls. This does not put other users' funds at risk — it only affects the platform's own risk-concentration assumptions.
+- **Per-user stake cap is enforced per-call, not cumulatively**: `stake()` checks the incoming amount against the 250M-FBiT ceiling, but never against the user's running `total_staked`. A user can exceed the intended per-user ceiling by splitting a large position across multiple `stake()` calls. This does not put other users' funds at risk — it only affects the platform's own risk-concentration assumptions.
 
 ## AI-Assisted Layers
 

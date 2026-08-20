@@ -25,7 +25,7 @@ const fs = require('fs');
 // ── Config ────────────────────────────────────────────────────────────────────
 const PROGRAM_ID  = '8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp';
 const TOKEN_MINT  = 'CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu';
-const RPC_URL     = 'https://mainnet.helius-rpc.com/?api-key=2fca8858-977e-4caa-8eb8-c5f042a91002';
+const RPC_URL     = process.env.SOLANA_RPC_URL ?? (() => { throw new Error('SOLANA_RPC_URL env var is required'); })();
 const DECIMALS    = 6;
 const SCALE       = 10 ** DECIMALS;
 
@@ -102,6 +102,9 @@ function loadKeypair(filePath) {
 }
 
 // ── Convert mode: Phantom base58 private key → keypair JSON ──────────────────
+// Reads the key from STDIN (piped or pasted at the prompt), never as a CLI argument —
+// a raw private key on the command line lands in shell history and is visible to
+// other processes on the machine via ps/Task Manager for the duration of the run.
 function convertAndSave(base58Key) {
   let decoded;
   try {
@@ -121,22 +124,29 @@ function convertAndSave(base58Key) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
-  const [,, arg1, arg2] = process.argv;
+  const [,, arg1] = process.argv;
 
-  // Convert mode
+  // Convert mode — key comes from stdin, not argv
   if (arg1 === '--convert') {
-    if (!arg2) {
-      console.error('Usage: node init-platform.js --convert <phantom-base58-private-key>');
+    let base58Key;
+    try {
+      base58Key = fs.readFileSync(0, 'utf-8').trim(); // fd 0 = stdin
+    } catch {
+      base58Key = '';
+    }
+    if (!base58Key) {
+      console.error('Usage: echo "<phantom-base58-private-key>" | node init-platform.js --convert');
+      console.error('(or run with no pipe and paste the key, then press Ctrl+D)');
       process.exit(1);
     }
-    convertAndSave(arg2);
+    convertAndSave(base58Key);
     return;
   }
 
   if (!arg1) {
     console.log('Usage:');
     console.log('  node init-platform.js <keypair.json> [reserve_amount]');
-    console.log('  node init-platform.js --convert <phantom-base58-private-key>');
+    console.log('  echo "<phantom-base58-private-key>" | node init-platform.js --convert');
     process.exit(0);
   }
 

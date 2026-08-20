@@ -19,7 +19,7 @@ import TokenPriceWidget from '@/components/market/TokenPriceWidget';
 
 const SOL_MINT     = 'So11111111111111111111111111111111111111112';
 const SOL_DECIMALS = 9;
-const FBIT_DECIMALS = 6;
+const FBIT_DECIMALS = 9;
 const SLIPPAGE_OPTIONS = [50, 100, 300]; // bps: 0.5% / 1% / 3%
 const QUOTE_DEBOUNCE_MS = 500;
 

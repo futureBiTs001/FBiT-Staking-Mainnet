@@ -43,7 +43,7 @@ const LEVEL_COLORS: Record<number, string> = {
 };
 
 export default function ReferralPanel() {
-  const { address, solanaAddress, evmAddress } = useWallet();
+  const { address, solanaAddress } = useWallet();
   const { getWalletData, selectedNetwork } = useAppStore();
   const contract = useContract();
   const { pairs: pricePairs } = useTokenPrice();
@@ -102,27 +102,18 @@ export default function ReferralPanel() {
   // ── On-chain full refresh ────────────────────────────────────────────────────
   const handleRefreshFromChain = useCallback(async () => {
     if (!address) return;
-    const solAddr = solanaAddress ?? (!address.startsWith('0x') ? address : null);
-    const polyAddr = evmAddress ?? (address.startsWith('0x') ? address : null);
+    const solAddr = solanaAddress ?? address;
 
     setIsFetchingChain(true);
     try {
       let anySucceeded = false;
-      if (selectedNetwork === 'solana' && solAddr) {
+      if (solAddr) {
         const [histRes, treeRes] = await Promise.allSettled([
           import('@/lib/contracts/solana').then(m => m.solanaGetReferralOnChainHistory(solAddr)),
           import('@/lib/contracts/solana').then(m => m.solanaGetFullReferralTree(solAddr)),
         ]);
         if (histRes.status === 'fulfilled') { setOnChainRefHistory(histRes.value); anySucceeded = true; }
         if (treeRes.status === 'fulfilled') { setFullReferralTree(treeRes.value);  anySucceeded = true; }
-      } else if (selectedNetwork === 'polygon' && polyAddr) {
-        // Polygon: on-chain history from HistoryPanel function (re-use same approach)
-        const histRes = await import('@/lib/contracts/polygon')
-          .then(m => m.polygonGetOnChainHistory(polyAddr))
-          .then(all => all.filter((t: TxRecord) => t.type === 'referral'))
-          .catch(() => [] as TxRecord[]);
-        setOnChainRefHistory(histRes);
-        anySucceeded = true;
       }
       if (anySucceeded) {
         setHasFetchedChain(true);
@@ -135,7 +126,7 @@ export default function ReferralPanel() {
     } finally {
       setIsFetchingChain(false);
     }
-  }, [address, solanaAddress, evmAddress, selectedNetwork]);
+  }, [address, solanaAddress]);
 
   // Referral tree: auto-poll now returns all L1–L10 levels via BFS.
   // fullReferralTree (manual "Refresh from Chain") overrides only when fetched and non-empty.
@@ -164,9 +155,7 @@ export default function ReferralPanel() {
     return merged.sort((a, b) => b.timestamp - a.timestamp);
   }, [onChainRefHistory, localRefTxs]);
 
-  const chainAddress = selectedNetwork === 'solana'
-    ? (solanaAddress ?? (address && !address.startsWith('0x') ? address : null))
-    : (evmAddress   ?? (address && address.startsWith('0x')   ? address : null));
+  const chainAddress = solanaAddress ?? address;
   const referralLink    = chainAddress ? generateReferralLink(chainAddress) : '';
   const myReferrer      = userAccount?.referrer ?? null;
   const totalReferrals  = referralInfo?.totalReferrals ?? 0;    // L1 direct count

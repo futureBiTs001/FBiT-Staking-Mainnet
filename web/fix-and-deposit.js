@@ -13,8 +13,8 @@
  * Example (800 million FBiT deposit):
  *   node fix-and-deposit.js admin-keypair.json 800000000
  *
- * Keypair file banana:
- *   node init-platform.js --convert <phantom-base58-private-key>
+ * Keypair file banana (key stdin se, CLI argument se nahi — shell history me nahi rahega):
+ *   echo "<phantom-base58-private-key>" | node init-platform.js --convert
  */
 
 const {
@@ -30,7 +30,7 @@ const fs   = require('fs');
 const PROGRAM_ID     = new PublicKey('8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp');
 const TOKEN_MINT     = new PublicKey('CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu');
 const RESERVE_VAULT  = new PublicKey('851yeewTXCDVRW1CGNCQk9KJCavTj1mZMfTEJcjACAzH');
-const RPC_URL        = 'https://mainnet.helius-rpc.com/?api-key=2fca8858-977e-4caa-8eb8-c5f042a91002';
+const RPC_URL        = process.env.SOLANA_RPC_URL ?? (() => { throw new Error('SOLANA_RPC_URL env var is required'); })();
 const DECIMALS       = 6;
 const SCALE          = 10 ** DECIMALS;
 const BUMP_OFFSET    = 378; // platform.bump field offset in Platform account data

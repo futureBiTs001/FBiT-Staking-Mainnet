@@ -1,31 +1,25 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { useWallet } from '@/context/WalletContext';
 import { useAppStore } from '@/lib/store';
 import { shortenAddress } from '@/lib/utils';
 import { sanitizeErrorMessage } from '@/lib/security';
-import { polygonIsRegistered } from '@/lib/contracts/polygon';
 
 function isValidSolanaAddress(addr: string): boolean {
   return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr);
 }
 
-function isValidEVMAddress(addr: string): boolean {
-  return /^0x[0-9a-fA-F]{40}$/.test(addr);
-}
-
 type GateView = 'choose' | 'referral';
 
 function ReferralGateModal({
-  network,
   savedReferral,
   onConfirm,
   onDismiss,
   onSkip,
 }: {
-  network: 'solana' | 'polygon';
   savedReferral?: string;
   onConfirm: (referralAddress: string) => void;
   onDismiss: () => void;
@@ -37,14 +31,11 @@ function ReferralGateModal({
   const [error, setError] = useState('');
 
   const trimmed = input.trim();
-  const networkLabel = network === 'solana' ? 'Solana' : 'Polygon';
-  const placeholder   = network === 'solana' ? 'Solana wallet address (base58)' : 'Polygon wallet address (0x...)';
-  const validate      = (v: string) =>
-    network === 'solana' ? isValidSolanaAddress(v) : isValidEVMAddress(v);
+  const networkLabel = 'Solana';
+  const placeholder   = 'Solana wallet address (base58)';
+  const validate      = (v: string) => isValidSolanaAddress(v);
   const valid = validate(trimmed);
-  const wrongFormat = network === 'solana'
-    ? 'Enter a valid Solana address (base58 format).'
-    : 'Enter a valid Polygon address (0x... format).';
+  const wrongFormat = 'Enter a valid Solana address (base58 format).';
 
   const handleSubmit = () => {
     if (!trimmed) { setError('Referral address is required.'); return; }
@@ -191,17 +182,18 @@ function ReferralGateModal({
 }
 
 export default function Header() {
-  const { connect, adminConnect, disconnect, address, isConnecting, solanaReferrer, polygonReferrer, setSolanaReferrer, setPolygonReferrer } = useWallet();
-  const { selectedNetwork, setSelectedNetwork, activeTab, setActiveTab, isAdmin, walletAddress, walletStates } = useAppStore();
-  const currentReferrer = selectedNetwork === 'solana' ? solanaReferrer : polygonReferrer;
+  const { connect, disconnect, address, isConnecting, solanaReferrer, setSolanaReferrer } = useWallet();
+  const {
+    selectedNetwork, activeTab, setActiveTab, isAdmin, walletAddress, walletStates,
+    connectGateOpen, setConnectGateOpen,
+  } = useAppStore();
+  const currentReferrer = solanaReferrer;
   const walletKey = walletAddress ? `${selectedNetwork}:${walletAddress}` : null;
   const referralCount = walletKey
     ? (walletStates[walletKey]?.referralInfo?.totalReferrals ?? walletStates[walletKey]?.userAccount?.referralCount ?? 0)
     : 0;
   const [showWalletMenu, setShowWalletMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [showReferralGate, setShowReferralGate] = useState(false);
-  const [showAdminConfirm, setShowAdminConfirm] = useState(false);
 
   // Tracks whether the pending connect was the "already a member" (skip-referral) path
   const isDirectConnectRef = useRef(false);
@@ -210,38 +202,33 @@ export default function Header() {
   useEffect(() => {
     if (!address) return;
     setShowWalletMenu(false);
-    setShowAdminConfirm(false);
 
     if (!isDirectConnectRef.current) {
-      setShowReferralGate(false);
+      setConnectGateOpen(false);
       return;
     }
     // "Already a member" path — check on-chain registration
     isDirectConnectRef.current = false;
     // Admin wallet bypasses registration check
     if (isAdmin) {
-      setShowReferralGate(false);
+      setConnectGateOpen(false);
       return;
     }
     const verify = async () => {
       let registered = false;
       try {
-        if (selectedNetwork === 'polygon') {
-          registered = await polygonIsRegistered(address);
-        } else {
-          const [{ solanaIsRegistered }, { PublicKey }] = await Promise.all([
-            import('@/lib/contracts/solana'),
-            import('@solana/web3.js'),
-          ]);
-          registered = await solanaIsRegistered(new PublicKey(address));
-        }
+        const [{ solanaIsRegistered }, { PublicKey }] = await Promise.all([
+          import('@/lib/contracts/solana'),
+          import('@solana/web3.js'),
+        ]);
+        registered = await solanaIsRegistered(new PublicKey(address));
       } catch {}
       if (registered) {
-        setShowReferralGate(false);
+        setConnectGateOpen(false);
       } else {
         disconnect();
         toast.error('You\'re not yet registered. Please enter a referral address to join FBiT Staking.');
-        setTimeout(() => setShowReferralGate(true), 400);
+        setTimeout(() => setConnectGateOpen(true), 400);
       }
     };
     void verify();
@@ -259,16 +246,12 @@ export default function Header() {
   ];
 
   const handleConnect = () => {
-    setShowReferralGate(true);
+    setConnectGateOpen(true);
   };
 
   const handleReferralConfirmed = async (referralAddress: string) => {
-    if (selectedNetwork === 'solana') {
-      setSolanaReferrer(referralAddress);
-    } else {
-      setPolygonReferrer(referralAddress);
-    }
-    setShowReferralGate(false);
+    setSolanaReferrer(referralAddress);
+    setConnectGateOpen(false);
     try {
       await connect('reown');
     } catch (err: any) {
@@ -278,7 +261,7 @@ export default function Header() {
 
   // "Already a member" path — connects without referral and verifies on-chain
   const handleConnectDirect = async () => {
-    setShowReferralGate(false);
+    setConnectGateOpen(false);
     isDirectConnectRef.current = true;
     try {
       await connect('reown');
@@ -288,84 +271,35 @@ export default function Header() {
     }
   };
 
-  const handleAdminConnect = async () => {
-    setShowAdminConfirm(false);
-    try {
-      await adminConnect();
-    } catch (err: any) {
-      toast.error(sanitizeErrorMessage(err));
-    }
-  };
-
-  const handleNetworkSwitch = (network: 'solana' | 'polygon') => {
-    if (network === selectedNetwork) return;
-    if (address) disconnect();
-    setSelectedNetwork(network);
-    setShowWalletMenu(false);
-  };
-
   return (
     <>
-    {showReferralGate && (
+    {connectGateOpen && (
       <ReferralGateModal
-        network={selectedNetwork}
         savedReferral={currentReferrer ?? undefined}
         onConfirm={handleReferralConfirmed}
-        onDismiss={() => setShowReferralGate(false)}
+        onDismiss={() => setConnectGateOpen(false)}
         onSkip={handleConnectDirect}
       />
-    )}
-    {showAdminConfirm && (
-      <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-        <div className="glass rounded-2xl border border-accent-amber/20 w-full max-w-sm p-6 animate-slide-up shadow-2xl">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-accent-amber/20 flex items-center justify-center text-xl shrink-0">⚙</div>
-            <div>
-              <h2 className="font-display font-bold text-lg leading-tight">Admin Login</h2>
-              <p className="text-text-muted text-xs">Restricted access</p>
-            </div>
-          </div>
-          <p className="text-text-secondary text-sm mb-5 leading-relaxed">
-            Connect your <span className="text-accent-amber font-medium">admin wallet</span>. If the connected wallet is not an admin address, it will be disconnected automatically.
-          </p>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => setShowAdminConfirm(false)}
-              className="flex-1 py-2.5 rounded-xl font-display font-bold text-sm bg-surface-700 text-text-muted hover:bg-surface-600 transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleAdminConnect}
-              className="flex-1 py-2.5 rounded-xl font-display font-bold text-sm bg-accent-amber/20 text-accent-amber border border-accent-amber/30 hover:bg-accent-amber/30 transition-all"
-            >
-              Connect Admin
-            </button>
-          </div>
-        </div>
-      </div>
     )}
     <header className="sticky top-0 z-50 glass border-b border-white/5">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Logo */}
-          <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3">
             <div className="relative inline-flex shrink-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logo.png" alt="FBiT logo" className="w-9 h-9 rounded-full object-cover" />
               <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-brand-500 border-2 border-surface-900 animate-pulse" />
             </div>
             <div className="hidden sm:block">
-              <h1 className="font-display font-bold text-lg leading-tight">Future Bit (FBiT) Staking Mainnet</h1>
-              <p className="text-[10px] text-text-secondary font-mono tracking-wider uppercase">Multi-Chain Protocol</p>
+              <h1 className="font-display font-bold text-lg leading-tight">FutureBit</h1>
+              <p className="text-[10px] text-text-secondary font-mono tracking-wider uppercase">Solana Protocol</p>
             </div>
-          </div>
+          </Link>
 
-          {/* Desktop Nav */}
+          {/* Desktop Nav — hidden until a wallet is connected */}
           <nav className="hidden md:flex items-center gap-1">
-            {navItems.map((item) => (
+            {address && navItems.map((item) => (
               <button
                 type="button"
                 key={item.id}
@@ -389,42 +323,6 @@ export default function Header() {
 
           {/* Right side */}
           <div className="flex items-center gap-3">
-            {/* Network Selector — locked to connected wallet's chain */}
-            <div
-              className="flex items-center bg-surface-800 rounded-xl border border-white/5 overflow-hidden"
-              title={address ? 'Disconnect wallet to switch networks' : undefined}
-            >
-              <button
-                type="button"
-                onClick={() => handleNetworkSwitch('solana')}
-                disabled={!!address}
-                className={`px-3 py-1.5 text-xs font-display font-medium transition-all ${
-                  selectedNetwork === 'solana'
-                    ? 'bg-accent-purple/20 text-accent-purple'
-                    : address
-                      ? 'text-text-muted opacity-30 cursor-not-allowed'
-                      : 'text-text-muted hover:text-text-secondary'
-                }`}
-              >
-                SOL
-              </button>
-              <div className="w-px h-5 bg-white/5" />
-              <button
-                type="button"
-                onClick={() => handleNetworkSwitch('polygon')}
-                disabled={!!address}
-                className={`px-3 py-1.5 text-xs font-display font-medium transition-all ${
-                  selectedNetwork === 'polygon'
-                    ? 'bg-accent-purple/20 text-[#8247E5]'
-                    : address
-                      ? 'text-text-muted opacity-30 cursor-not-allowed'
-                      : 'text-text-muted hover:text-text-secondary'
-                }`}
-              >
-                POLY
-              </button>
-            </div>
-
             {/* Wallet */}
             {address ? (
               <div className="relative">
@@ -460,26 +358,24 @@ export default function Header() {
                 )}
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleConnect}
-                  disabled={isConnecting}
-                  className="btn-primary text-xs sm:text-sm px-4 sm:px-6 py-2 sm:py-2.5"
-                >
-                  {isConnecting ? 'Connecting...' : 'Connect'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAdminConfirm(true)}
-                  disabled={isConnecting}
-                  title="Admin Login"
-                  className="px-2.5 py-2 sm:py-2.5 rounded-xl text-xs font-display font-medium border border-accent-amber/20 text-accent-amber/60 hover:border-accent-amber/50 hover:text-accent-amber hover:bg-accent-amber/10 transition-all"
-                >
-                  ⚙
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleConnect}
+                disabled={isConnecting}
+                className="btn-primary text-xs sm:text-sm px-4 sm:px-6 py-2 sm:py-2.5"
+              >
+                {isConnecting ? 'Connecting...' : 'Connect'}
+              </button>
             )}
+
+            {/* Back to home — icon only, far right */}
+            <Link
+              href="/"
+              title="Back to Home"
+              className="flex items-center justify-center w-9 h-9 rounded-lg text-text-secondary hover:text-brand-400 hover:bg-white/5 transition-colors shrink-0"
+            >
+              <span className="text-lg leading-none">🏠</span>
+            </Link>
 
             {/* Mobile menu toggle */}
             <button
@@ -501,7 +397,7 @@ export default function Header() {
         {showMobileMenu && (
           <nav className="md:hidden pb-4 animate-slide-up">
             <div className="flex flex-col gap-1">
-              {navItems.map((item) => (
+              {address && navItems.map((item) => (
                 <button
                   type="button"
                   key={item.id}

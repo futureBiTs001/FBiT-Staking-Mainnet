@@ -23,6 +23,10 @@ export const maxDuration = 10;
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? '' });
 
 // ── Simple in-process rate limiter (10 req / min per IP) ──────────────────────
+// Caveat: this Map lives in a single warm function instance. Serverless platforms
+// can run several instances concurrently (each with its own empty Map), so a
+// distributed caller can exceed the per-IP limit by fanning out across instances.
+// The global cap below bounds the worst case per-instance regardless.
 const _rl = new Map<string, { count: number; reset: number }>();
 function checkRateLimit(ip: string): boolean {
   const now  = Date.now();
@@ -33,6 +37,19 @@ function checkRateLimit(ip: string): boolean {
   }
   if (slot.count >= 10) return false;
   slot.count++;
+  return true;
+}
+
+// ── Global cap across ALL callers on this instance (bounds worst-case Anthropic
+// spend even when per-IP tracking is bypassed via distributed/multi-instance abuse) ──
+let _globalCount = 0;
+let _globalReset = Date.now() + 60_000;
+const GLOBAL_LIMIT_PER_MIN = 200;
+function checkGlobalRateLimit(): boolean {
+  const now = Date.now();
+  if (now > _globalReset) { _globalCount = 0; _globalReset = now + 60_000; }
+  if (_globalCount >= GLOBAL_LIMIT_PER_MIN) return false;
+  _globalCount++;
   return true;
 }
 
@@ -71,22 +88,42 @@ const VALID_RISKS = new Set(['low', 'medium', 'high', 'blocked']);
 
 export async function POST(req: NextRequest) {
   // ── Rate limit ──────────────────────────────────────────────────────────────
+  if (!checkGlobalRateLimit()) {
+    return NextResponse.json<AssessResponse>(failSuspicious('global_rate_limited'), { status: 429 });
+  }
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
   if (!checkRateLimit(ip)) {
-    return NextResponse.json<AssessResponse>(failOpen(), { status: 429 });
+    // Exceeding 10 req/min from one IP is itself a bot-like signal — a legitimate
+    // single session never needs this many assessments. Do NOT fail open here:
+    // an attacker could otherwise deliberately blow through the rate limit to
+    // guarantee a "low risk" verdict every time. Fail toward suspicion instead.
+    return NextResponse.json<AssessResponse>(failSuspicious('rate_limited'), { status: 429 });
   }
 
   // ── Origin check (skip when no allowed origins configured) ─────────────────
   if (!isAllowedOrigin(req.headers.get('origin') ?? '', process.env.NEXT_PUBLIC_SITE_URL)) {
-    return NextResponse.json<AssessResponse>(failOpen(), { status: 403 });
+    // Same reasoning — a spoofed/mismatched origin on this endpoint is far more
+    // likely to be a probing script than a real browser session.
+    return NextResponse.json<AssessResponse>(failSuspicious('bad_origin'), { status: 403 });
+  }
+
+  // Parse the body in its own try/catch: invalid JSON is attacker-controlled
+  // (a real browser client always sends well-formed JSON), so it must fail
+  // toward suspicion, not fall through to the genuine-outage fail-open path below.
+  let body: Partial<AssessRequest>;
+  try {
+    body = (await req.json()) as Partial<AssessRequest>;
+  } catch {
+    return NextResponse.json<AssessResponse>(failSuspicious('invalid_json'), { status: 400 });
+  }
+
+  if (typeof body.fpScore !== 'number' || typeof body.humanScore !== 'number') {
+    // Malformed request shape — real clients always send well-formed bodies;
+    // this is more consistent with a script probing the endpoint.
+    return NextResponse.json<AssessResponse>(failSuspicious('malformed_request'), { status: 400 });
   }
 
   try {
-    const body = (await req.json()) as Partial<AssessRequest>;
-
-    if (typeof body.fpScore !== 'number' || typeof body.humanScore !== 'number') {
-      return NextResponse.json<AssessResponse>(failOpen(), { status: 400 });
-    }
 
     const b   = body.behavior ?? { mouseMovements:0, mouseDistance:0, clicks:0, keystrokes:0, scrolls:0, sessionAgeMs:0 };
     const ageS = Math.round((b.sessionAgeMs ?? 0) / 1000);
@@ -150,6 +187,15 @@ Respond with ONLY this JSON (no markdown, no explanation outside it):
   }
 }
 
+// Genuine infrastructure failure (Anthropic API outage, malformed model response) —
+// never penalize a real user for something on our end going wrong.
 function failOpen(): AssessResponse {
   return { risk: 'low', confidence: 0, reasoning: 'Assessment unavailable — defaulting to safe.', flags: [] };
+}
+
+// A failure condition that is itself attacker-controllable (rate limit, bad origin,
+// invalid/malformed request). Fails toward "medium" instead of "low" so a bot can't
+// force a guaranteed-safe verdict just by tripping one of these checks.
+function failSuspicious(reason: string): AssessResponse {
+  return { risk: 'medium', confidence: 0.3, reasoning: 'Request failed a basic validation check.', flags: [reason] };
 }

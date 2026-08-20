@@ -24,7 +24,7 @@ export default function TermsPage() {
             }}>F</div>
             <span style={{ fontWeight: 700, fontSize: 18, color: '#f1f5f9' }}>FBiT Staking</span>
           </Link>
-          <Link href="/" style={{
+          <Link href="/app" style={{
             padding: '8px 20px', borderRadius: 8,
             background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)',
             color: '#00E676', textDecoration: 'none', fontSize: 14, fontWeight: 500,
@@ -92,8 +92,8 @@ export default function TermsPage() {
           <ul style={{ paddingLeft: 20, lineHeight: 2, marginTop: 8 }}>
             <li><b style={{ color: '#f1f5f9' }}>Staking Fee:</b> 1% of staked amount at time of staking.</li>
             <li><b style={{ color: '#f1f5f9' }}>Burn:</b> 10% of collected fees are burned (permanently destroyed).</li>
-            <li><b style={{ color: '#f1f5f9' }}>Referral Commissions:</b> Up to 15.75% of fees distributed to referrers (10 levels).</li>
-            <li><b style={{ color: '#f1f5f9' }}>Blockchain Gas Fees:</b> You are responsible for all network transaction fees (SOL/MATIC).</li>
+            <li><b style={{ color: '#f1f5f9' }}>Referral Commissions:</b> Up to 30% of rewards distributed to referrers (10 levels).</li>
+            <li><b style={{ color: '#f1f5f9' }}>Blockchain Gas Fees:</b> You are responsible for all network transaction fees (SOL).</li>
           </ul>
         </Section>
 
@@ -139,7 +139,7 @@ export default function TermsPage() {
         <div style={{ marginTop: 64, paddingTop: 32, borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: 24, flexWrap: 'wrap' }}>
           <Link href="/about" style={{ color: '#64748b', textDecoration: 'none', fontSize: 14 }}>About Us</Link>
           <Link href="/privacy" style={{ color: '#64748b', textDecoration: 'none', fontSize: 14 }}>Privacy Policy</Link>
-          <Link href="/" style={{ color: '#64748b', textDecoration: 'none', fontSize: 14 }}>Launch App</Link>
+          <Link href="/app" style={{ color: '#64748b', textDecoration: 'none', fontSize: 14 }}>Launch App</Link>
         </div>
       </main>
     </div>

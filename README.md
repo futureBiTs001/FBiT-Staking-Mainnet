@@ -1,6 +1,6 @@
-# FBiT Staking — Multi-Chain DApp
+# FBiT Staking — Solana DApp
 
-A production-ready, decentralized staking platform for the **FBiT token** running on **Solana** and **Polygon** networks simultaneously. The platform implements Proof-of-Stake (PoS) APY, a 10-level referral commission system, a Team Target Bonus program, a deflationary burn mechanism, and an automated emission reserve — all governed by on-chain smart contracts.
+A production-ready, decentralized staking platform for the **FBiT token** on **Solana**. The platform implements Proof-of-Stake (PoS) APY, a 10-level referral commission system, a Team Target Bonus program, a deflationary burn mechanism, and an automated emission reserve — all governed by an on-chain Anchor smart contract.
 
 **Live Demo:** [https://stake.futurebit.in](https://stake.futurebit.in)
 
@@ -16,7 +16,7 @@ A production-ready, decentralized staking platform for the **FBiT token** runnin
 6. [Burn & PoS Emission System](#6-burn--pos-emission-system)
 7. [Ownership Renouncement](#7-ownership-renouncement)
 8. [Admin Panel](#8-admin-panel)
-9. [Smart Contracts](#9-smart-contracts)
+9. [Smart Contract](#9-smart-contract)
 10. [Frontend Architecture](#10-frontend-architecture)
 11. [Security System](#11-security-system)
 12. [Project Structure](#12-project-structure)
@@ -38,12 +38,12 @@ FBiT Staking is a fully on-chain staking DApp where users lock FBiT tokens for *
 |---------|---------|
 | Lock Period | 30 days (fixed) |
 | Claim Interval | Every 6 hours (4 intervals/day) |
-| APY Range | 10% – 300% on Solana · 60% – 250% on Polygon (auto-adjusting, PoS — differs per chain in the deployed contracts) |
-| Burn Rate | 10% of gross reward (burned to dead address), adjustable 0–50% by admin |
+| APY Range | 10% – 300% (auto-adjusting, PoS) |
+| Burn Rate | 10% of gross reward, adjustable 0–50% by admin |
 | Referral Levels | 10 levels deep |
 | Referral Total | 30% distributed across all 10 levels |
 | Team Bonus | Up to +10% on top of staking rewards |
-| Networks | Solana Mainnet + Polygon Mainnet (Chain ID: 137) |
+| Network | Solana Mainnet |
 | Platform Fee | 1% on all operations (removed after ownership renouncement) |
 | AI Support Chat | Claude-powered widget answering platform FAQs (`/api/support-chat`) |
 
@@ -52,9 +52,7 @@ FBiT Staking is a fully on-chain staking DApp where users lock FBiT tokens for *
 ## 2. How It Works — Complete Flow
 
 ### Step 1 — Connect Wallet
-Users connect their wallet via **Reown (WalletConnect)**:
-- **Solana**: Phantom, Solflare, or Binance Web3 Wallet (Solana account)
-- **Polygon**: MetaMask, Binance Web3 Wallet, or any WalletConnect-compatible EVM wallet
+Users connect their Solana wallet (Phantom, Solflare, Backpack, or any Wallet Standard-compliant wallet) via **Reown AppKit**.
 
 ### Step 2 — Register with a Referral Link (Optional)
 Before staking, a user can click a referral link (`?ref=<address>`). This stores the referrer on-chain and credits all 10 levels of the referral chain when the user stakes.
@@ -73,9 +71,8 @@ Rewards accumulate every **6 hours** (4 intervals/day). Formula:
 grossReward = stakedAmount × effectiveAPY × intervals / (1,460 × 10,000)
 
 Where:
-  effectiveAPY = clamp(ANNUAL_EMISSION × 10,000 / totalStaked, MIN_APY_BPS, MAX_APY_BPS)
-                 Solana:  MIN_APY_BPS = 1,000 (10%)   MAX_APY_BPS = 30,000 (300%)
-                 Polygon: MIN_APY_BPS = 6,000 (60%)   MAX_APY_BPS = 25,000 (250%)
+  effectiveAPY = clamp(ANNUAL_EMISSION × 10,000 / totalStaked, 1_000, 30_000)
+                 MIN_APY_BPS = 1,000 (10% floor)   MAX_APY_BPS = 30,000 (300% ceiling)
   intervals    = seconds elapsed / 21,600 (each interval = 6 hours)
   1,460        = total 6-hour intervals in one year (4 × 365)
 ```
@@ -110,7 +107,7 @@ Gross Reward (R)
     │
     └─ 99% After Fee (A)
             │
-            ├─ 10% Burn (A × 10%)  ───────────→ Dead address (0x000...dEaD) 🔥
+            ├─ 10% Burn (A × 10%)  ───────────→ Burned on-chain 🔥
             │
             └─ 90% Net Reward (A × 90%)  ──────→ User wallet ✅
 ```
@@ -124,7 +121,7 @@ Gross Reward (R)
     │
     └─ 100% After Fee (A = R)
             │
-            ├─ 10% Burn (R × 10%)  ───────────→ Dead address 🔥
+            ├─ 10% Burn (R × 10%)  ───────────→ Burned on-chain 🔥
             │
             ├─ 25% Fee  ──────────────────────→ feeRecipient (former admin)
             │   (of gross reward, from pool separately)
@@ -177,16 +174,16 @@ On top of base staking rewards, users who build large teams earn an additional b
 
 | Tier | Label | Min Team Staked | Bonus |
 |------|-------|----------------|-------|
-| 1 | Bronze | 200,000 FBiT | +2% |
-| 2 | Silver | 350,000 FBiT | +3% |
-| 3 | Gold | 500,000 FBiT | +4% |
-| 4 | Platinum | 1,000,000 FBiT | +5% |
-| 5 | Diamond | 5,000,000 FBiT | +6% |
-| 6 | Ruby | 10,000,000 FBiT | +7% |
-| 7 | Emerald | 50,000,000 FBiT | +7.5% |
-| 8 | Sapphire | 100,000,000 FBiT | +8.5% |
-| 9 | Obsidian | 500,000,000 FBiT | +9% |
-| 10 | Titan | 1,000,000,000 FBiT | +10% |
+| 1 | Bronze | 50,000 FBiT | +2% |
+| 2 | Silver | 100,000 FBiT | +3% |
+| 3 | Gold | 250,000 FBiT | +4% |
+| 4 | Platinum | 500,000 FBiT | +5% |
+| 5 | Diamond | 1,000,000 FBiT | +6% |
+| 6 | Ruby | 2,500,000 FBiT | +7% |
+| 7 | Emerald | 5,000,000 FBiT | +7.5% |
+| 8 | Sapphire | 10,000,000 FBiT | +8.5% |
+| 9 | Obsidian | 20,000,000 FBiT | +9% |
+| 10 | Titan | 100,000,000 FBiT | +10% |
 
 The bonus applies automatically on every claim or compound — no user action required.
 
@@ -195,7 +192,7 @@ The bonus applies automatically on every claim or compound — no user action re
 ## 6. Burn & PoS Emission System
 
 ### Reward Burn (10% per Claim/Compound)
-Every time a user claims or compounds, **10% of their gross reward is permanently burned** by sending tokens to the dead address (`0x000000000000000000000000000000000000dEaD` on Polygon). This is deflationary — it reduces the total circulating supply over time.
+Every time a user claims or compounds, **10% of their gross reward is permanently burned** via an on-chain SPL token burn instruction. This is deflationary — it reduces the total circulating supply over time.
 
 - The burn comes from the **user's share** — the reward pool does not pay extra for this.
 - The burn percentage (`burnBps`) can be adjusted by the admin (range: 0–50%).
@@ -203,32 +200,23 @@ Every time a user claims or compounds, **10% of their gross reward is permanentl
 ### Automated Annual Emission Reserve
 The contract includes a long-term **emission reserve** system:
 
-1. **Admin deposits** the full token supply once (e.g., 800,000,000 FBiT).
+1. **Admin deposits** the full reserve allocation once (120,000,000 FBiT).
 2. The contract **automatically releases** `ANNUAL_EMISSION` tokens per year from the reserve into the active reward pool.
-3. Default: **1,000,000 FBiT/year** → sustains 800 years of rewards.
+3. Target: **12,000,000 FBiT/year** → an approximately 10-year nominal runway.
 4. The emission release is triggered automatically on every claim/compound — no cron job needed.
-
-### Auto Year-End Burn
-Once per year, the contract automatically burns any **surplus** tokens in the active reward pool (tokens above what all active stakers could possibly claim). This prevents pool bloat and accelerates token deflation.
-
-- User rewards are protected — only genuine surplus is burned.
-- Shortens the emission schedule (fewer years remain after each annual burn).
 
 ### PoS APY Formula
 ```
 effectiveAPY (bps) = clamp(
     ANNUAL_EMISSION × 10,000 / totalStaked,
-    MIN_APY_BPS, MAX_APY_BPS
+    1_000, 30_000
 )
 
-Solana:  MIN_APY_BPS = 1,000 (10% floor)   MAX_APY_BPS = 30,000 (300% ceiling)
-Polygon: MIN_APY_BPS = 6,000 (60% floor)   MAX_APY_BPS = 25,000 (250% ceiling)
+MIN_APY_BPS = 1,000 (10% floor)   MAX_APY_BPS = 30,000 (300% ceiling)
 ```
 
-When no one is staking: APY sits at its chain's ceiling (attracts stakers).
-As more tokens are staked: APY decreases automatically toward the floor.
-The two chains currently run different floor/ceiling values — check the
-live dashboard for the exact current APY on your selected network.
+When no one is staking: APY sits at the 300% ceiling (attracts stakers).
+As more tokens are staked: APY decreases automatically toward the 10% floor.
 
 ---
 
@@ -242,12 +230,11 @@ The admin can call **Renounce Ownership** from the Admin Panel. This is a **one-
 | Admin can pause/unpause, block users, etc. | No admin — contract is autonomous |
 | Admin can fund reward pool, set rates | Cannot change any parameter |
 | Admin can set annual emission | Emission locked forever |
-| Admin can emergency withdraw (when paused) | No emergency withdraw possible |
 
 After renouncement, the former admin's address becomes `feeRecipient` and passively earns income from the reward pool on every user claim/compound. This is the admin's permanent passive revenue in exchange for giving up control.
 
 > **Important:** Before renouncing, the admin must:
-> - Deposit the full token reserve (`depositReserve`)
+> - Deposit the full reserve allocation (`depositReserve`)
 > - Set the desired annual emission (`setAnnualEmission`)
 > - Configure all Team Target Tiers correctly
 > - Ensure the reward pool has sufficient balance
@@ -264,7 +251,6 @@ The Admin Panel is accessible only to wallet addresses listed in `NEXT_PUBLIC_AD
 | Fund Reward Pool | Directly add tokens to the active reward pool |
 | Deposit Reserve | Deposit tokens into the long-term emission reserve |
 | Release Emission | Manually trigger release of pending reserve emission |
-| Burn Unused Pool | Burn surplus pool tokens (only genuine surplus, never user rewards) |
 
 ### Platform Parameters
 | Action | Description |
@@ -290,59 +276,7 @@ Permanently transfers to a trustless, admin-free operation mode.
 
 ---
 
-## 9. Smart Contracts
-
-### Polygon Contract — `FBiTStaking.sol`
-
-**Location:** `contracts/polygon/contracts/FBiTStaking.sol`
-
-Built with Solidity 0.8.20 using OpenZeppelin libraries:
-- `Ownable` — access control
-- `ReentrancyGuard` — prevents reentrancy attacks
-- `Pausable` — emergency stop mechanism
-- `SafeERC20` — safe token transfers
-
-**Key Constants:**
-```solidity
-uint256 public constant CLAIM_INTERVAL   = 21600;   // 6 hours
-uint256 public constant LOCK_PERIOD      = 30;      // 30 days
-uint256 public constant PLATFORM_FEE_BPS = 100;     // 1%
-uint256 public constant MIN_APY_BPS      =  6_000;  // 60%
-uint256 public constant MAX_APY_BPS      = 25_000;  // 250%
-uint256 public constant MAX_BURN_BPS     = 5000;    // 50% max
-uint256 public BURN_BPS                  = 1000;    // 10% initial (adjustable)
-```
-
-**Public Functions:**
-```solidity
-registerUser(address _referrer)        // Register before staking
-stake(uint256 _amount)                 // Stake FBiT tokens
-claimRewards(uint256 _stakeId)         // Claim rewards (every 12h)
-compoundRewards(uint256 _stakeId)      // Compound rewards back into stake
-unstake(uint256 _stakeId)              // Withdraw after 30-day lock
-releaseEmission()                      // Trigger reserve → pool release (anyone can call)
-```
-
-**Admin Functions:**
-```solidity
-depositReserve(uint256 _amount)
-fundRewardPool(uint256 _amount)
-setRewardRate(uint256 _newRate)
-setReferralRewardRate(uint256 _newRate)
-setAnnualEmission(uint256 _annualEmission)
-setBurnBps(uint256 _burnBps)
-setTeamTargetTier(uint8 _index, uint256 _minTeamStaked, uint256 _bonusBps)
-blockUser(address _user)
-unblockUser(address _user)
-pause() / unpause()
-emergencyWithdraw(address _token, address _to, uint256 _amount)
-burnUnusedPool(uint256 _amount)
-renounceOwnershipWithFee()
-```
-
-**Events emitted:** `TokensStaked`, `RewardsClaimed`, `RewardsCompounded`, `TokensUnstaked`, `TokensBurned`, `EmissionReleased`, `UnusedPoolBurned`, `OwnershipRenounced`, `RenounceFeeCollected`, `UserRegistered`, `ReferralReward`, `TeamBonusApplied`, and more.
-
----
+## 9. Smart Contract
 
 ### Solana Contract — Anchor/Rust
 
@@ -381,7 +315,9 @@ Built with **Next.js 16** (App Router, Turbopack) + **TypeScript** + **Tailwind 
 ### Pages
 | Route | Component | Description |
 |-------|-----------|-------------|
-| `/` | `page.tsx` | Home — renders the full Dashboard (Stake / Referral / History / Admin tabs) |
+| `/` | `page.tsx` | Marketing landing page — live stats, tokenomics, security, roadmap, FAQ |
+| `/app` | `app/page.tsx` | Staking dashboard (Dashboard / Swap / Stake / Referral / Calculator / History / Admin tabs) |
+| `/guide` | `guide/page.tsx` | Step-by-step staking tutorial |
 | `/about` | `about/page.tsx` | About FBiT Staking (SEO landing content) |
 | `/terms` | `terms/page.tsx` | Terms of Service |
 | `/privacy` | `privacy/page.tsx` | Privacy Policy |
@@ -436,41 +372,37 @@ Built with **Next.js 16** (App Router, Turbopack) + **TypeScript** + **Tailwind 
 ### Hooks
 | Hook | Purpose |
 |------|---------|
-| `useContract.ts` | Unified interface — routes calls to Solana or Polygon based on selected network |
+| `useContract.ts` | Unified contract interface, backed by Solana |
 | `useSolanaStaking.ts` | All Solana on-chain reads/writes via `@solana/web3.js` + Anchor IDL |
-| `usePolygonStaking.ts` | All Polygon on-chain reads/writes via `ethers.js` v6 |
 | `useTokenPrice.ts` | Fetches live FBiT price from market APIs |
 | `useTokenLogo.ts` | Resolves token logo URL |
 
 ### State Management
 Zustand store (`web/src/lib/store.ts`) with localStorage persistence:
-- `selectedNetwork` — 'solana' or 'polygon'
 - `walletStates` — per-wallet stakes, transactions, balances, referral info
 - `platformStats` — total staked, APY, burn rate, pool balance, emission data
 
-Store key: `fbit-staking-v5` (versioned to force fresh state on breaking changes).
+Store key: `fbit-staking-v6` (versioned to force fresh state on breaking changes).
 
 ### Context
-`WalletContext.tsx` — unified wallet connection state:
-- Solana wallet (via Reown/AppKit)
-- Polygon wallet (via Reown/AppKit)
-- `address` — active wallet address (either chain)
-- `solanaReferrer` / `polygonReferrer` — referrer from URL param
+`WalletContext.tsx` — Solana wallet connection state (via Reown AppKit):
+- `address` / `solanaAddress` — active wallet address
+- `solanaReferrer` — referrer from URL param
 
 ### Contract Interface (`useContract.ts`)
 All buttons in the UI call through this single hook:
 
 ```typescript
 contract.stake(amount, referrer?)           // Stake tokens
-contract.claimReward(stakeId)               // Claim rewards
-contract.compoundReward(stakeId)            // Compound rewards
-contract.unstake(stakeId)                   // Unstake after lock
+contract.claimRewards(stakeId, stakedAt)    // Claim rewards
+contract.compoundRewards(stakeId, stakedAt) // Compound rewards
+contract.unstake(stakeId, stakedAt)         // Unstake after lock
 contract.syncUserData()                     // Refresh user's on-chain data
-contract.syncPlatformStats()               // Refresh platform stats
-contract.adminFundPool(amount)              // Admin: fund pool
-contract.adminSetRewardRate(rate)           // Admin: set reward rate
-contract.adminBlockUser(address)            // Admin: block user
-contract.adminRenounceOwnership()          // Admin: renounce ownership
+contract.syncPlatformStats()                // Refresh platform stats
+contract.fundRewardPool(amount)             // Admin: fund pool
+contract.setRewardRate(rate)                // Admin: set reward rate
+contract.blockUser(address)                 // Admin: block user
+contract.renounceOwnership()                // Admin: renounce ownership
 // ... and more
 ```
 
@@ -498,22 +430,20 @@ if (!checkRateLimit('stake', { maxCalls: 3, windowMs: 120_000 })) {
 
 ### Input Validation
 ```typescript
-isValidEVMAddress(addr)      // 0x + 40 hex chars
 isValidSolanaAddress(addr)   // base58, 32–44 chars
-isValidWalletAddress(addr)   // accepts either chain
-isValidAmount(amount)        // finite, positive, max 6 decimals
+isValidWalletAddress(addr)   // Solana address (base58)
+isValidAmount(amount)        // finite, positive, max 9 decimals
 isValidBps(bps)              // integer 0–10,000
 isValidBonusBps(bps)         // integer 1–1,000
 sanitizeText(value)          // strips HTML/script tags (XSS prevention)
 ```
 
 ### Smart Contract Security
-- **Reentrancy Guard**: Both contracts use `nonReentrant` modifier
-- **SafeERC20**: Prevents silent token transfer failures (Polygon)
-- **Overflow Protection**: Solidity 0.8.x built-in checked arithmetic
-- **Access Control**: `onlyOwner` modifier on all admin functions
-- **Emergency Pause**: Instantly halts all user-facing operations
-- **Lock Period Enforcement**: Unstake reverts if called before `unlockAt`
+- **PDA-based account validation**: strict owner/seed/signer checks on every instruction (Anchor)
+- **Checked arithmetic**: overflow/underflow protection throughout reward, emission, and burn calculations
+- **Access Control**: authority checks on all admin instructions
+- **Emergency Pause**: instantly halts all user-facing operations
+- **Lock Period Enforcement**: unstake reverts if called before `unlockAt`
 
 ---
 
@@ -523,19 +453,12 @@ sanitizeText(value)          // strips HTML/script tags (XSS prevention)
 FBiT-Staking/
 │
 ├── contracts/
-│   ├── polygon/                        # EVM (Polygon) smart contract
-│   │   ├── contracts/
-│   │   │   └── FBiTStaking.sol         # Main Solidity contract
-│   │   ├── scripts/
-│   │   │   └── deploy.js               # Hardhat deploy script
-│   │   ├── hardhat.config.js           # Hardhat config (Polygon mainnet)
-│   │   ├── .env.example                # Required env vars for deployment
-│   │   └── package.json
-│   │
 │   └── solana/                         # Solana Anchor program
 │       ├── programs/fbit-staking/      # Rust source code
 │       ├── scripts/
 │       │   ├── initialize.ts           # Initialize platform PDA
+│       │   ├── migrate-token.ts        # Point program at a new stake/reward mint
+│       │   ├── set-annual-emission.ts  # Set the emission target
 │       │   └── update-team-tiers.ts    # Update tiers on-chain
 │       ├── target/idl/                 # Auto-generated IDL (after build)
 │       ├── Anchor.toml                 # Anchor config (mainnet)
@@ -545,9 +468,12 @@ FBiT-Staking/
     ├── src/
     │   ├── app/
     │   │   ├── layout.tsx              # Root layout with providers
-    │   │   └── page.tsx                # Home page
+    │   │   ├── page.tsx                # Marketing landing page
+    │   │   ├── app/page.tsx            # Staking dashboard
+    │   │   └── guide/page.tsx          # Staking tutorial
     │   ├── components/
-    │   │   ├── layout/                 # Header, navigation, network switcher
+    │   │   ├── landing/                # Landing page sections (Hero, Stats, Tokenomics, ...)
+    │   │   ├── layout/                 # Header, navigation
     │   │   ├── staking/
     │   │   │   ├── Dashboard.tsx       # Active stakes, burn panel, history
     │   │   │   └── StakePanel.tsx      # Stake form
@@ -560,20 +486,18 @@ FBiT-Staking/
     │   │   └── ui/
     │   │       └── ContractSetupNotice.tsx # Setup guidance banner
     │   ├── context/
-    │   │   └── WalletContext.tsx       # Unified wallet state
+    │   │   └── WalletContext.tsx       # Wallet state
     │   ├── hooks/
     │   │   ├── useContract.ts          # Unified contract interface
-    │   │   ├── useSolanaStaking.ts     # Solana reads/writes
-    │   │   └── usePolygonStaking.ts    # Polygon reads/writes
+    │   │   └── useSolanaStaking.ts     # Solana reads/writes
     │   ├── lib/
     │   │   ├── config.ts               # Network configuration
-    │   │   ├── store.ts                # Zustand global state (v4)
+    │   │   ├── store.ts                # Zustand global state (v6)
     │   │   ├── security.ts             # Rate limiting & validation
     │   │   ├── utils.ts                # Formatting helpers
     │   │   ├── reown.ts                # WalletConnect/Reown setup
     │   │   └── contracts/
-    │   │       ├── solana.ts           # Solana contract helpers
-    │   │       └── polygon.ts          # Polygon contract helpers
+    │   │       └── solana.ts           # Solana contract helpers
     │   ├── providers/
     │   │   └── AppKitProvider.tsx      # Reown AppKit wallet provider
     │   ├── idl/
@@ -583,8 +507,7 @@ FBiT-Staking/
     │   └── styles/
     │       └── globals.css             # Tailwind + custom CSS variables
     ├── .env.local                      # Active environment (gitignored)
-    ├── .env.mainnet                    # Mainnet env template
-    ├── .env.testnet                    # Testnet env template
+    ├── .env.mainnet.example            # Mainnet env template
     ├── next.config.mjs
     ├── tailwind.config.js
     └── package.json
@@ -598,8 +521,8 @@ All frontend configuration lives in `web/.env.local`:
 
 ```bash
 # ===== ADMIN ACCESS =====
-# Wallet addresses that can access the Admin Panel
-NEXT_PUBLIC_ADMIN_ADDRESSES=<solana_address>,<evm_address>
+# Solana wallet addresses that can access the Admin Panel
+NEXT_PUBLIC_ADMIN_ADDRESSES=<solana_address>
 
 # ===== REOWN (WalletConnect) =====
 NEXT_PUBLIC_REOWN_PROJECT_ID=<your_project_id>
@@ -607,20 +530,13 @@ NEXT_PUBLIC_REOWN_PROJECT_ID=<your_project_id>
 # ===== SOLANA MAINNET =====
 NEXT_PUBLIC_SOLANA_RPC_URL=https://solana-rpc.publicnode.com
 NEXT_PUBLIC_SOLANA_PROGRAM_ID=<deployed_anchor_program_id>     # ⚠ Required
-NEXT_PUBLIC_SOLANA_STAKE_TOKEN_MINT=CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu
-NEXT_PUBLIC_SOLANA_REWARD_TOKEN_MINT=CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu
+NEXT_PUBLIC_SOLANA_STAKE_TOKEN_MINT=5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME
+NEXT_PUBLIC_SOLANA_REWARD_TOKEN_MINT=5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME
 NEXT_PUBLIC_SOLANA_STAKE_VAULT=   # Optional — auto-derived from Program ID
 NEXT_PUBLIC_SOLANA_REWARD_VAULT=  # Optional — auto-derived from Program ID
-
-# ===== POLYGON MAINNET =====
-NEXT_PUBLIC_POLYGON_RPC_URL=https://polygon-bor-rpc.publicnode.com
-NEXT_PUBLIC_POLYGON_CHAIN_ID=137
-NEXT_PUBLIC_POLYGON_CONTRACT_ADDRESS=<deployed_contract_address> # ⚠ Required
-NEXT_PUBLIC_POLYGON_STAKE_TOKEN=0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945
-NEXT_PUBLIC_POLYGON_REWARD_TOKEN=0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945
 ```
 
-> **Note:** The app shows a `ContractSetupNotice` warning until both `PROGRAM_ID` (Solana) and `CONTRACT_ADDRESS` (Polygon) are filled in. All staking buttons are disabled until contracts are configured.
+> **Note:** The app shows a `ContractSetupNotice` warning until `PROGRAM_ID` is filled in. All staking buttons are disabled until the contract is configured.
 
 ---
 
@@ -630,49 +546,14 @@ NEXT_PUBLIC_POLYGON_REWARD_TOKEN=0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| Node.js | 18+ | Frontend + Hardhat |
+| Node.js | 18+ | Frontend |
 | Rust | stable | Solana program compilation |
 | Anchor CLI | 0.29+ | Solana framework |
 | Solana CLI | 1.18+ | Wallet + deployment |
 
 ---
 
-### A. Deploy Polygon Contract
-
-```bash
-cd contracts/polygon
-npm install
-
-# Create .env from example
-cp .env.example .env
-```
-
-Edit `contracts/polygon/.env`:
-```
-PRIVATE_KEY=<your_deployer_private_key>
-POLYGON_MAINNET_RPC=https://polygon-bor-rpc.publicnode.com
-STAKE_TOKEN_ADDRESS=0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945
-REWARD_TOKEN_ADDRESS=0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945
-```
-
-```bash
-# Compile
-npx hardhat compile
-
-# Deploy to Polygon Mainnet
-npx hardhat run scripts/deploy.js --network polygon_mainnet
-
-# Verify on Polygonscan
-npx hardhat verify --network polygon_mainnet <CONTRACT_ADDRESS> \
-  <STAKE_TOKEN> <REWARD_TOKEN> 1000 500 1000000000000
-
-# Copy the deployed contract address into web/.env.local:
-# NEXT_PUBLIC_POLYGON_CONTRACT_ADDRESS=<CONTRACT_ADDRESS>
-```
-
----
-
-### B. Deploy Solana Program
+### A. Deploy Solana Program
 
 ```bash
 cd contracts/solana
@@ -701,15 +582,15 @@ npx ts-node scripts/initialize.ts
 
 ---
 
-### C. Run the Frontend
+### B. Run the Frontend
 
 ```bash
 cd web
 npm install
 
 # Copy and fill in your env
-cp .env.mainnet .env.local
-# Edit .env.local: add PROGRAM_ID and CONTRACT_ADDRESS
+cp .env.mainnet.example .env.local
+# Edit .env.local: add PROGRAM_ID
 
 # Development server
 npm run dev
@@ -722,13 +603,12 @@ npm start
 
 ---
 
-### D. Post-Deployment Checklist
+### C. Post-Deployment Checklist
 
-- [ ] Polygon contract deployed and verified on Polygonscan
 - [ ] Solana program deployed and initialized
-- [ ] `.env.local` has both contract addresses
+- [ ] `.env.local` has the deployed Program ID
 - [ ] Admin panel accessible from admin wallet
-- [ ] Deposit reward reserve: Admin → `depositReserve` with full token supply
+- [ ] Deposit reward reserve: Admin → `depositReserve` with the reserve allocation
 - [ ] Set annual emission: Admin → `setAnnualEmission`
 - [ ] Configure Team Target Tiers: Admin → Sync All Tiers
 - [ ] Fund active reward pool if needed: Admin → `fundRewardPool`
@@ -742,16 +622,14 @@ npm start
 | Layer | Technology |
 |-------|-----------|
 | Solana Contract | Rust + Anchor Framework 0.29 |
-| Polygon Contract | Solidity 0.8.20 + Hardhat + OpenZeppelin 5 |
 | Frontend Framework | Next.js 16 (App Router, Turbopack) |
 | Language | TypeScript |
 | Styling | Tailwind CSS v4 |
 | State Management | Zustand v5 (with localStorage persistence) |
 | AI | `@anthropic-ai/sdk` (Claude Haiku) — bot detection + support chat |
 | Solana SDK | `@solana/web3.js`, `@solana/spl-token`, `@coral-xyz/anchor` |
-| Polygon SDK | `ethers.js` v6 |
 | Wallet Connection | Reown AppKit (formerly WalletConnect) |
-| Supported Wallets | Phantom, Solflare, Binance Web3 Wallet (Solana) · MetaMask, Binance Web3 Wallet, WalletConnect (Polygon) |
+| Supported Wallets | Phantom, Solflare, Backpack, Binance Web3 Wallet |
 | Toast Notifications | `react-hot-toast` |
 | Deployment | Vercel / any Node.js host |
 
@@ -759,23 +637,11 @@ npm start
 
 ## 16. Token & Contract Addresses
 
-### WFBIT Token — Polygon Mainnet
-```
-0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945
-```
-[View on Polygonscan](https://polygonscan.com/token/0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945)
-
-### FBiTStaking Contract — Polygon Mainnet
-```
-0xb86DA67406DaD482428704c14AdA269E9653FDca
-```
-[View on Polygonscan](https://polygonscan.com/address/0xb86DA67406DaD482428704c14AdA269E9653FDca)
-
 ### FBiT Token — Solana Mainnet
 ```
-CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu
+5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME
 ```
-[View on Solana Explorer](https://explorer.solana.com/address/CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu)
+[View on Solana Explorer](https://explorer.solana.com/address/5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME)
 
 ### FBiT Staking Program — Solana Mainnet
 ```
@@ -787,9 +653,11 @@ CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu
 
 ## 17. Changelog
 
+> These entries are a historical record and are left as originally written, including references to the Polygon deployment that was part of the platform at the time. The platform is Solana-only as of the most recent entries below.
+
 ### v1.7 — July 2026
 
-- **AI Support Chat** — New floating widget (`web/src/components/chat/SupportChat.tsx`) backed by a rate-limited `/api/support-chat` route using Claude Haiku, scoped strictly to platform facts (APY, chains, referrals, safety)
+- **AI Support Chat** — New floating widget (`web/src/components/chat/SupportChat.tsx`) backed by a rate-limited `/api/support-chat` route using Claude Haiku, scoped strictly to platform facts (APY, referrals, safety)
 - **New static pages** — `/about`, `/terms`, `/privacy`, linked from the footer
 - **Ad placements** — Coinzilla/Adcash integration (`AdsManager.tsx`) driven entirely by `NEXT_PUBLIC_ADS_*` env vars; the Admin Panel's Ads tab is a read-only status view (there is no backend database, so a live in-panel toggle would only ever affect the admin's own browser via `localStorage`, never real visitors — this was in fact a live bug, fixed this cycle)
 - **SEO overhaul** — full metadata, sitemap, robots.txt, Schema.org structured data (Organization/WebSite/WebApp/FAQ), Google Search Console verification, dynamic OG image
@@ -798,53 +666,50 @@ CuubBzUTnQ4H2D2fHJCVWGEUEod2fJzq4nAPwfx8UGTu
 - **Production origin-check bug** — `NEXT_PUBLIC_SITE_URL` in Vercel was malformed (bare hostname plus a stray literal `\n`), so the Origin-allowlist check in `/api/bot-assess` silently 403'd every real request in production — meaning the Claude bot-detection layer had likely never actually run in production (it fails open, so this went unnoticed). Added `isAllowedOrigin()` in `lib/security.ts` which normalizes hostnames regardless of scheme/formatting.
 - **Unsolicited wallet signature fix** — the auto-halving check in `syncPlatformStats()` called `triggerHalving()` for *any* connected wallet once a halving became due, prompting a surprise signature request for ordinary visitors; now gated to admin wallets only
 - **Stake amount precision fixes** — the Stake page's MAX/25%/50% quick-fill buttons used `toFixed(0)` which could round *up* past the actual wallet balance (now `Math.floor`); the reward estimate used a double-rounded whole-percent APY instead of the raw basis-points value, causing it to diverge from the Dashboard's live figures
-- **Polygon referral level off-by-one** — the on-chain history feed displayed the contract's 0-based `ReferralReward` level index verbatim while the rest of the app is 1-based, showing every Polygon referral one level lower than actual
-- **Admin emission cap mismatch** — the Annual Emission input capped at 1,000,000 FBiT while the on-chain contract allows up to 1,000,000,000, so the built-in APY calculator's own quick-fill values were sometimes rejected by the form that generated them
+- **Referral level off-by-one** (legacy Polygon deployment) — the on-chain history feed displayed the contract's 0-based `ReferralReward` level index verbatim while the rest of the app is 1-based, showing every referral one level lower than actual
+- **Admin emission cap mismatch** — the Annual Emission input capped at 1,000,000 FBiT while the on-chain contract allows a much higher ceiling, so the built-in APY calculator's own quick-fill values were sometimes rejected by the form that generated them
 - **Dependency vulnerability patches** — resolved a critical `shell-quote` CRLF injection and several high/moderate advisories (`@babel/core`, `form-data`, `ws`) across the web app and contract tooling via `npm audit fix`
 - **Corrected referral total in SEO/FAQ content and the support chat** — was incorrectly stated as 15.75%; the real total across all 10 levels is 30%
-- **Known limitation (not fixed — flagged for a deliberate decision):** both the Solana and Polygon contracts check the 500M-FBiT per-user stake cap only against each individual `stake()` call, never the user's cumulative `total_staked`. A user can bypass the intended ceiling by splitting a large stake across multiple calls. Fixing this requires a new contract version and a migration plan for existing stakers — out of scope for a routine patch on a live mainnet contract holding real funds.
+- **Known limitation (not fixed — flagged for a deliberate decision):** the contract checks the per-user stake cap only against each individual `stake()` call, never the user's cumulative `total_staked`. A user can bypass the intended ceiling by splitting a large stake across multiple calls. Fixing this requires a new contract version and a migration plan for existing stakers — out of scope for a routine patch on a live mainnet contract holding real funds.
 - **New Swap tab** (`SwapPanel`) — custom SOL ↔ FBiT swap UI built directly on Jupiter's Quote/Swap API, with a live GeckoTerminal price chart alongside it
 - **New Staking Calculator tab** — projects claim-only vs compound rewards for a chosen amount/APY/duration, no wallet connection required
 - **New `UsdValue` component** — live "~ $X" estimate shown next to FBiT amounts across Dashboard, Stake, History, Referral, Admin, and the calculator
-- **Admin panel: Blocked Users list** — count + per-address Unblock button (Solana via a discriminator-filtered `getProgramAccounts` scan, Polygon via `UserBlockedEvent`/`UserUnblockedEvent` log replay); the Ads Management tab was removed
+- **Admin panel: Blocked Users list** — count + per-address Unblock button (via a discriminator-filtered `getProgramAccounts` scan); the Ads Management tab was removed
 - **Nav reordered and code-split** — Dashboard → Swap → Stake → Referral → Calculator → History; every tab now loads via `next/dynamic` so switching tabs only pulls in that tab's JS
-- **Referral persistence fix** — Solana/Polygon referrer is now resolved independently, so a malformed `?ref=` URL param no longer wipes out a legitimately stored referrer
+- **Referral persistence fix** — referrer resolution no longer gets wiped out by a malformed `?ref=` URL param
 - **Claim/compound fee-recipient fallback fix** — a failed platform-state fetch now aborts before signing instead of silently defaulting the fee recipient to the user's own wallet
 - **Solana RPC rate-limiting storm fix** — history fetchers now batch `getParsedTransactions` (chunks of 50) instead of 100–200 individual calls, and space queued RPC requests ~120ms apart, eliminating repeated 429s from the Helius free tier
 - **Price feed fix** — the confirmed-correct FBiT/SOL pool is now pinned to the front of the price list regardless of liquidity ranking
 - **Dependency updates** — `@reown/appkit` + adapters, React, Tailwind, Recharts, Zustand and others bumped to latest compatible versions
 - **Support contact email** updated to `contact@futurebit.in` across Terms, Privacy Policy, and [SECURITY.md](SECURITY.md)
 
-### v1.6 — May 2026
+### v1.6 — May 2026 *(legacy Polygon deployment era)*
 
-- **Binance Web3 Wallet support** — Binance wallet now works on both Solana and Polygon networks via Reown WalletConnect
-- **3-layer Solana wallet resolution** — `getSolanaWallet()` now uses AppKit's `subscribeProviders` provider first, then address-matched browser extension, then legacy fallback — prevents Phantom from intercepting WalletConnect sessions
-- **Connected address tracking** — `subscribeAccount` in Reown tracks the connected Solana address to verify extension wallets match the user's chosen account
-- **New Vercel deployment** — Migrated to fresh project at [stake-futurebit.vercel.app](https://stake-futurebit.vercel.app) with all 18 environment variables configured
-- **WalletConnect fix** — Resolved "WalletConnect is not available" error caused by missing `NEXT_PUBLIC_REOWN_PROJECT_ID` on Vercel
-- **Binance wallet featured** — Added Binance Web3 Wallet to `featuredWalletIds` in Reown modal for quick discovery
+- Binance Web3 Wallet support added via Reown WalletConnect
+- 3-layer Solana wallet resolution — `getSolanaWallet()` uses AppKit's `subscribeProviders` provider first, then address-matched browser extension, then legacy fallback — prevents Phantom from intercepting WalletConnect sessions
+- Connected address tracking — `subscribeAccount` in Reown tracks the connected Solana address to verify extension wallets match the user's chosen account
+- New Vercel deployment — migrated to fresh project at [stake-futurebit.vercel.app](https://stake-futurebit.vercel.app) with all environment variables configured
+- WalletConnect fix — resolved "WalletConnect is not available" error caused by missing `NEXT_PUBLIC_REOWN_PROJECT_ID` on Vercel
+- Binance wallet featured in Reown modal for quick discovery
 
-### v1.5 — May 2026
+### v1.5 — May 2026 *(legacy Polygon deployment era)*
 
 - **History Panel** — New dedicated Activity History tab showing on-chain + local transaction records with summary stats (Total Staked, Unstaked, Claimed, Compound, Referral Earned, Team Bonus)
-- **On-chain history sync** — `queryFilterChunked` helper splits Polygon event log queries into 9,000-block chunks to stay within RPC limits; scans last 2,000,000 blocks automatically
 - **8 decimal places** — All FBiT token amounts now display with 8 decimal places throughout the UI
 - **Loading indicator** — History panel shows "Loading data from chain..." while syncing
 - **`userAccount.totalStaked`** — History panel Total Staked now reads directly from the contract's user struct (most reliable source)
 - **Live APY calculator** — Admin Panel Annual Emission section shows real-time APY preview as admin types a new emission value
 
-### v1.4 — April 2026
+### v1.4 — April 2026 *(legacy Polygon deployment era)*
 
-- **MAX APY reduced** — Changed from 500% to 250% cap (`MAX_APY_BPS = 25,000`) for sustainable tokenomics
-- **WFBIT token deployed** — New Polygon token `0xa31b5A95268CAd709e6691Ec2F2F107A3F36D945` replaces old address
-- **New staking contract** — `FBiTStaking` redeployed at `0xb86DA67406DaD482428704c14AdA269E9653FDca`
+- **MAX APY reduced** — changed to a 250% cap for sustainable tokenomics on that deployment
 - **Bot Management System** — Multi-layer bot detection (fingerprinting, behavioral analysis, TF.js Layer 7, Claude AI Layer 8)
-- **Security hardening** — Rate limiting, input validation, HTTP headers, Polygonscan API key removed from codebase
+- **Security hardening** — Rate limiting, input validation, HTTP headers, API keys removed from codebase
 - **Zustand store v5** — Upgraded from v4 to force fresh state after breaking changes
 
-### v1.3 — March 2026
+### v1.3 — March 2026 *(legacy Polygon deployment era)*
 
-- Multi-chain wallet connection (Solana + Polygon simultaneously)
+- Multi-chain wallet connection
 - Auto network switch on wallet connect
 - Referral Panel with 10-level commission tracking
 - Admin Panel with full on-chain controls
@@ -858,4 +723,4 @@ MIT — Free to use, modify, and distribute.
 
 ---
 
-*Built for the FBiT ecosystem. Multi-chain, autonomous, deflationary.*
+*Built for the FBiT ecosystem on Solana. Autonomous, deflationary, non-custodial.*

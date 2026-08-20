@@ -1,16 +1,13 @@
 'use client';
 
 import { createAppKit } from '@reown/appkit/react';
-import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { SolanaAdapter } from '@reown/appkit-adapter-solana';
-import { polygon, solana } from '@reown/appkit/networks';
+import { solana } from '@reown/appkit/networks';
 
 // Primary:  dashboard.walletconnect.com
 // Fallback: dashboard.reown.com
 const PRIMARY_PROJECT_ID  = (process.env.NEXT_PUBLIC_REOWN_PROJECT_ID  ?? '').trim();
 const FALLBACK_PROJECT_ID = (process.env.NEXT_PUBLIC_REOWN_PROJECT_ID_2 ?? '').trim();
-
-const ethersAdapter = new EthersAdapter();
 
 // Phantom, Solflare, and Backpack are all Wallet Standard-compliant and are
 // auto-detected by SolanaAdapter without being listed here. Explicitly passing
@@ -39,12 +36,12 @@ if (typeof window !== 'undefined') {
   const siteUrl = window.location.origin;
 
   const config = {
-    adapters:       [ethersAdapter, solanaAdapter],
-    networks:       [polygon, solana] as [typeof polygon, typeof solana],
-    defaultNetwork: polygon,
+    adapters:       [solanaAdapter],
+    networks:       [solana] as [typeof solana],
+    defaultNetwork: solana,
     metadata: {
-      name:        'Future Bit (FBiT) Staking',
-      description: 'Multi-Chain FBiT Token Staking & Referral Platform',
+      name:        'FutureBit',
+      description: 'FBiT Token Staking & Referral Platform on Solana',
       url:         siteUrl,
       icons:       [`${siteUrl}/favicon.ico`],
     },
