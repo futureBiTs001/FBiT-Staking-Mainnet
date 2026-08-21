@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Terms & Conditions',
-  description: 'Terms and Conditions for using the FBiT Staking platform. Read before using our DeFi staking services.',
+  description: 'Terms and Conditions for using the FutureBit Staking platform. Read before using our DeFi staking services.',
 };
 
 const EFFECTIVE_DATE = 'June 29, 2026';

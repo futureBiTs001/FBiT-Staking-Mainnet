@@ -40,14 +40,14 @@ const structuredData = {
       '@type': 'WebSite',
       '@id': `${BASE_URL}/#website`,
       url: BASE_URL,
-      name: 'FBiT Staking',
+      name: 'FutureBit Staking',
       description: 'FBiT token staking platform on Solana',
       publisher: { '@id': `${BASE_URL}/#organization` },
     },
     {
       '@type': 'WebApplication',
       '@id': `${BASE_URL}/#app`,
-      name: 'FBiT Staking Platform',
+      name: 'FutureBit Staking Platform',
       url: BASE_URL,
       applicationCategory: 'FinanceApplication',
       operatingSystem: 'Web Browser',
@@ -90,10 +90,10 @@ const structuredData = {
         },
         {
           '@type': 'Question',
-          name: 'Which blockchain does FBiT Staking run on?',
+          name: 'Which blockchain does FutureBit Staking run on?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'FBiT Staking runs on Solana Mainnet — stake FBiT tokens using Phantom, Solflare, or any Solana wallet.',
+            text: 'FutureBit Staking runs on Solana Mainnet — stake FBiT tokens using Phantom, Solflare, or any Solana wallet.',
           },
         },
         {
@@ -101,7 +101,7 @@ const structuredData = {
           name: 'What is the referral commission in FBiT staking?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'FBiT Staking offers a 10-level referral system. Total commission across all levels is 30%: Level 1: 0.25%, Level 2: 0.5%, Level 3: 1.25%, up to Level 10: 8%. Commissions are paid automatically on-chain.',
+            text: 'FutureBit Staking offers a 10-level referral system. Total commission across all levels is 30%: Level 1: 0.25%, Level 2: 0.5%, Level 3: 1.25%, up to Level 10: 8%. Commissions are paid automatically on-chain.',
           },
         },
         {
@@ -109,7 +109,7 @@ const structuredData = {
           name: 'Is FBiT staking safe?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'FBiT Staking is non-custodial — your tokens never leave your wallet. The smart contracts are open-source and verifiable on Solana Explorer. No KYC or personal data is required.',
+            text: 'FutureBit Staking is non-custodial — your tokens never leave your wallet. The smart contracts are open-source and verifiable on Solana Explorer. No KYC or personal data is required.',
           },
         },
       ],
@@ -121,8 +121,8 @@ export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
 
   title: {
-    default: 'FBiT Staking — Earn Dynamic APY on Solana',
-    template: '%s | FBiT Staking',
+    default: 'FutureBit Staking — Earn Dynamic APY on Solana',
+    template: '%s | FutureBit Staking',
   },
   description:
     'Stake FBiT tokens on Solana. Earn dynamic Proof-of-Stake APY up to 300%, build a 10-level referral network, and get Team Target Bonuses. Non-custodial, open-source, no KYC.',
@@ -143,8 +143,8 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     url: BASE_URL,
-    siteName: 'FBiT Staking',
-    title: 'FBiT Staking — Earn Dynamic APY on Solana',
+    siteName: 'FutureBit Staking',
+    title: 'FutureBit Staking — Earn Dynamic APY on Solana',
     description:
       'Stake FBiT on Solana. Dynamic APY up to 300%, 10-level referrals, deflationary burn. Non-custodial & open-source.',
     images: [
@@ -152,7 +152,7 @@ export const metadata: Metadata = {
         url: `${BASE_URL}/opengraph-image`,
         width: 1200,
         height: 630,
-        alt: 'FBiT Staking — Solana DeFi Platform',
+        alt: 'FutureBit Staking — Solana DeFi Platform',
       },
     ],
     locale: 'en_US',
@@ -162,7 +162,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     site: '@FutureBiT_Token',
     creator: '@FutureBiT_Token',
-    title: 'FBiT Staking — Earn Dynamic APY on Solana',
+    title: 'FutureBit Staking — Earn Dynamic APY on Solana',
     description:
       'Stake FBiT on Solana. Dynamic APY up to 300%, 10-level referrals, deflationary burn.',
     images: [`${BASE_URL}/opengraph-image`],
