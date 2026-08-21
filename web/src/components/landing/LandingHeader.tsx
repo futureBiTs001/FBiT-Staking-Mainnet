@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 
 const NAV_LINKS = [
@@ -18,6 +18,65 @@ const WHITEPAPER_URL = 'https://github.com/futurebitsmaxx/FBiT-Staking-Mainnet/b
 const BROCHURE_URL   = '/brochure.pdf';
 const FBIT_MINT      = '5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME';
 const VERIFY_URL     = `https://solscan.io/token/${FBIT_MINT}`;
+
+// Secondary/utility links — consolidated into a single "Resources" dropdown
+// instead of sitting inline in the header, which got cluttered as more of
+// these were added over time.
+const RESOURCE_LINKS = [
+  { href: VERIFY_URL,     label: 'Verify Token', icon: '🛡', external: true,  accent: true },
+  { href: '/guide',       label: 'Guide',        icon: '📖', external: false, accent: false },
+  { href: WHITEPAPER_URL, label: 'Whitepaper',   icon: '📄', external: true,  accent: false },
+  { href: BROCHURE_URL,   label: 'Brochure',     icon: '📑', external: true,  accent: false, download: true },
+];
+
+function ResourcesDropdown() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative hidden xl:block">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 text-sm font-display text-text-secondary hover:text-text-primary hover:bg-white/5 rounded-lg px-3 py-2 transition-all"
+      >
+        Resources
+        <span className={`text-[10px] transition-transform duration-200 ${open ? 'rotate-180' : ''}`}>▾</span>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-52 glass-card p-1.5 animate-fade-in">
+          {RESOURCE_LINKS.map((item) => (
+            <a
+              key={item.label}
+              href={item.href}
+              target={item.external ? '_blank' : undefined}
+              rel={item.external ? 'noopener noreferrer' : undefined}
+              download={item.download}
+              onClick={() => setOpen(false)}
+              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-display transition-all ${
+                item.accent
+                  ? 'text-[#9945FF] hover:bg-[#9945FF]/10 hover:text-[#14F195]'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
+              }`}
+            >
+              <span>{item.icon}</span> {item.label}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function LandingHeader() {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -40,7 +99,7 @@ export default function LandingHeader() {
           </Link>
 
           {/* Desktop Nav — full row only at xl; below that everything moves into the
-              hamburger menu, so the extra Guide/Whitepaper/Verify links can't overflow. */}
+              hamburger menu, so the Resources dropdown can't overflow. */}
           <nav className="hidden xl:flex items-center gap-0.5">
             {NAV_LINKS.map((item) => (
               <a
@@ -55,36 +114,7 @@ export default function LandingHeader() {
 
           {/* Right side */}
           <div className="flex items-center gap-2">
-            <a
-              href={VERIFY_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Verify the FBiT token contract on Solscan"
-              className="hidden xl:inline-flex items-center gap-1.5 text-sm font-display px-3 py-2 rounded-lg border border-[#9945FF]/30 text-[#9945FF] hover:bg-[#9945FF]/10 hover:border-[#14F195]/50 hover:text-[#14F195] transition-all"
-            >
-              <span>🛡</span> Verify Token
-            </a>
-            <Link
-              href="/guide"
-              className="hidden xl:inline-block text-sm font-display text-text-secondary hover:text-text-primary transition-colors px-2"
-            >
-              Guide
-            </Link>
-            <a
-              href={WHITEPAPER_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden xl:inline-block text-sm font-display text-text-secondary hover:text-text-primary transition-colors px-2"
-            >
-              Whitepaper
-            </a>
-            <a
-              href={BROCHURE_URL}
-              download
-              className="hidden xl:inline-block text-sm font-display text-text-secondary hover:text-text-primary transition-colors px-2"
-            >
-              Brochure
-            </a>
+            <ResourcesDropdown />
             <Link href="/app" className="btn-primary text-xs sm:text-sm px-4 sm:px-6 py-2 sm:py-2.5">
               Launch App
             </Link>
@@ -119,37 +149,24 @@ export default function LandingHeader() {
                   {item.label}
                 </a>
               ))}
-              <a
-                href={VERIFY_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => setShowMobileMenu(false)}
-                className="px-4 py-3 rounded-xl font-display text-sm text-[#9945FF] hover:bg-[#9945FF]/10 transition-all flex items-center gap-2"
-              >
-                🛡 Verify Token
-              </a>
-              <Link
-                href="/guide"
-                onClick={() => setShowMobileMenu(false)}
-                className="px-4 py-3 rounded-xl font-display text-sm text-text-secondary hover:text-text-primary hover:bg-white/5 transition-all"
-              >
-                Guide
-              </Link>
-              <a
-                href={WHITEPAPER_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-3 rounded-xl font-display text-sm text-text-secondary hover:text-text-primary hover:bg-white/5 transition-all"
-              >
-                Whitepaper
-              </a>
-              <a
-                href={BROCHURE_URL}
-                download
-                className="px-4 py-3 rounded-xl font-display text-sm text-text-secondary hover:text-text-primary hover:bg-white/5 transition-all"
-              >
-                Brochure
-              </a>
+              <div className="my-2 border-t border-white/10" />
+              {RESOURCE_LINKS.map((item) => (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  target={item.external ? '_blank' : undefined}
+                  rel={item.external ? 'noopener noreferrer' : undefined}
+                  download={item.download}
+                  onClick={() => setShowMobileMenu(false)}
+                  className={`px-4 py-3 rounded-xl font-display text-sm transition-all flex items-center gap-2 ${
+                    item.accent
+                      ? 'text-[#9945FF] hover:bg-[#9945FF]/10'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
+                  }`}
+                >
+                  <span>{item.icon}</span> {item.label}
+                </a>
+              ))}
             </div>
           </nav>
         )}
