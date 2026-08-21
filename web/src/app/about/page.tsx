@@ -4,6 +4,9 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'About Us',
   description: 'Learn about FutureBit and the FBiT staking platform built on Solana.',
+  alternates: {
+    canonical: '/about/',
+  },
 };
 
 export default function AboutPage() {
