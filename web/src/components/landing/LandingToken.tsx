@@ -13,15 +13,11 @@ function copyMint() {
   toast.success('Mint address copied!');
 }
 
-const INFO_ROWS = [
-  { label: 'Token Name',      value: 'FutureBit' },
-  { label: 'Symbol',          value: 'FBiT' },
-  { label: 'Network',         value: 'Solana Mainnet' },
-  { label: 'Standard',        value: 'SPL Token' },
-  { label: 'Total Supply',    value: '250,000,000 FBiT' },
-  { label: 'Decimals',        value: '9' },
-  { label: 'Mint Authority',  value: 'Renounced (fixed supply)' },
-  { label: 'Liquidity',       value: '100% locked / burned' },
+const STATS = [
+  { icon: '🪙', label: 'Total Supply',   value: '250M',       sub: 'FBiT, fixed forever' },
+  { icon: '🔢', label: 'Decimals',       value: '9',          sub: 'SPL token precision' },
+  { icon: '🔒', label: 'Mint Authority', value: 'Renounced',  sub: 'No new tokens, ever' },
+  { icon: '💧', label: 'Liquidity',      value: '100%',       sub: 'Locked / burned' },
 ];
 
 export default function LandingToken() {
@@ -37,12 +33,36 @@ export default function LandingToken() {
       </Reveal>
 
       <Reveal delay={80}>
-        <div className="glass-card">
-          <div className="grid sm:grid-cols-2 gap-x-8 gap-y-3">
-            {INFO_ROWS.map((row) => (
-              <div key={row.label} className="flex items-center justify-between text-sm border-b border-white/5 pb-2">
-                <span className="text-text-muted">{row.label}</span>
-                <span className="font-mono text-text-secondary text-right">{row.value}</span>
+        <div className="glass-card overflow-hidden">
+          {/* Identity strip */}
+          <div className="flex flex-wrap items-center gap-4 pb-6 mb-6 border-b border-white/10">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="FBiT logo" className="w-14 h-14 rounded-2xl object-cover shrink-0" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-display font-bold text-xl">FutureBit</h3>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-display font-bold bg-brand-500/15 text-brand-400 border border-brand-500/30">
+                  FBiT
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mt-1.5 text-xs text-text-muted flex-wrap">
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#9945FF]" /> Solana Mainnet
+                </span>
+                <span className="text-white/15">·</span>
+                <span>SPL Token</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Stat grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {STATS.map((s) => (
+              <div key={s.label} className="rounded-xl bg-white/3 border border-white/10 px-4 py-3.5 text-center">
+                <div className="text-lg mb-1">{s.icon}</div>
+                <p className="font-display font-bold text-base sm:text-lg text-text-primary">{s.value}</p>
+                <p className="text-text-muted text-[10px] uppercase tracking-wider mt-0.5">{s.label}</p>
+                <p className="text-text-muted/70 text-[10px] mt-0.5 leading-tight hidden sm:block">{s.sub}</p>
               </div>
             ))}
           </div>
