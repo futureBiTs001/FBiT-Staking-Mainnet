@@ -114,6 +114,12 @@ export default function LandingHeader() {
 
           {/* Right side */}
           <div className="flex items-center gap-2">
+            <Link
+              href="/launch"
+              className="hidden lg:inline-flex items-center gap-1.5 text-xs font-display font-bold uppercase tracking-wider px-3 py-1.5 rounded-full bg-brand-500/15 text-brand-400 border border-brand-500/30 hover:bg-brand-500/25 transition-all"
+            >
+              🎉 We're Live
+            </Link>
             <ResourcesDropdown />
             <Link href="/app" className="btn-primary text-xs sm:text-sm px-4 sm:px-6 py-2 sm:py-2.5">
               Launch App
@@ -139,6 +145,13 @@ export default function LandingHeader() {
         {showMobileMenu && (
           <nav className="xl:hidden pb-4 animate-slide-up">
             <div className="flex flex-col gap-1">
+              <Link
+                href="/launch"
+                onClick={() => setShowMobileMenu(false)}
+                className="px-4 py-3 rounded-xl font-display font-bold text-sm text-brand-400 bg-brand-500/10 hover:bg-brand-500/15 transition-all flex items-center gap-2 mb-1"
+              >
+                🎉 We're Live
+              </Link>
               {NAV_LINKS.map((item) => (
                 <a
                   key={item.href}
