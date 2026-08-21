@@ -26,6 +26,10 @@ const FAQS = [
     q: 'Is FBiT staking safe?',
     a: 'FBiT Staking is non-custodial — your tokens never leave your wallet. The smart contracts are open-source and verifiable on Solana Explorer. No KYC or personal data is required.',
   },
+  {
+    q: 'Is FutureBit Staking the same company as FutureBit (Apollo Bitcoin miners)?',
+    a: 'No. FutureBit Staking (ticker FBiT) at stake.futurebit.in is an independent Solana DeFi staking protocol and is not affiliated with FutureBit LLC, the maker of Apollo Bitcoin mining hardware. The two are separate, unrelated projects that happen to share a similar name.',
+  },
 ];
 
 export default function LandingFAQ() {
