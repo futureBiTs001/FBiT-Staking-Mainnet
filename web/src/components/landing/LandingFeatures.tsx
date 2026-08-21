@@ -19,7 +19,7 @@ const FEATURES = [
   {
     icon: '◎',
     title: '10-Level Referrals',
-    desc: 'Earn commission up to 10 levels deep — up to 30% total, paid automatically on-chain.',
+    desc: 'Earn commission up to 10 levels deep — up to 17.75% total, paid automatically on-chain.',
     color: 'text-accent-cyan',
   },
   {

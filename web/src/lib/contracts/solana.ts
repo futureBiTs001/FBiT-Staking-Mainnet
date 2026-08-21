@@ -147,9 +147,12 @@ function getProgramId(): PublicKey {
 const DECIMALS   = 9;
 const SCALE      = 10 ** DECIMALS;
 
-// Referral commission percentages in BPS — mirrors the contract's REFERRAL_PERCENTAGES.
-// Index 0 = Level 1 (direct), index 9 = Level 10.
-const REFERRAL_BPS = [25, 50, 125, 150, 200, 325, 350, 425, 550, 800] as const;
+// Referral commission percentages in BPS — fallback only. Mirrors the LIVE
+// on-chain Platform.referral_percentages (verified 2026-08-21), not the
+// contract's DEFAULT_REFERRAL_PERCENTAGES constant (30% total) — an admin
+// changed this on-chain post-deploy to a lower, evenly-stepped curve (17.75%
+// total). Index 0 = Level 1 (direct), index 9 = Level 10.
+const REFERRAL_BPS = [25, 50, 125, 150, 175, 200, 225, 250, 275, 300] as const;
 
 // Cache for program.account.userAccount.all() — expires after 2 minutes.
 // Shared across all callers (bfsReferralTree + solanaGetReferralInfo) so a

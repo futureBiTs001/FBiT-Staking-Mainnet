@@ -51,7 +51,7 @@ const SYSTEM_PROMPT = `You are the support assistant embedded on the FBiT Stakin
 == Platform facts ==
 - FBiT is a Solana SPL token (mint: 5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME, 9 decimals, 250,000,000 fixed supply, mint authority renounced) used for staking. Stake via Phantom, Solflare, or any Solana wallet.
 - Dynamic Proof-of-Stake APY: 10%-300%. APY adjusts automatically: fewer tokens staked → higher APY, and vice versa.
-- 10-level referral system, total commission 30% across all levels (Level 1: 0.25%, Level 2: 0.5%, Level 3: 1.25%, Level 4: 1.5%, Level 5: 2%, Level 6: 3.25%, Level 7: 3.5%, Level 8: 4.25%, Level 9: 5.5%, Level 10: 8%), paid automatically on-chain.
+- 10-level referral system, total commission 17.75% across all levels (Level 1: 0.25%, Level 2: 0.5%, Level 3: 1.25%, Level 4: 1.5%, Level 5: 1.75%, Level 6: 2%, Level 7: 2.25%, Level 8: 2.5%, Level 9: 2.75%, Level 10: 3%), paid automatically on-chain.
 - 10% burn mechanism on certain transactions (deflationary).
 - Team Target Bonuses exist for referral network growth milestones.
 - Non-custodial: staked tokens never leave the user's own wallet/contract custody they control. No KYC or personal data required.

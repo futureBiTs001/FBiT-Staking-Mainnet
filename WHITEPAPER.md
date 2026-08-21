@@ -35,7 +35,7 @@ Key highlights:
 
 - Up to **300% APY** (dynamic, PoS-based, 10% floor)
 - **30-day lock period** with 6-hour claim intervals
-- **10-level referral rewards** totaling **30%** passive income
+- **10-level referral rewards** totaling **17.75%** passive income
 - **10-tier team bonus** (Bronze → Titan) up to +10% additional APY
 - **120,000,000 FBiT reserve** funding a **12,000,000 FBiT/year** target emission
 - **Deflationary burn** on every claim, compound, and unstake
@@ -265,13 +265,15 @@ FBiT's referral system is one of its most distinctive features. When a user regi
 | 2         | **0.50%**  |
 | 3         | **1.25%**  |
 | 4         | **1.50%**  |
-| 5         | **2.00%**  |
-| 6         | **3.25%**  |
-| 7         | **3.50%**  |
-| 8         | **4.25%**  |
-| 9         | **5.50%**  |
-| 10        | **8.00%**  |
-| **Total** | **~30.0%** |
+| 5         | **1.75%**  |
+| 6         | **2.00%**  |
+| 7         | **2.25%**  |
+| 8         | **2.50%**  |
+| 9         | **2.75%**  |
+| 10        | **3.00%**  |
+| **Total** | **17.75%** |
+
+The contract's built-in default (`DEFAULT_REFERRAL_PERCENTAGES`) is a steeper curve totaling 30% — the table above reflects the live on-chain values currently set via `set_referral_percentages`, which is what stakers actually earn today.
 
 Percentages are applied to each claimant's **reward amount**, not their stake principal. They are paid from the reward pool, not deducted from the claimant.
 

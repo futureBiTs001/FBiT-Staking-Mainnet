@@ -101,7 +101,7 @@ const structuredData = {
           name: 'What is the referral commission in FBiT staking?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'FutureBit Staking offers a 10-level referral system. Total commission across all levels is 30%: Level 1: 0.25%, Level 2: 0.5%, Level 3: 1.25%, up to Level 10: 8%. Commissions are paid automatically on-chain.',
+            text: 'FutureBit Staking offers a 10-level referral system. Total commission across all levels is 17.75%: Level 1: 0.25%, Level 2: 0.5%, Level 3: 1.25%, up to Level 10: 3%. Commissions are paid automatically on-chain.',
           },
         },
         {

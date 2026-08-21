@@ -26,17 +26,24 @@ export const LOCK_PERIOD = { days: 30, label: '30 Days' };
 export const DYNAMIC_APY = 60;
 
 // ===== REFERRAL LEVELS =====
+// Fallback only — mirrors the LIVE on-chain Platform.referral_percentages
+// (verified directly against the mainnet account 2026-08-21), which an admin
+// changed away from the contract's DEFAULT_REFERRAL_PERCENTAGES (30% total,
+// see lib.rs) to this lower, evenly-stepped curve (17.75% total) at some
+// point post-deploy. Update this if set_referral_percentages is ever called
+// again — live data (Platform.referralPercentages) always overrides this
+// wherever it's fetched successfully.
 export const REFERRAL_LEVELS = [
   { level: 1, percentage: 0.25 },
   { level: 2, percentage: 0.50 },
   { level: 3, percentage: 1.25 },
   { level: 4, percentage: 1.50 },
-  { level: 5, percentage: 2.00 },
-  { level: 6, percentage: 3.25 },
-  { level: 7, percentage: 3.50 },
-  { level: 8, percentage: 4.25 },
-  { level: 9, percentage: 5.50 },
-  { level: 10, percentage: 8.00 },
+  { level: 5, percentage: 1.75 },
+  { level: 6, percentage: 2.00 },
+  { level: 7, percentage: 2.25 },
+  { level: 8, percentage: 2.50 },
+  { level: 9, percentage: 2.75 },
+  { level: 10, percentage: 3.00 },
 ] as const;
 
 // ===== TEAM TARGET BONUS TIERS =====

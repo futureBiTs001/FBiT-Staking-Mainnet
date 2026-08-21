@@ -41,10 +41,10 @@ FBiT Staking is a fully on-chain staking DApp where users lock FBiT tokens for *
 | APY Range | 10% – 300% (auto-adjusting, PoS) |
 | Burn Rate | 10% of gross reward, adjustable 0–50% by admin |
 | Referral Levels | 10 levels deep |
-| Referral Total | 30% distributed across all 10 levels |
+| Referral Total | 17.75% distributed across all 10 levels (live on-chain config; contract default is 30%) |
 | Team Bonus | Up to +10% on top of staking rewards |
 | Network | Solana Mainnet |
-| Platform Fee | 1% on all operations (removed after ownership renouncement) |
+| Platform Fee | 1% on all operations (applies before and after ownership renouncement — see v2.1) |
 | AI Support Chat | Claude-powered widget answering platform FAQs (`/api/support-chat`) |
 
 ---
@@ -151,13 +151,13 @@ When user A refers user B (and B stakes), users in the referral chain up to 10 l
 | 2 | 0.50% | Referrer's referrer |
 | 3 | 1.25% | Level 3 upline |
 | 4 | 1.50% | Level 4 upline |
-| 5 | 2.00% | Level 5 upline |
-| 6 | 3.25% | Level 6 upline |
-| 7 | 3.50% | Level 7 upline |
-| 8 | 4.25% | Level 8 upline |
-| 9 | 5.50% | Level 9 upline |
-| 10 | 8.00% | Level 10 upline |
-| **Total** | **30.00%** | Distributed instantly on stake |
+| 5 | 1.75% | Level 5 upline |
+| 6 | 2.00% | Level 6 upline |
+| 7 | 2.25% | Level 7 upline |
+| 8 | 2.50% | Level 8 upline |
+| 9 | 2.75% | Level 9 upline |
+| 10 | 3.00% | Level 10 upline |
+| **Total** | **17.75%** | Distributed instantly on stake (contract default is 30% — an admin lowered this on-chain post-deploy) |
 
 Referral commissions are paid **immediately** when the downstream user stakes — no waiting for claims.
 
@@ -654,6 +654,10 @@ npm start
 ---
 
 ## 17. Changelog
+
+### v2.2 — August 2026
+
+**Referral commission mismatch fixed — frontend/docs said 30%, live contract pays 17.75%.** Queried the mainnet Platform account's `referral_percentages` field directly and found it no longer matches the contract's `DEFAULT_REFERRAL_PERCENTAGES` (30% total) set at `initialize()` — at some point an admin called `set_referral_percentages` to a lower, evenly-stepped curve (0.25% → 3.00% per level, 17.75% total) that was never reflected outside the app's own live-data-aware components. The in-app Referral tab was already correct (it fetches live `Platform.referralPercentages` and only falls back to a static constant when that fetch fails), but the landing page's Rewards section, both FAQ copies (visible + structured data), Features grid, Terms page, AI support chat's system prompt, the marketing PDF, the whitepaper, and this README's own reference tables all still quoted the old 30% figure and per-level breakdown. Updated every one of them to 17.75%, and updated the two fallback constants (`REFERRAL_LEVELS` in `types/index.ts`, `REFERRAL_BPS` in `lib/contracts/solana.ts`) so the safety-net values match reality too, not just the always-correct live path.
 
 ### v2.1 — August 2026
 

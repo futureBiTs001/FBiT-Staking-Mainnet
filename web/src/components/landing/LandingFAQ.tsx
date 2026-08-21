@@ -20,7 +20,7 @@ const FAQS = [
   },
   {
     q: 'What is the referral commission in FBiT staking?',
-    a: 'FBiT Staking offers a 10-level referral system. Total commission across all levels is up to 30%: Level 1: 0.25%, Level 2: 0.5%, Level 3: 1.25%, up to Level 10: 8%. Commissions are paid automatically on-chain.',
+    a: 'FBiT Staking offers a 10-level referral system. Total commission across all levels is up to 17.75%: Level 1: 0.25%, Level 2: 0.5%, Level 3: 1.25%, up to Level 10: 3%. Commissions are paid automatically on-chain.',
   },
   {
     q: 'Is FBiT staking safe?',
