@@ -14,6 +14,7 @@ const NAV_LINKS = [
 ];
 
 const WHITEPAPER_URL = 'https://github.com/futurebitsmaxx/FBiT-Staking-Mainnet/blob/main/WHITEPAPER.md';
+const BROCHURE_URL   = '/brochure.pdf';
 const FBIT_MINT      = '5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME';
 const VERIFY_URL     = `https://solscan.io/token/${FBIT_MINT}`;
 
@@ -76,6 +77,13 @@ export default function LandingHeader() {
             >
               Whitepaper
             </a>
+            <a
+              href={BROCHURE_URL}
+              download
+              className="hidden xl:inline-block text-sm font-display text-text-secondary hover:text-text-primary transition-colors px-2"
+            >
+              Brochure
+            </a>
             <Link href="/app" className="btn-primary text-xs sm:text-sm px-4 sm:px-6 py-2 sm:py-2.5">
               Launch App
             </Link>
@@ -133,6 +141,13 @@ export default function LandingHeader() {
                 className="px-4 py-3 rounded-xl font-display text-sm text-text-secondary hover:text-text-primary hover:bg-white/5 transition-all"
               >
                 Whitepaper
+              </a>
+              <a
+                href={BROCHURE_URL}
+                download
+                className="px-4 py-3 rounded-xl font-display text-sm text-text-secondary hover:text-text-primary hover:bg-white/5 transition-all"
+              >
+                Brochure
               </a>
             </div>
           </nav>
