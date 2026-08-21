@@ -24,7 +24,8 @@ const structuredData = {
     {
       '@type': 'Organization',
       '@id': `${BASE_URL}/#organization`,
-      name: 'FutureBit',
+      name: 'FutureBit Staking',
+      alternateName: ['FBiT Staking', 'FBiT'],
       url: BASE_URL,
       logo: {
         '@type': 'ImageObject',
@@ -41,6 +42,7 @@ const structuredData = {
       '@id': `${BASE_URL}/#website`,
       url: BASE_URL,
       name: 'FutureBit Staking',
+      alternateName: 'FBiT Staking',
       description: 'FBiT token staking platform on Solana',
       publisher: { '@id': `${BASE_URL}/#organization` },
     },
@@ -121,7 +123,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
 
   title: {
-    default: 'FutureBit Staking — Earn Dynamic APY on Solana',
+    default: 'FutureBit Staking (FBiT) — Earn Dynamic APY on Solana',
     template: '%s | FutureBit Staking',
   },
   description:
@@ -144,7 +146,7 @@ export const metadata: Metadata = {
     type: 'website',
     url: BASE_URL,
     siteName: 'FutureBit Staking',
-    title: 'FutureBit Staking — Earn Dynamic APY on Solana',
+    title: 'FutureBit Staking (FBiT) — Earn Dynamic APY on Solana',
     description:
       'Stake FBiT on Solana. Dynamic APY up to 300%, 10-level referrals, deflationary burn. Non-custodial & open-source.',
     images: [
@@ -162,7 +164,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     site: '@FutureBiT_Token',
     creator: '@FutureBiT_Token',
-    title: 'FutureBit Staking — Earn Dynamic APY on Solana',
+    title: 'FutureBit Staking (FBiT) — Earn Dynamic APY on Solana',
     description:
       'Stake FBiT on Solana. Dynamic APY up to 300%, 10-level referrals, deflationary burn.',
     images: [`${BASE_URL}/opengraph-image`],
