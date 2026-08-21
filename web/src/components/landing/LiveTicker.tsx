@@ -1,9 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTokenPrice } from '@/hooks/useTokenPrice';
+import { NETWORK_CONFIG } from '@/lib/config';
 
 const TOTAL_SUPPLY = 250_000_000;
+const HOLDERS_REFRESH_MS = 60_000;
 
 function formatPrice(n: number): string {
   return n < 0.01 ? `$${n.toPrecision(3)}` : `$${n.toFixed(4)}`;
@@ -13,9 +15,13 @@ function formatCompactUsd(n: number): string {
   return `$${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(n)}`;
 }
 
+function formatCompactNumber(n: number): string {
+  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
+}
+
 function Stat({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <span className="flex items-center gap-1.5 shrink-0">
+    <span className="flex items-center gap-2 shrink-0">
       <span className="text-text-muted tracking-wider">{label}</span>
       <span className="text-text-primary font-semibold">{children}</span>
     </span>
@@ -31,10 +37,63 @@ function PriceChange({ pct }: { pct: number }) {
   );
 }
 
+/** Total SPL token accounts for the FBiT mint, via Helius's `getTokenAccounts`
+ *  DAS extension (only available when NEXT_PUBLIC_HELIUS_API_KEY is set — falls
+ *  back to hidden rather than erroring if the configured RPC doesn't support it).
+ *  `result.total` is just the page size, not a grand total, so accounts are
+ *  actually counted page by page via `cursor` (capped at 5 pages / 5000 accounts —
+ *  fine for now, and avoids an unbounded loop if the holder base grows a lot). */
+function useHolderCount(): number | null {
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      const mint = NETWORK_CONFIG.solana.stakeTokenAddress;
+      if (!mint) return;
+      try {
+        let total = 0;
+        let cursor: string | undefined;
+        for (let page = 0; page < 5; page++) {
+          const res = await fetch(NETWORK_CONFIG.solana.rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 'holders',
+              method: 'getTokenAccounts',
+              params: { mint, limit: 1000, cursor },
+            }),
+          });
+          if (!res.ok) break;
+          const json = await res.json();
+          const accounts = json?.result?.token_accounts;
+          if (!Array.isArray(accounts) || accounts.length === 0) break;
+          total += accounts.length;
+          cursor = json?.result?.cursor;
+          if (accounts.length < 1000 || !cursor) break;
+        }
+        if (!cancelled && total > 0) setCount(total);
+      } catch {
+        /* silently hidden — not every RPC provider supports this method */
+      }
+    }
+
+    load();
+    const timer = setInterval(load, HOLDERS_REFRESH_MS);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, []);
+
+  return count;
+}
+
 /** Sticky bottom live-stats bar for the marketing homepage — price/24h/mcap/liquidity
- *  from the same GeckoTerminal-backed hook already used for the Stake/Swap tabs. */
+ *  from the same GeckoTerminal-backed hook already used for the Stake/Swap tabs, plus
+ *  a holder count from Helius. */
 export default function LiveTicker() {
   const { pairs, isLoading } = useTokenPrice();
+  const holders = useHolderCount();
   const pair = pairs[0];
 
   const price     = pair ? parseFloat(pair.priceUsd) : null;
@@ -44,16 +103,17 @@ export default function LiveTicker() {
 
   return (
     <div className="fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-surface-dark/95 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-10 flex items-center gap-5 sm:gap-7 overflow-x-auto text-[11px] sm:text-xs font-mono">
-        <span className="flex items-center gap-1.5 shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse" />
-          <span className="text-brand-400 font-display font-semibold tracking-wider">LIVE</span>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-center gap-6 sm:gap-10 overflow-x-auto text-sm sm:text-base font-mono">
+        <span className="flex items-center gap-2 shrink-0">
+          <span className="w-2 h-2 rounded-full bg-brand-400 animate-pulse" />
+          <span className="text-brand-400 font-display font-bold tracking-wider">LIVE</span>
         </span>
 
         <Stat label="MCAP">{marketCap != null ? formatCompactUsd(marketCap) : (isLoading ? '···' : '—')}</Stat>
         <Stat label="24H">{change != null ? <PriceChange pct={change} /> : (isLoading ? '···' : '—')}</Stat>
         <Stat label="PRICE">{price != null ? formatPrice(price) : (isLoading ? '···' : '—')}</Stat>
         <Stat label="LIQ">{liquidity != null ? formatCompactUsd(liquidity) : (isLoading ? '···' : '—')}</Stat>
+        {holders != null && <Stat label="HOLDERS">{formatCompactNumber(holders)}</Stat>}
       </div>
     </div>
   );
