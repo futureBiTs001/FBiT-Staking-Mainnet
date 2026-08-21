@@ -2,8 +2,6 @@ import '@/styles/globals.css';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import Script from 'next/script';
-import { WalletProvider } from '@/context/WalletContext';
-import { AppKitProvider } from '@/providers/AppKitProvider';
 import ExtensionErrorSuppressor from '@/components/ExtensionErrorSuppressor';
 import DataMigration from '@/components/DataMigration';
 import { warnMissingEnv } from '@/lib/security';
@@ -257,17 +255,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
         <AdsManager />
         <ExtensionErrorSuppressor />
-        <AppKitProvider>
-          <WalletProvider>
-            <DataMigration />
-            <div className="bg-mesh fixed inset-0" />
-            <div className="grid-pattern fixed inset-0" />
-            <div className="relative z-10 min-h-screen">
-              {children}
-            </div>
-            <SupportChat />
-          </WalletProvider>
-        </AppKitProvider>
+        <DataMigration />
+        <div className="bg-mesh fixed inset-0" />
+        <div className="grid-pattern fixed inset-0" />
+        <div className="relative z-10 min-h-screen">
+          {children}
+        </div>
+        <SupportChat />
       </body>
     </html>
   );
