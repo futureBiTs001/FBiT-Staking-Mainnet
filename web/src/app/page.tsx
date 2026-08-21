@@ -9,6 +9,7 @@ import LandingRoadmap from '@/components/landing/LandingRoadmap';
 import LandingFeatures from '@/components/landing/LandingFeatures';
 import LandingRewards from '@/components/landing/LandingRewards';
 import LandingFAQ from '@/components/landing/LandingFAQ';
+import LiveTicker from '@/components/landing/LiveTicker';
 
 export default function HomePage() {
   return (
@@ -27,7 +28,7 @@ export default function HomePage() {
         <LandingFAQ />
       </main>
 
-      <footer className="border-t border-white/5 mt-12">
+      <footer className="border-t border-white/5 mt-12 pb-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
@@ -51,6 +52,8 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+
+      <LiveTicker />
     </>
   );
 }
