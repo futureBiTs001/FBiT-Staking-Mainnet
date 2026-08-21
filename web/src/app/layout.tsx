@@ -193,7 +193,10 @@ export const metadata: Metadata = {
   },
 
   verification: {
-    google: 'BxzT8iTO3x-tAefZfNaA4H9Z0JC8edGS61YFWRw4ca4',
+    google: [
+      'BxzT8iTO3x-tAefZfNaA4H9Z0JC8edGS61YFWRw4ca4',
+      '9luXnlk5ESpDm2a3zgJGB5URsqbPkzQIkysnpSzq49g',
+    ],
   },
 };
 
