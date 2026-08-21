@@ -2,6 +2,7 @@ import Link from 'next/link';
 import LandingHeader from '@/components/landing/LandingHeader';
 import LandingHero from '@/components/landing/LandingHero';
 import LandingStats from '@/components/landing/LandingStats';
+import LandingExchanges from '@/components/landing/LandingExchanges';
 import LandingToken from '@/components/landing/LandingToken';
 import LandingTokenomics from '@/components/landing/LandingTokenomics';
 import LandingSecurity from '@/components/landing/LandingSecurity';
@@ -19,6 +20,7 @@ export default function HomePage() {
       <main className="max-w-7xl mx-auto w-full">
         <LandingHero />
         <LandingStats />
+        <LandingExchanges />
         <LandingToken />
         <LandingRewards />
         <LandingTokenomics />

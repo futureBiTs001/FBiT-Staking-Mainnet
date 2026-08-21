@@ -5,6 +5,7 @@ import Link from 'next/link';
 
 const NAV_LINKS = [
   { href: '#stats',      label: 'Stats' },
+  { href: '#exchanges',  label: 'Trade' },
   { href: '#token',      label: 'Token' },
   { href: '#rewards',    label: 'Rewards' },
   { href: '#tokenomics', label: 'Tokenomics' },
