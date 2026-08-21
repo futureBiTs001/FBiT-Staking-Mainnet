@@ -655,8 +655,6 @@ npm start
 
 ## 17. Changelog
 
-> These entries are a historical record and are left as originally written, including references to the Polygon deployment that was part of the platform at the time. The platform is Solana-only as of the most recent entries below.
-
 ### v2.1 — August 2026
 
 **Critical security fix — orphaned pre-migration stakes could drain the reserve.** After the v2.0 mint migration, 19 StakeEntry accounts created under the *old* mint were still `is_active = true` with their lock periods long expired. `unstake()`/`claim_rewards()`/`compound_rewards()` only validate that the supplied vault matches the platform's *current* mint — they never check which mint an entry was originally staked under — so any of those 19 entries could call `unstake()` against the new shared stake/reward/reserve vault and receive real new-mint FBiT they never deposited under the new mint. The platform was paused immediately as a stopgap the moment this was found, then fully resolved:
@@ -682,7 +680,7 @@ npm start
 
 ### v2.0 — August 2026
 
-**Polygon removed entirely.** The platform is now Solana-only across the contract, frontend, and documentation — see the legacy-era changelog entries below for what the removed Polygon deployment covered.
+**Platform is now Solana-only** across the contract, frontend, and documentation.
 
 - **Solana mainnet migration executed** — the staking program was upgraded in place (same Program ID, `8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp`) to a new fixed-supply FBiT SPL mint (9 decimals, 250,000,000 supply, mint authority renounced); the 120,000,000 FBiT emission reserve was funded, the annual emission rate was set to 12,000,000 FBiT/year, and all 10 Team Target Bonus tiers were pushed on-chain
 - **Critical fix: emission release could freeze permanently** — `release_emission` computed "tokens releasable so far" by applying the *current* annual emission rate across the *entire* elapsed time since the reserve was first funded. Any future rate change (e.g. via `set_annual_emission`, or the now-removed halving) would retroactively undercut that total below what had already been released, permanently reverting every subsequent release call. Fixed by tracking an incremental `last_release_time` instead — each call only ever applies the current rate to time elapsed since the last release
@@ -690,7 +688,6 @@ npm start
 - **Halving mechanic removed** — `trigger_halving` and the automatic 4-year base-APY/emission halving are gone; annual emission is admin-adjustable via `set_annual_emission` only. The now-unused `halving_epoch`/`halving_start_time` fields are kept in the account layout (backward-compatible byte offsets) but are otherwise inert
 - **Team Target Bonus tiers rescaled** — Bronze now starts at 50,000 FBiT (was 2,500 after an earlier rescale, originally 50,000 FBiT pre-decimal-migration); Titan tops out at 100,000,000 FBiT / 40% of supply (previous top tiers of 500M–1B FBiT were mathematically unreachable against the 250M fixed supply)
 - **Solana build hygiene** — `overflow-checks = true` and the `idl-build` feature are now required for a clean `anchor build`, matching current Anchor CLI expectations
-- **Full Polygon removal** — deleted `contracts/polygon/` (Solidity contract, Hardhat config, deploy/diagnostic scripts) entirely; removed the network selector, EVM wallet connect path (`@reown/appkit-adapter-ethers`, `ethers`), Polygon admin-panel sections (Burn Unused Pool, Emergency Withdraw, halving schedule display), and all Polygon-specific contract helpers from the frontend
 - **New marketing landing page** at `/` — live protocol stats, token info, tokenomics breakdown, security/trust section, roadmap, 10-level referral and Team Target Bonus tables, FAQ, and a Canvas-based particle-globe hero animation; the original tabbed dashboard moved to `/app`. Added a step-by-step staking tutorial at `/guide`
 - **Admin login hint removed** — the visible "⚙ Admin Login" button and confirmation modal are gone; admin status now auto-detects silently whenever any wallet connects through the normal Connect flow (this already worked under the hood — the separate admin path was redundant, and it was the only place an admin backdoor was hinted at)
 - **Admin address hashed, not stored raw** — `NEXT_PUBLIC_ADMIN_ADDRESS_HASHES` (SHA-256 digests) replaces `NEXT_PUBLIC_ADMIN_ADDRESSES`, so the admin wallet can no longer be read directly out of the public JS bundle
@@ -711,7 +708,7 @@ npm start
 - **Production origin-check bug** — `NEXT_PUBLIC_SITE_URL` in Vercel was malformed (bare hostname plus a stray literal `\n`), so the Origin-allowlist check in `/api/bot-assess` silently 403'd every real request in production — meaning the Claude bot-detection layer had likely never actually run in production (it fails open, so this went unnoticed). Added `isAllowedOrigin()` in `lib/security.ts` which normalizes hostnames regardless of scheme/formatting.
 - **Unsolicited wallet signature fix** — the auto-halving check in `syncPlatformStats()` called `triggerHalving()` for *any* connected wallet once a halving became due, prompting a surprise signature request for ordinary visitors; now gated to admin wallets only
 - **Stake amount precision fixes** — the Stake page's MAX/25%/50% quick-fill buttons used `toFixed(0)` which could round *up* past the actual wallet balance (now `Math.floor`); the reward estimate used a double-rounded whole-percent APY instead of the raw basis-points value, causing it to diverge from the Dashboard's live figures
-- **Referral level off-by-one** (legacy Polygon deployment) — the on-chain history feed displayed the contract's 0-based `ReferralReward` level index verbatim while the rest of the app is 1-based, showing every referral one level lower than actual
+- **Referral level off-by-one** — the on-chain history feed displayed the contract's 0-based `ReferralReward` level index verbatim while the rest of the app is 1-based, showing every referral one level lower than actual
 - **Admin emission cap mismatch** — the Annual Emission input capped at 1,000,000 FBiT while the on-chain contract allows a much higher ceiling, so the built-in APY calculator's own quick-fill values were sometimes rejected by the form that generated them
 - **Dependency vulnerability patches** — resolved a critical `shell-quote` CRLF injection and several high/moderate advisories (`@babel/core`, `form-data`, `ws`) across the web app and contract tooling via `npm audit fix`
 - **Corrected referral total in SEO/FAQ content and the support chat** — was incorrectly stated as 15.75%; the real total across all 10 levels is 30%
@@ -727,38 +724,6 @@ npm start
 - **Price feed fix** — the confirmed-correct FBiT/SOL pool is now pinned to the front of the price list regardless of liquidity ranking
 - **Dependency updates** — `@reown/appkit` + adapters, React, Tailwind, Recharts, Zustand and others bumped to latest compatible versions
 - **Support contact email** updated to `contact@futurebit.in` across Terms, Privacy Policy, and [SECURITY.md](SECURITY.md)
-
-### v1.6 — May 2026 *(legacy Polygon deployment era)*
-
-- Binance Web3 Wallet support added via Reown WalletConnect
-- 3-layer Solana wallet resolution — `getSolanaWallet()` uses AppKit's `subscribeProviders` provider first, then address-matched browser extension, then legacy fallback — prevents Phantom from intercepting WalletConnect sessions
-- Connected address tracking — `subscribeAccount` in Reown tracks the connected Solana address to verify extension wallets match the user's chosen account
-- New Vercel deployment — migrated to fresh project at [stake-futurebit.vercel.app](https://stake-futurebit.vercel.app) with all environment variables configured
-- WalletConnect fix — resolved "WalletConnect is not available" error caused by missing `NEXT_PUBLIC_REOWN_PROJECT_ID` on Vercel
-- Binance wallet featured in Reown modal for quick discovery
-
-### v1.5 — May 2026 *(legacy Polygon deployment era)*
-
-- **History Panel** — New dedicated Activity History tab showing on-chain + local transaction records with summary stats (Total Staked, Unstaked, Claimed, Compound, Referral Earned, Team Bonus)
-- **8 decimal places** — All FBiT token amounts now display with 8 decimal places throughout the UI
-- **Loading indicator** — History panel shows "Loading data from chain..." while syncing
-- **`userAccount.totalStaked`** — History panel Total Staked now reads directly from the contract's user struct (most reliable source)
-- **Live APY calculator** — Admin Panel Annual Emission section shows real-time APY preview as admin types a new emission value
-
-### v1.4 — April 2026 *(legacy Polygon deployment era)*
-
-- **MAX APY reduced** — changed to a 250% cap for sustainable tokenomics on that deployment
-- **Bot Management System** — Multi-layer bot detection (fingerprinting, behavioral analysis, TF.js Layer 7, Claude AI Layer 8)
-- **Security hardening** — Rate limiting, input validation, HTTP headers, API keys removed from codebase
-- **Zustand store v5** — Upgraded from v4 to force fresh state after breaking changes
-
-### v1.3 — March 2026 *(legacy Polygon deployment era)*
-
-- Multi-chain wallet connection
-- Auto network switch on wallet connect
-- Referral Panel with 10-level commission tracking
-- Admin Panel with full on-chain controls
-- Landing page removed — DApp at root route
 
 ---
 
