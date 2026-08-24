@@ -655,6 +655,10 @@ npm start
 
 ## 17. Changelog
 
+### v2.3 — August 2026
+
+**Deployed the last pending cleanup instructions and fully retired stale accounts.** `close_user_account`/`close_stake_entry` (written and build-verified back in v2.1, deferred only for lack of SOL in the admin wallet — cosmetic only, no security impact) were upgraded to mainnet (no `solana program extend` needed this time — allocated program space already covered the new binary) and run against every account on-chain via two new scripts, `close-user-accounts.ts` and `close-stake-entries.ts`. Closed all 16 empty UserAccount PDAs and all 29 inactive StakeEntry accounts left over from the pre-migration cleanup, reclaiming their rent to the admin wallet. `Platform.total_users` now accurately reads 1 (the admin's own still-active account) instead of the stale 17.
+
 ### v2.2 — August 2026
 
 **Referral commission mismatch fixed — frontend/docs said 30%, live contract pays 17.75%.** Queried the mainnet Platform account's `referral_percentages` field directly and found it no longer matches the contract's `DEFAULT_REFERRAL_PERCENTAGES` (30% total) set at `initialize()` — at some point an admin called `set_referral_percentages` to a lower, evenly-stepped curve (0.25% → 3.00% per level, 17.75% total) that was never reflected outside the app's own live-data-aware components. The in-app Referral tab was already correct (it fetches live `Platform.referralPercentages` and only falls back to a static constant when that fetch fails), but the landing page's Rewards section, both FAQ copies (visible + structured data), Features grid, Terms page, AI support chat's system prompt, the marketing PDF, the whitepaper, and this README's own reference tables all still quoted the old 30% figure and per-level breakdown. Updated every one of them to 17.75%, and updated the two fallback constants (`REFERRAL_LEVELS` in `types/index.ts`, `REFERRAL_BPS` in `lib/contracts/solana.ts`) so the safety-net values match reality too, not just the always-correct live path.
