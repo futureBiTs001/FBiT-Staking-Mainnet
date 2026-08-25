@@ -226,6 +226,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
+        {/* Fonts as <link> tags (not a CSS @import) so the browser can fetch
+            them in parallel with the main stylesheet instead of waiting to
+            parse it first — see the comment in globals.css. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        />
+
         <script dangerouslySetInnerHTML={{ __html: suppressExtensionErrors }} />
 
         {/* Schema.org Structured Data */}

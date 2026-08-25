@@ -1,4 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* Google Fonts are loaded via <link> tags in layout.tsx's <head>, not a CSS
+   @import here — @import forces the browser to download and parse this
+   stylesheet before it can even discover the font stylesheet, turning a
+   parallel fetch into a serial one on the critical rendering path. */
 
 @import "tailwindcss";
 @config "../../tailwind.config.js";
