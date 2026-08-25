@@ -7,8 +7,9 @@ import Reveal from './Reveal';
 // (OKLCH lightness band, chroma floor, CVD separation, contrast vs. surface —
 // all PASS at mode dark, surface #0f1729, the app's own glass-card surface).
 const ALLOCATION = [
-  { label: 'Liquidity',       pct: 50.8,  amount: '127,000,000', color: '#0891B2' },
-  { label: 'Staking Reserve', pct: 48,    amount: '120,000,000', color: '#00A844' },
+  { label: 'Liquidity',            pct: 50.8, amount: '127,000,000', color: '#0891B2' },
+  { label: 'Staking Reserve',      pct: 48,   amount: '120,000,000', color: '#00A844' },
+  { label: 'Reserve / Unallocated', pct: 1.2, amount: '3,000,000',   color: '#64748B' },
 ];
 
 export default function LandingTokenomics() {
