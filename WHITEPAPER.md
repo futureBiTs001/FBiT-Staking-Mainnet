@@ -403,12 +403,10 @@ The same program ID was retained across the token migration — the program was 
 
 The 250,000,000 FBiT supply is fixed — the mint authority has been renounced on-chain, so no additional FBiT can ever be created.
 
-| Allocation            | Amount (FBiT) | % of Supply |
-| --------------------- | ------------- | ----------- |
-| Liquidity             | 127,000,000   | 50.8%       |
-| Staking Reserve       | 120,000,000   | 48%         |
-| Reserve / Unallocated | 3,000,000     | 1.2%        |
-| **Total**             | **250,000,000** | **100%**  |
+| Allocation      | Amount (FBiT) | % of Supply |
+| --------------- | ------------- | ----------- |
+| Liquidity       | 127,000,000   | 50.8%       |
+| Staking Reserve | 120,000,000   | 48%         |
 
 - **Liquidity (50.8%)** is deployed into the FBiT/SOL pool and **100% locked or burned** — it can never be pulled by a single wallet.
 - **Staking Reserve (48%, 120,000,000 FBiT)** funds the auto-emission system described in §7.
