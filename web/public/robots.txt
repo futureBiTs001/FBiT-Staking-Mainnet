@@ -3,4 +3,4 @@ Allow: /
 Disallow: /api/
 Disallow: /export-data/
 
-Sitemap: https://stake.futurebit.in/sitemap.xml
+Sitemap: https://futurebit.in/sitemap.xml

@@ -70,7 +70,7 @@ const SAFETY_TIPS = [
   {
     icon: '🔖',
     title: 'Only use this bookmarked URL',
-    desc: 'Always go to stake.futurebit.in directly. Never connect your wallet through a link from a DM, comment, or search ad — that\'s the #1 way people get phished.',
+    desc: 'Always go to futurebit.in directly. Never connect your wallet through a link from a DM, comment, or search ad — that\'s the #1 way people get phished.',
   },
   {
     icon: '🔑',

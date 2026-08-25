@@ -9,7 +9,7 @@ const FBIT_MINT = '5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME';
 const JUPITER_URL = `https://jup.ag/swap/SOL-${FBIT_MINT}`;
 const METEORA_URL = 'https://app.meteora.ag/dammv2/5ZA1NsMv9hviXTUPhxqXbbFqoMwYeaNvSegJiRQv9E2F';
 const SHARE_TEXT = encodeURIComponent('FutureBit Staking ($FBiT) is live on Solana — dynamic PoS APY up to 300%, 10-level referrals, non-custodial. 🚀');
-const SHARE_URL = 'https://stake.futurebit.in/launch';
+const SHARE_URL = 'https://futurebit.in/launch';
 const TWEET_URL = `https://twitter.com/intent/tweet?text=${SHARE_TEXT}&url=${encodeURIComponent(SHARE_URL)}`;
 
 const CONFETTI_COLORS = ['#00E676', '#14F195', '#9945FF', '#fbbf24', '#22d3ee', '#fb7185'];

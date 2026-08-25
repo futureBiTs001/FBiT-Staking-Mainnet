@@ -10,7 +10,7 @@ import SupportChat from '@/components/chat/SupportChat';
 
 warnMissingEnv();
 
-const BASE_URL = 'https://stake.futurebit.in';
+const BASE_URL = 'https://futurebit.in';
 
 // ── Google Analytics 4 — replace G-XXXXXXXXXX with your real Measurement ID ──
 const GA_ID = 'G-3B36D0CW8F';
@@ -117,7 +117,7 @@ const structuredData = {
           name: 'Is FutureBit Staking the same company as FutureBit (Apollo Bitcoin miners)?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'No. FutureBit Staking (ticker FBiT) at stake.futurebit.in is an independent Solana DeFi staking protocol and is not affiliated with FutureBit LLC, the maker of Apollo Bitcoin mining hardware. The two are separate, unrelated projects that happen to share a similar name.',
+            text: 'No. FutureBit Staking (ticker FBiT) at futurebit.in is an independent Solana DeFi staking protocol and is not affiliated with FutureBit LLC, the maker of Apollo Bitcoin mining hardware. The two are separate, unrelated projects that happen to share a similar name.',
           },
         },
       ],
@@ -186,10 +186,6 @@ export const metadata: Metadata = {
       'max-image-preview': 'large',
       'max-video-preview': -1,
     },
-  },
-
-  alternates: {
-    canonical: BASE_URL,
   },
 
   icons: {

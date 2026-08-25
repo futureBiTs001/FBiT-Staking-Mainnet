@@ -6,9 +6,6 @@ import { WalletProvider } from '@/context/WalletContext';
 export const metadata: Metadata = {
   title: 'App — Stake, Swap & Earn',
   description: 'Connect your Solana wallet to stake FBiT, swap, track referrals, and claim rewards.',
-  alternates: {
-    canonical: '/app/',
-  },
 };
 
 // Wallet SDK (Reown AppKit + WalletConnect + Solana adapter) is scoped to

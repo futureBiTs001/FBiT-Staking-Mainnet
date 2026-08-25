@@ -28,7 +28,7 @@ const FAQS = [
   },
   {
     q: 'Is FutureBit Staking the same company as FutureBit (Apollo Bitcoin miners)?',
-    a: 'No. FutureBit Staking (ticker FBiT) at stake.futurebit.in is an independent Solana DeFi staking protocol and is not affiliated with FutureBit LLC, the maker of Apollo Bitcoin mining hardware. The two are separate, unrelated projects that happen to share a similar name.',
+    a: 'No. FutureBit Staking (ticker FBiT) at futurebit.in is an independent Solana DeFi staking protocol and is not affiliated with FutureBit LLC, the maker of Apollo Bitcoin mining hardware. The two are separate, unrelated projects that happen to share a similar name.',
   },
 ];
 

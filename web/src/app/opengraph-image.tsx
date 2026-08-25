@@ -112,7 +112,7 @@ export default function OgImage() {
           color: 'rgba(255,255,255,0.35)',
           fontSize: 18,
         }}>
-          stake.futurebit.in
+          futurebit.in
         </div>
       </div>
     ),
