@@ -190,7 +190,7 @@ function fromLamports(n: BN | number): number {
 
 // ── PDA derivations ────────────────────────────────────────────────────────────
 
-function platformPda(): [PublicKey, number] {
+export function platformPda(): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([Buffer.from('platform')], getProgramId());
 }
 
@@ -218,7 +218,7 @@ function stakeEntryPda(owner: PublicKey, stakeId: number): [PublicKey, number] {
  *    covers Phantom/Solflare when AppKit provider isn't yet available.
  * 3. Any connected window extension (legacy fallback, no AppKit).
  */
-function getSolanaWallet(): any {
+export function getSolanaWallet(): any {
   if (appKitModal) {
     // Layer 1: provider from AppKit (WalletConnect wallets like Binance, or Phantom via AppKit)
     if (solanaWalletProvider?.publicKey) return solanaWalletProvider;
@@ -252,7 +252,7 @@ function getSolanaWallet(): any {
 // "no active chain" is thrown by the WC Universal Provider when Binance Web3 Wallet
 // is connected via WalletConnect but the Solana chain isn't in the approved session.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function wrapSolanaSign(fn: () => Promise<any>): Promise<any> {
+export function wrapSolanaSign(fn: () => Promise<any>): Promise<any> {
   return fn().catch((err: any) => {
     const msg = String(err?.message ?? err ?? '').toLowerCase();
     if (msg.includes('no active chain') || msg.includes('no chain') || msg.includes('chain not found')) {
@@ -285,7 +285,7 @@ function getProgram(): Program {
   return new (Program as any)(idl, getProvider()) as Program;
 }
 
-function getOwner(): PublicKey {
+export function getOwner(): PublicKey {
   const wallet = getSolanaWallet();
   return new PublicKey(wallet.publicKey.toString());
 }
@@ -338,7 +338,7 @@ function getReserveVault(): PublicKey {
 }
 
 /** Derive the ATA for `owner` and `mint` — works synchronously via Anchor utils */
-function ata(mint: PublicKey, owner: PublicKey): PublicKey {
+export function ata(mint: PublicKey, owner: PublicKey): PublicKey {
   const [address] = PublicKey.findProgramAddressSync(
     [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
     ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1440,7 +1440,7 @@ function rpcFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respons
   });
 }
 
-function getRpcConnection(): Connection {
+export function getRpcConnection(): Connection {
   return new Connection(READ_RPC, { commitment: 'confirmed', fetch: rpcFetch });
 }
 

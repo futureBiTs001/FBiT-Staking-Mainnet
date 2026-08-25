@@ -20,6 +20,7 @@ const TabLoading = () => (
 const Dashboard    = dynamic(() => import('@/components/staking/Dashboard'),      { loading: TabLoading });
 const StakePanel   = dynamic(() => import('@/components/staking/StakePanel'),     { loading: TabLoading });
 const SwapPanel    = dynamic(() => import('@/components/market/SwapPanel'),       { loading: TabLoading });
+const LiquidityPanel = dynamic(() => import('@/components/liquidity/LiquidityPanel'), { loading: TabLoading });
 const ReferralPanel = dynamic(() => import('@/components/referral/ReferralPanel'), { loading: TabLoading });
 const CalculatorPanel = dynamic(() => import('@/components/staking/CalculatorPanel'), { loading: TabLoading });
 const AdminPanel   = dynamic(() => import('@/components/admin/AdminPanel'),       { loading: TabLoading });
@@ -39,6 +40,7 @@ export default function AppPage() {
       case 'dashboard': return <Dashboard />;
       case 'stake':     return <StakePanel />;
       case 'swap':      return <SwapPanel />;
+      case 'liquidity': return <LiquidityPanel />;
       case 'referral':  return <ReferralPanel />;
       case 'calculator': return <CalculatorPanel />;
       case 'history':   return <HistoryPanel />;

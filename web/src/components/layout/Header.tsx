@@ -238,6 +238,7 @@ export default function Header() {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '◈' },
     { id: 'swap',      label: 'Swap',      icon: '⇄' },
+    { id: 'liquidity', label: 'Liquidity', icon: '💧' },
     { id: 'stake',     label: 'Stake',     icon: '⬡' },
     { id: 'referral',  label: 'Referral',  icon: '◎' },
     { id: 'calculator', label: 'Calculator', icon: '🧮' },

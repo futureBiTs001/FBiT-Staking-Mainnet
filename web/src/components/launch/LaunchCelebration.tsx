@@ -8,6 +8,63 @@ const TOTAL_SUPPLY = 250_000_000;
 const FBIT_MINT = '5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME';
 const JUPITER_URL = `https://jup.ag/swap/SOL-${FBIT_MINT}`;
 const METEORA_URL = 'https://app.meteora.ag/dammv2/5ZA1NsMv9hviXTUPhxqXbbFqoMwYeaNvSegJiRQv9E2F';
+
+// New FBiT/SOL DAMM v2 pool (ECUsT6sdz9rAj7tPfHnnHwxdkLaDcafHEfWZEdzc7hQx) — read directly from
+// its on-chain Pool account: activation_type=1 (timestamp), activation_point=1788416999.
+// Trading on this specific pool cannot happen before this moment (Meteora's own on-chain
+// enforcement) — this is NOT the same as the existing pool referenced above, which already
+// trades today; this countdown is for the new pool only.
+const POOL_LAUNCH_TIMESTAMP_MS = 1788416999 * 1000;
+
+function getCountdown(targetMs: number) {
+  const diff = Math.max(0, targetMs - Date.now());
+  const days    = Math.floor(diff / 86_400_000);
+  const hours   = Math.floor((diff % 86_400_000) / 3_600_000);
+  const minutes = Math.floor((diff % 3_600_000) / 60_000);
+  const seconds = Math.floor((diff % 60_000) / 1000);
+  return { diff, days, hours, minutes, seconds };
+}
+
+function LaunchCountdown() {
+  const [now, setNow] = useState<number | null>(null);
+
+  useEffect(() => {
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  if (now === null) return null; // avoid SSR/client mismatch on the ticking value
+
+  const { diff, days, hours, minutes, seconds } = getCountdown(POOL_LAUNCH_TIMESTAMP_MS);
+  const launched = diff <= 0;
+
+  return (
+    <div className="glass-card w-full mb-8 py-6 px-6">
+      <p className="text-text-muted text-[11px] font-display uppercase tracking-wider mb-3 flex items-center justify-center gap-1.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-accent-rose animate-pulse" />
+        {launched ? 'New Liquidity Pool' : 'New Liquidity Pool Launching In'}
+      </p>
+      {launched ? (
+        <p className="font-display font-bold text-lg text-brand-400">🎉 Live now on Meteora</p>
+      ) : (
+        <div className="flex items-center justify-center gap-3 sm:gap-5 font-mono">
+          {[
+            { v: days, label: 'Days' },
+            { v: hours, label: 'Hrs' },
+            { v: minutes, label: 'Min' },
+            { v: seconds, label: 'Sec' },
+          ].map((u) => (
+            <div key={u.label} className="flex flex-col items-center">
+              <span className="font-display font-black text-2xl sm:text-3xl">{String(u.v).padStart(2, '0')}</span>
+              <span className="text-text-muted text-[10px] uppercase tracking-wider">{u.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 const SHARE_TEXT = encodeURIComponent('FutureBit Staking ($FBiT) is live on Solana — dynamic PoS APY up to 300%, 10-level referrals, non-custodial. 🚀');
 const SHARE_URL = 'https://futurebit.in/launch';
 const TWEET_URL = `https://twitter.com/intent/tweet?text=${SHARE_TEXT}&url=${encodeURIComponent(SHARE_URL)}`;
@@ -98,6 +155,8 @@ export default function LaunchCelebration() {
         <p className="text-text-muted text-base sm:text-lg max-w-lg mb-10 animate-fade-in">
           Stake FBiT, earn dynamic Proof-of-Stake APY up to 300%, and build a 10-level referral network — non-custodial, on Solana.
         </p>
+
+        <LaunchCountdown />
 
         {/* Live price hero */}
         <div className="glass-card w-full mb-8 py-8 px-6">
