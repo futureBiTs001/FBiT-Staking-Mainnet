@@ -372,7 +372,6 @@ Beyond program-level protections, FBiT's tokenomics (§13.2) are structured to r
 | Safeguard                    | Detail                                                                 |
 | ------------------------------ | -------------------------------------------------------------------------- |
 | **Liquidity Lock**            | 100% of the 127,000,000 FBiT (50.8%) liquidity allocation is **locked or burned** — no wallet, including the team's, can withdraw pool liquidity. |
-| **Team & Marketing Vesting**  | The combined 2,000,000 + 1,000,000 FBiT (1.2% of supply) allocated to Team and Marketing is locked under a **10-year vesting schedule with a 6-month cliff** — no tokens from this allocation are released for the first 6 months, and the full amount unlocks gradually over 10 years. |
 | **Fixed Supply**              | Mint authority is renounced on the FBiT SPL mint — the 250,000,000 total supply can never be increased. |
 
 These safeguards are verifiable directly on-chain (mint authority, liquidity pool ownership, and vesting contract addresses) and are independent of any statement in this document.
@@ -404,16 +403,14 @@ The same program ID was retained across the token migration — the program was 
 
 The 250,000,000 FBiT supply is fixed — the mint authority has been renounced on-chain, so no additional FBiT can ever be created.
 
-| Allocation       | Amount (FBiT)   | % of Supply |
-| ------------------ | ----------------- | ----------- |
-| Liquidity         | 127,000,000       | 50.8%       |
-| Staking Reserve   | 120,000,000       | 48%         |
-| Team              | 2,000,000         | 0.8%        |
-| Marketing         | 1,000,000         | 0.4%        |
-| **Total**         | **250,000,000**   | **100%**    |
+| Allocation            | Amount (FBiT) | % of Supply |
+| --------------------- | ------------- | ----------- |
+| Liquidity             | 127,000,000   | 50.8%       |
+| Staking Reserve       | 120,000,000   | 48%         |
+| Reserve / Unallocated | 3,000,000     | 1.2%        |
+| **Total**             | **250,000,000** | **100%**  |
 
 - **Liquidity (50.8%)** is deployed into the FBiT/SOL pool and **100% locked or burned** — it can never be pulled by a single wallet.
-- **Team + Marketing (1.2% combined)** are locked under a **10-year vesting schedule with a 6-month cliff** before any release begins (see §11.5).
 - **Staking Reserve (48%, 120,000,000 FBiT)** funds the auto-emission system described in §7.
 
 ### 13.3 Emission Schedule
@@ -451,7 +448,6 @@ The phases below describe goals the team is building toward — they are not com
 
 - [x] FBiT token v2 — fixed 250,000,000 supply, mint authority renounced
 - [x] 100% of liquidity locked/burned
-- [x] Team & Marketing allocations (1.2% combined) placed under a 10-year vesting schedule, 6-month cliff
 - [ ] Independent third-party smart contract audit
 - [x] Whitepaper and public documentation brought current
 
@@ -480,7 +476,7 @@ The phases below describe goals the team is building toward — they are not com
 
 FBiT Staking Platform represents a new generation of DeFi staking — one that combines **long-term financial sustainability** (on-chain emission reserve), **community-driven growth mechanics** (10-level referrals + 10-tier team bonuses), and **deflationary tokenomics** (burn on every transaction) into a single, non-custodial protocol.
 
-The platform is live and fully operational on Solana Mainnet. Its transparent on-chain architecture — a verifiable program, public emission tracking, locked/burned liquidity, vested team allocations, and ownership renouncement capability — ensures that FBiT Staking can operate autonomously and trustlessly for the long term.
+The platform is live and fully operational on Solana Mainnet. Its transparent on-chain architecture — a verifiable program, public emission tracking, locked/burned liquidity, and ownership renouncement capability — ensures that FBiT Staking can operate autonomously and trustlessly for the long term.
 
 ---
 
