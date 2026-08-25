@@ -30,7 +30,7 @@ const structuredData = {
         url: `${BASE_URL}/favicon.svg`,
       },
       sameAs: [
-        'https://x.com/FutureBiT_Token',
+        'https://x.com/FUTURBIT',
         'https://t.me/FutureBiTToken',
         'https://github.com/futurebitsmaxx/FBiT-Staking-Mainnet',
       ],
@@ -168,8 +168,8 @@ export const metadata: Metadata = {
 
   twitter: {
     card: 'summary_large_image',
-    site: '@FutureBiT_Token',
-    creator: '@FutureBiT_Token',
+    site: '@FUTURBIT',
+    creator: '@FUTURBIT',
     title: 'FutureBit Staking (FBiT) — Earn Dynamic APY on Solana',
     description:
       'Stake FBiT on Solana. Dynamic APY up to 300%, 10-level referrals, deflationary burn.',
