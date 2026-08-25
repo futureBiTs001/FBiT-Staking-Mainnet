@@ -23,6 +23,7 @@ const VERIFY_URL     = `https://solscan.io/token/${FBIT_MINT}`;
 // instead of sitting inline in the header, which got cluttered as more of
 // these were added over time.
 const RESOURCE_LINKS = [
+  { href: '/trust',       label: 'Trust',        icon: '✅', external: false, accent: false },
   { href: VERIFY_URL,     label: 'Verify Token', icon: '🛡', external: true,  accent: true },
   { href: '/guide',       label: 'Guide',        icon: '📖', external: false, accent: false },
   { href: WHITEPAPER_URL, label: 'Whitepaper',   icon: '📄', external: true,  accent: false },
