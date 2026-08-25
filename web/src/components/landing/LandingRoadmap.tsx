@@ -26,7 +26,6 @@ const PHASES = [
     items: [
       'FBiT token v2 — fixed supply, renounced mint authority',
       '100% liquidity locked/burned',
-      'Team & marketing allocations under 10-year vesting',
       'Independent smart contract audit',
       'Whitepaper & documentation finalized',
     ],

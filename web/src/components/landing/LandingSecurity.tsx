@@ -17,12 +17,6 @@ const POINTS = [
     color: 'text-accent-cyan',
   },
   {
-    icon: '⏳',
-    title: 'Team & Marketing Vesting',
-    desc: 'The 0.5% team + marketing allocation is locked under a 10-year vesting schedule with a 6-month cliff before any release begins.',
-    color: 'text-accent-purple',
-  },
-  {
     icon: '📜',
     title: 'Open-Source & Verifiable',
     desc: 'Smart contracts are open-source and verifiable on Solana Explorer — anyone can audit the code that holds their funds.',

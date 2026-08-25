@@ -9,8 +9,6 @@ import Reveal from './Reveal';
 const ALLOCATION = [
   { label: 'Liquidity',       pct: 50.8,  amount: '127,000,000', color: '#0891B2' },
   { label: 'Staking Reserve', pct: 48,    amount: '120,000,000', color: '#00A844' },
-  { label: 'Team',            pct: 0.8,   amount: '2,000,000',   color: '#9333EA' },
-  { label: 'Marketing',       pct: 0.4,   amount: '1,000,000',   color: '#D97706' },
 ];
 
 export default function LandingTokenomics() {
@@ -35,8 +33,7 @@ export default function LandingTokenomics() {
             ))}
           </div>
 
-          {/* Horizontal bar list — direct-labeled, minimum visible width so the
-              small Team/Marketing slices stay perceivable without misrepresenting their share */}
+          {/* Horizontal bar list — direct-labeled */}
           <div className="space-y-4">
             {ALLOCATION.map((a) => (
               <div key={a.label}>
