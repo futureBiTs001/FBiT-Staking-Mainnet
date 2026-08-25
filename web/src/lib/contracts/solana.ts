@@ -560,9 +560,20 @@ export async function solanaRegisterUser(referrer?: string): Promise<{ txHash: s
     try {
       referrerPubkey = new PublicKey(referrer);
       if (referrerPubkey.equals(owner)) throw new Error('Cannot use your own wallet as referrer.');
-      const referrerRegistered = await solanaIsRegistered(referrerPubkey);
-      if (!referrerRegistered) {
+      const [referrerPda] = userPda(referrerPubkey);
+      let referrerData: any;
+      try {
+        referrerData = await (program.account as any).userAccount.fetch(referrerPda);
+      } catch {
         throw new Error('Referrer wallet is not yet registered on the platform. Please use a valid referral link.');
+      }
+      // Referrer must have staked at least once — mirrors the on-chain check in
+      // register_user (also what closes the circular-referrer exploit at the root:
+      // a referrer must have registered AND staked strictly before their referee
+      // registers, so no A→B→A cycle can ever be constructed).
+      const referrerStaked = referrerData.totalStaked ? new BN(referrerData.totalStaked.toString()) : new BN(0);
+      if (referrerStaked.isZero()) {
+        throw new Error('This referral link is not active yet — the referrer needs to stake at least once before their link can be used.');
       }
     } catch (err: any) {
       throw err;
@@ -586,9 +597,16 @@ export async function solanaRegisterUser(referrer?: string): Promise<{ txHash: s
     : Buffer.from([0]);
   const data = Buffer.concat([disc, refArg]);
 
+  // referrer_account: the referrer's own UserAccount PDA (validated on-chain when
+  // referrer is Some). When there's no referrer (admin-only registration), the contract
+  // never reads this account, so the caller's own not-yet-created PDA is passed as a
+  // harmless placeholder.
+  const referrerAccPda = referrerPubkey ? userPda(referrerPubkey)[0] : userAccPda;
+
   const keys = [
     { pubkey: platPda,                 isSigner: false, isWritable: true  },
     { pubkey: userAccPda,              isSigner: false, isWritable: true  },
+    { pubkey: referrerAccPda,          isSigner: false, isWritable: false },
     { pubkey: owner,                   isSigner: true,  isWritable: true  },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];

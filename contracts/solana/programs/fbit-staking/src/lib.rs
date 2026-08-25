@@ -294,6 +294,25 @@ pub mod fbit_staking {
 
         if let Some(ref_key) = referrer {
             require!(ref_key != ctx.accounts.owner.key(), StakingError::SelfReferral);
+
+            // The referrer must be a real, already-active staker (total_staked > 0) —
+            // enforces "only users who have staked can refer new users", and as a direct
+            // consequence makes a circular referrer chain (A→B, B→A) impossible: a
+            // referrer must have registered AND staked strictly before their referee
+            // registers, so no cycle can ever close. This closes the self-dealing exploit
+            // in stake()'s referral-chain walk, where an attacker could otherwise craft a
+            // cyclic referrer graph and have their own stake pay referral rewards back to
+            // themselves across alternating levels.
+            let ref_ai = &ctx.accounts.referrer_account;
+            require!(ref_ai.key() == ref_key, StakingError::ReferrerMismatch);
+            require!(ref_ai.owner == ctx.program_id, StakingError::ReferrerNotActive);
+            let data = ref_ai.try_borrow_data().map_err(|_| error!(StakingError::ReferrerNotActive))?;
+            require!(data.len() > 8, StakingError::ReferrerNotActive);
+            let mut slice: &[u8] = &data[8..];
+            let referrer_user = UserAccount::deserialize(&mut slice)
+                .map_err(|_| error!(StakingError::ReferrerNotActive))?;
+            require!(referrer_user.owner == ref_key, StakingError::ReferrerMismatch);
+            require!(referrer_user.total_staked > 0, StakingError::ReferrerNotActive);
         }
 
         let user = &mut ctx.accounts.user_account;
@@ -401,6 +420,13 @@ pub mod fbit_staking {
                 let pair_start = level * 2;
                 if pair_start + 1 >= remaining.len() { break; }
                 let Some(expected_key) = cur_referrer else { break; };
+
+                // Defense-in-depth: the staker must never appear in their own referral
+                // chain. Unreachable in practice now that register_user requires a
+                // referrer to already have staked (which makes any circular chain
+                // impossible to construct in the first place) — kept as a cheap,
+                // direct guard rather than relying solely on that invariant.
+                if expected_key == ctx.accounts.owner.key() { break; }
 
                 let ref_user_ai   = &remaining[pair_start];
                 let ref_reward_ai = &remaining[pair_start + 1];
@@ -1201,6 +1227,12 @@ pub struct RegisterUser<'info> {
     #[account(init, payer = owner, space = USER_ACCOUNT_SPACE,
         seeds = [b"user", owner.key().as_ref()], bump)]
     pub user_account: Account<'info, UserAccount>,
+    /// CHECK: manually validated in the handler only when the `referrer` instruction
+    /// arg is Some — must be the referrer's own UserAccount PDA, owned by this program,
+    /// with total_staked > 0 (an already-active staker). Ignored entirely when referrer
+    /// is None (admin-only registration) — any account (e.g. a placeholder) may be
+    /// passed in that case since it is never read.
+    pub referrer_account: UncheckedAccount<'info>,
     #[account(mut)]
     pub owner:        Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -1492,4 +1524,5 @@ pub enum StakingError {
     #[msg("Invalid referral token account")]               InvalidReferralATA,
     #[msg("A valid referrer is required to register")]     ReferrerRequired,
     #[msg("Total referral BPS exceeds 50% maximum")]       ReferralPercentagesTooHigh,
+    #[msg("Referrer must have an active stake before their link can be used")] ReferrerNotActive,
 }

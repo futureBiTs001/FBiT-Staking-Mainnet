@@ -72,6 +72,7 @@ export type FbitStaking = {
       "accounts": [
         { "name": "platform", "isMut": true, "isSigner": false },
         { "name": "userAccount", "isMut": true, "isSigner": false },
+        { "name": "referrerAccount", "isMut": false, "isSigner": false },
         { "name": "owner", "isMut": true, "isSigner": true },
         { "name": "systemProgram", "isMut": false, "isSigner": false }
       ],
@@ -459,6 +460,7 @@ export const IDL: FbitStaking = {
       "accounts": [
         { "name": "platform", "isMut": true, "isSigner": false },
         { "name": "userAccount", "isMut": true, "isSigner": false },
+        { "name": "referrerAccount", "isMut": false, "isSigner": false },
         { "name": "owner", "isMut": true, "isSigner": true },
         { "name": "systemProgram", "isMut": false, "isSigner": false }
       ],
