@@ -371,7 +371,7 @@ Beyond program-level protections, FBiT's tokenomics (§13.2) are structured to r
 
 | Safeguard                    | Detail                                                                 |
 | ------------------------------ | -------------------------------------------------------------------------- |
-| **Liquidity Lock**            | 100% of the 127,000,000 FBiT (50.8%) liquidity allocation is **locked or burned** — no wallet, including the team's, can withdraw pool liquidity. |
+| **Liquidity Lock**            | 100% of the 130,000,000 FBiT (52%) liquidity allocation is **locked or burned** — no wallet, including the team's, can withdraw pool liquidity. |
 | **Fixed Supply**              | Mint authority is renounced on the FBiT SPL mint — the 250,000,000 total supply can never be increased. |
 
 These safeguards are verifiable directly on-chain (mint authority, liquidity pool ownership, and vesting contract addresses) and are independent of any statement in this document.
@@ -405,10 +405,10 @@ The 250,000,000 FBiT supply is fixed — the mint authority has been renounced o
 
 | Allocation      | Amount (FBiT) | % of Supply |
 | --------------- | ------------- | ----------- |
-| Liquidity       | 127,000,000   | 50.8%       |
+| Liquidity       | 130,000,000   | 52%         |
 | Staking Reserve | 120,000,000   | 48%         |
 
-- **Liquidity (50.8%)** is deployed into the FBiT/SOL pool and **100% locked or burned** — it can never be pulled by a single wallet.
+- **Liquidity (52%)** is deployed into the FBiT/SOL pool and **100% locked or burned** — it can never be pulled by a single wallet.
 - **Staking Reserve (48%, 120,000,000 FBiT)** funds the auto-emission system described in §7.
 
 ### 13.3 Emission Schedule
