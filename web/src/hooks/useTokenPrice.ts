@@ -145,6 +145,85 @@ async function fetchGeckoTokenLogo(network: string, tokenAddress: string): Promi
   }
 }
 
+// Runs the actual GeckoTerminal fallback chain for one network and returns
+// the resulting state (never throws — always resolves to a usable value).
+async function fetchPriceData(network: string): Promise<TokenPriceData> {
+  const config       = NETWORK_CONFIG[network];
+  const tokenAddress = config?.stakeTokenAddress ?? '';
+  const geckoNet     = GECKO_NETWORK[network] ?? network;
+  const hasAddress   = tokenAddress.length > 10;
+
+  // ── 1. GeckoTerminal — hardcoded FBiT pool addresses (Solana) ───────────
+  if (network === 'solana') {
+    try {
+      const pairs = await fetchGeckoMultiPools('solana', FBIT_SOLANA_POOLS);
+      if (pairs.length > 0) {
+        const logoUrl = hasAddress ? await fetchGeckoTokenLogo('solana', tokenAddress) : null;
+        return { pairs, logoUrl, lastUpdated: Date.now(), isLoading: false, error: null, source: 'geckoterminal' };
+      }
+    } catch { /* fall through */ }
+  }
+
+  // ── 2. GeckoTerminal by token address ────────────────────────────────────
+  if (hasAddress) {
+    try {
+      const [poolsRes, logoUrl] = await Promise.all([
+        fetch(
+          `https://api.geckoterminal.com/api/v2/networks/${geckoNet}/tokens/${tokenAddress}/pools` +
+          `?page=1&include=dex`,
+          { headers: { Accept: 'application/json' }, cache: 'no-store' }
+        ),
+        fetchGeckoTokenLogo(network, tokenAddress),
+      ]);
+
+      if (poolsRes.ok) {
+        const data  = await poolsRes.json();
+        const pairs = parseGeckoPools(data, network);
+        if (pairs.length > 0) {
+          return { pairs, logoUrl, lastUpdated: Date.now(), isLoading: false, error: null, source: 'geckoterminal' };
+        }
+      }
+    } catch { /* fall through */ }
+  }
+
+  // ── 3. GeckoTerminal search by symbol "FBiT" ─────────────────────────────
+  try {
+    const res = await fetch(
+      `https://api.geckoterminal.com/api/v2/search/pools?query=FBiT&network=${geckoNet}&page=1`,
+      { headers: { Accept: 'application/json' }, cache: 'no-store' }
+    );
+    if (res.ok) {
+      const data  = await res.json();
+      const pairs = parseGeckoSearch(data, network);
+      if (pairs.length > 0) {
+        return { pairs, logoUrl: null, lastUpdated: Date.now(), isLoading: false, error: null, source: 'geckoterminal' };
+      }
+    }
+  } catch { /* fall through */ }
+
+  // ── All sources failed — empty state ─────────────────────────────────────
+  return { pairs: [], logoUrl: null, lastUpdated: Date.now(), isLoading: false, error: 'No price data available', source: 'mock' };
+}
+
+// Multiple components (LandingStats, LiveTicker, …) call this hook at once,
+// each on its own mount timer. Without sharing in-flight requests, a single
+// page load fires the same GeckoTerminal calls twice — the extra load makes
+// it easier to trip GeckoTerminal's rate limit on a cold, uncached visit
+// (e.g. a first-time crawl). Keyed by network so this stays correct if a
+// network switch is ever reintroduced.
+const inFlightByNetwork = new Map<string, Promise<TokenPriceData>>();
+
+function fetchPriceDeduped(network: string): Promise<TokenPriceData> {
+  const existing = inFlightByNetwork.get(network);
+  if (existing) return existing;
+
+  const promise = fetchPriceData(network).finally(() => {
+    inFlightByNetwork.delete(network);
+  });
+  inFlightByNetwork.set(network, promise);
+  return promise;
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────────────
 export function useTokenPrice(): TokenPriceData & { refresh: () => void } {
   const { selectedNetwork } = useAppStore();
@@ -160,65 +239,8 @@ export function useTokenPrice(): TokenPriceData & { refresh: () => void } {
 
   const fetchPrice = useCallback(async () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
-
-    const config       = NETWORK_CONFIG[selectedNetwork];
-    const tokenAddress = config?.stakeTokenAddress ?? '';
-    const geckoNet     = GECKO_NETWORK[selectedNetwork] ?? selectedNetwork;
-    const hasAddress   = tokenAddress.length > 10;
-
-    // ── 1. GeckoTerminal — hardcoded FBiT pool addresses (Solana) ───────────
-    if (selectedNetwork === 'solana') {
-      try {
-        const pairs = await fetchGeckoMultiPools('solana', FBIT_SOLANA_POOLS);
-        if (pairs.length > 0) {
-          const logoUrl = hasAddress ? await fetchGeckoTokenLogo('solana', tokenAddress) : null;
-          setState({ pairs, logoUrl, lastUpdated: Date.now(), isLoading: false, error: null, source: 'geckoterminal' });
-          return;
-        }
-      } catch { /* fall through */ }
-    }
-
-    // ── 2. GeckoTerminal by token address ────────────────────────────────────
-    if (hasAddress) {
-      try {
-        const [poolsRes, logoUrl] = await Promise.all([
-          fetch(
-            `https://api.geckoterminal.com/api/v2/networks/${geckoNet}/tokens/${tokenAddress}/pools` +
-            `?page=1&include=dex`,
-            { headers: { Accept: 'application/json' }, cache: 'no-store' }
-          ),
-          fetchGeckoTokenLogo(selectedNetwork, tokenAddress),
-        ]);
-
-        if (poolsRes.ok) {
-          const data  = await poolsRes.json();
-          const pairs = parseGeckoPools(data, selectedNetwork);
-          if (pairs.length > 0) {
-            setState({ pairs, logoUrl, lastUpdated: Date.now(), isLoading: false, error: null, source: 'geckoterminal' });
-            return;
-          }
-        }
-      } catch { /* fall through */ }
-    }
-
-    // ── 3. GeckoTerminal search by symbol "FBiT" ─────────────────────────────
-    try {
-      const res = await fetch(
-        `https://api.geckoterminal.com/api/v2/search/pools?query=FBiT&network=${geckoNet}&page=1`,
-        { headers: { Accept: 'application/json' }, cache: 'no-store' }
-      );
-      if (res.ok) {
-        const data  = await res.json();
-        const pairs = parseGeckoSearch(data, selectedNetwork);
-        if (pairs.length > 0) {
-          setState({ pairs, logoUrl: null, lastUpdated: Date.now(), isLoading: false, error: null, source: 'geckoterminal' });
-          return;
-        }
-      }
-    } catch { /* fall through */ }
-
-    // ── All sources failed — show empty state ─────────────────────────────────
-    setState(prev => ({ ...prev, pairs: [], logoUrl: null, isLoading: false, error: 'No price data available', source: 'mock' }));
+    const result = await fetchPriceDeduped(selectedNetwork);
+    setState(result);
   }, [selectedNetwork]);
 
   useEffect(() => {

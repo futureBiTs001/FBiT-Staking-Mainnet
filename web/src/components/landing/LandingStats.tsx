@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { formatNumber } from '@/lib/utils';
-import { PINNED_FBIT_POOL } from '@/hooks/useTokenPrice';
+import { useTokenPrice } from '@/hooks/useTokenPrice';
 import type { PlatformStats } from '@/types';
 import Reveal from './Reveal';
 
@@ -55,39 +55,22 @@ function StatTile({ label, target, suffix, prefix, color, loading, formatValue }
   );
 }
 
-/** Price is a token-level figure (always the FBiT/SOL pool), independent of the
- *  per-chain protocol-stats toggle below — so it is fetched separately here rather
- *  than via useTokenPrice(), which follows the app store's selected network. */
-async function fetchFbitPriceUsd(): Promise<number | null> {
-  try {
-    const res = await fetch(
-      `https://api.geckoterminal.com/api/v2/networks/solana/pools/${PINNED_FBIT_POOL}`,
-      { headers: { Accept: 'application/json' }, cache: 'no-store' }
-    );
-    if (!res.ok) return null;
-    const json = await res.json();
-    const price = Number(json?.data?.attributes?.base_token_price_usd);
-    return Number.isFinite(price) && price > 0 ? price : null;
-  } catch {
-    return null;
-  }
-}
-
 export default function LandingStats() {
   const [stats, setStats]     = useState<PlatformStats | null>(null);
-  const [priceUsd, setPriceUsd] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Shared with LiveTicker — a page load previously fired two independent
+  // GeckoTerminal requests for the same FBiT/SOL pool (one here, one in
+  // useTokenPrice), which made it easy to trip GeckoTerminal's rate limit
+  // on a cold, uncached visit (e.g. a first-time crawl).
+  const { pairs, isLoading: priceLoading } = useTokenPrice();
+  const priceUsd = pairs[0] ? parseFloat(pairs[0].priceUsd) : null;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const { solanaFetchPlatformStats } = await import('@/lib/contracts/solana');
-      const [sol, price] = await Promise.all([
-        solanaFetchPlatformStats().catch(() => null),
-        fetchFbitPriceUsd(),
-      ]);
-      setStats(sol);
-      setPriceUsd(price);
+      setStats(await solanaFetchPlatformStats().catch(() => null));
     } finally {
       setLoading(false);
     }
@@ -105,11 +88,12 @@ export default function LandingStats() {
       prefix: '$',
       color: 'text-text-primary',
       formatValue: (n: number) => (n < 0.01 ? n.toPrecision(3) : n.toFixed(4)),
+      loading: priceLoading,
     },
-    { label: 'Total Staked',  target: current ? current.totalStaked : null, suffix: ' FBiT', color: 'text-brand-400' },
-    { label: 'Current APY',   target: apyPct,                                suffix: '%',     color: 'text-accent-amber' },
-    { label: 'Total Stakers', target: current ? current.totalUsers : null,   suffix: '',       color: 'text-accent-cyan' },
-    { label: 'Total Burned',  target: current ? current.totalBurned : null,  suffix: ' FBiT', color: 'text-accent-rose' },
+    { label: 'Total Staked',  target: current ? current.totalStaked : null, suffix: ' FBiT', color: 'text-brand-400', loading },
+    { label: 'Current APY',   target: apyPct,                                suffix: '%',     color: 'text-accent-amber', loading },
+    { label: 'Total Stakers', target: current ? current.totalUsers : null,   suffix: '',       color: 'text-accent-cyan', loading },
+    { label: 'Total Burned',  target: current ? current.totalBurned : null,  suffix: ' FBiT', color: 'text-accent-rose', loading },
   ];
 
   return (
@@ -126,7 +110,7 @@ export default function LandingStats() {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {tiles.map((t, i) => (
           <Reveal key={t.label} delay={i * 80}>
-            <StatTile {...t} loading={loading} />
+            <StatTile {...t} />
           </Reveal>
         ))}
       </div>
