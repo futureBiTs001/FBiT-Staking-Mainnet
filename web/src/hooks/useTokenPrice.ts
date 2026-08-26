@@ -33,10 +33,12 @@ const GECKO_NETWORK: Record<string, string> = {
 };
 
 // ── Hardcoded FBiT pool addresses on Solana (always fetched first) ────────────
-// 5ZA1NsMv... is the live pool for the current FBiT mint — pinned to the front
-// in parseGeckoPools() below regardless of liquidity ranking.
+// ECUsT6sd... is the current live pool for the FBiT mint (switched 2026-08-26 — the
+// prior 5ZA1NsMv... pool had negligible real liquidity; this one holds real reserves,
+// ~70,000 FBiT / ~70 SOL, verified on-chain) — pinned to the front in parseGeckoPools()
+// below regardless of liquidity ranking.
 const FBIT_SOLANA_POOLS = [
-  '5ZA1NsMv9hviXTUPhxqXbbFqoMwYeaNvSegJiRQv9E2F',
+  'ECUsT6sdz9rAj7tPfHnnHwxdkLaDcafHEfWZEdzc7hQx',
 ];
 /** Exported so other callers (e.g. the landing page stats row) price the same pool. */
 export const PINNED_FBIT_POOL = FBIT_SOLANA_POOLS[0];

@@ -4,7 +4,7 @@ import React from 'react';
 import Reveal from './Reveal';
 
 const FBIT_MINT = '5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME';
-const FBIT_POOL = '5ZA1NsMv9hviXTUPhxqXbbFqoMwYeaNvSegJiRQv9E2F';
+const FBIT_POOL = 'ECUsT6sdz9rAj7tPfHnnHwxdkLaDcafHEfWZEdzc7hQx';
 
 interface Platform {
   name: string;

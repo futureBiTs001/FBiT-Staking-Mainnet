@@ -7,7 +7,7 @@ import { useTokenPrice } from '@/hooks/useTokenPrice';
 const TOTAL_SUPPLY = 250_000_000;
 const FBIT_MINT = '5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME';
 const JUPITER_URL = `https://jup.ag/swap/SOL-${FBIT_MINT}`;
-const METEORA_URL = 'https://app.meteora.ag/dammv2/5ZA1NsMv9hviXTUPhxqXbbFqoMwYeaNvSegJiRQv9E2F';
+const METEORA_URL = 'https://app.meteora.ag/dammv2/ECUsT6sdz9rAj7tPfHnnHwxdkLaDcafHEfWZEdzc7hQx';
 
 // New FBiT/SOL DAMM v2 pool (ECUsT6sdz9rAj7tPfHnnHwxdkLaDcafHEfWZEdzc7hQx) — read directly from
 // its on-chain Pool account: activation_type=1 (timestamp), activation_point=1788416999.
