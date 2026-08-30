@@ -200,9 +200,9 @@ Every time a user claims or compounds, **10% of their gross reward is permanentl
 ### Automated Annual Emission Reserve
 The contract includes a long-term **emission reserve** system:
 
-1. **Admin deposits** the full reserve allocation once (120,000,000 FBiT).
+1. **Admin deposits** into the reserve allocation (initially 120,000,000 FBiT, topped up to 229,830,026 FBiT as of August 2026).
 2. The contract **automatically releases** `ANNUAL_EMISSION` tokens per year from the reserve into the active reward pool.
-3. Target: **12,000,000 FBiT/year** → an approximately 10-year nominal runway.
+3. Target: **12,000,000 FBiT/year** → an approximately 19-year nominal runway at the current reserve size.
 4. The emission release is triggered automatically on every claim/compound — no cron job needed.
 
 ### PoS APY Formula

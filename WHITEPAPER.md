@@ -37,7 +37,7 @@ Key highlights:
 - **30-day lock period** with 6-hour claim intervals
 - **10-level referral rewards** totaling **17.75%** passive income
 - **10-tier team bonus** (Bronze → Titan) up to +10% additional APY
-- **120,000,000 FBiT reserve** funding a **12,000,000 FBiT/year** target emission
+- **229,830,026 FBiT reserve** funding a **12,000,000 FBiT/year** target emission (~19-year runway)
 - **Deflationary burn** on every claim, compound, and unstake
 - **250,000,000 fixed FBiT supply** — mint authority renounced on-chain
 - Live on **Solana Mainnet** (Program ID `8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp`)
@@ -199,9 +199,9 @@ FBiT's long-term sustainability is funded by an **on-chain reserve vault** that 
 
 | Parameter               | Value                                          |
 | ------------------------ | ------------------------------------------------ |
-| Reserve Allocation      | **120,000,000 FBiT** (48% of total supply)      |
+| Reserve Allocation      | **229,830,026 FBiT** (91.9% of total supply)    |
 | Annual Emission Target  | **12,000,000 FBiT / year**                      |
-| Nominal Runway          | **~10 years**                                   |
+| Nominal Runway          | **~19 years**                                   |
 
 The reserve is held in a separate vault from the active reward pool. This design ensures:
 
@@ -371,7 +371,7 @@ Beyond program-level protections, FBiT's tokenomics (§13.2) are structured to r
 
 | Safeguard                    | Detail                                                                 |
 | ------------------------------ | -------------------------------------------------------------------------- |
-| **Liquidity Lock**            | 100% of the 130,000,000 FBiT (52%) liquidity allocation is **locked or burned** — no wallet, including the team's, can withdraw pool liquidity. |
+| **Liquidity Lock**            | 100% of the 20,169,974 FBiT (8.1%) liquidity allocation is **locked or burned** — no wallet, including the team's, can withdraw pool liquidity. |
 | **Fixed Supply**              | Mint authority is renounced on the FBiT SPL mint — the 250,000,000 total supply can never be increased. |
 
 These safeguards are verifiable directly on-chain (mint authority, liquidity pool ownership, and vesting contract addresses) and are independent of any statement in this document.
@@ -405,21 +405,21 @@ The 250,000,000 FBiT supply is fixed — the mint authority has been renounced o
 
 | Allocation      | Amount (FBiT) | % of Supply |
 | --------------- | ------------- | ----------- |
-| Liquidity       | 130,000,000   | 52%         |
-| Staking Reserve | 120,000,000   | 48%         |
+| Staking Reserve | 229,830,026   | 91.9%       |
+| Liquidity       | 20,169,974    | 8.1%        |
 
-- **Liquidity (52%)** is deployed into the FBiT/SOL pool and **100% locked or burned** — it can never be pulled by a single wallet.
-- **Staking Reserve (48%, 120,000,000 FBiT)** funds the auto-emission system described in §7.
+- **Staking Reserve (91.9%, 229,830,026 FBiT)** funds the auto-emission system described in §7 — topped up from its original 120,000,000 with an additional 110,000,000 FBiT deposit to extend the nominal runway (see §13.3).
+- **Liquidity (8.1%)** is deployed into the FBiT/SOL pool and **100% locked or burned** — it can never be pulled by a single wallet.
 
 ### 13.3 Emission Schedule
 
-FBiT's dynamic APY (§6.1) is driven by an annual emission rate released from the 120,000,000 FBiT staking reserve — targeted at **12,000,000 FBiT/year**, an approximately **10-year nominal runway**:
+FBiT's dynamic APY (§6.1) is driven by an annual emission rate released from the 229,830,026 FBiT staking reserve — targeted at **12,000,000 FBiT/year**, an approximately **19-year nominal runway**:
 
 ```text
 Year 1  (2026): 12,000,000 FBiT emitted → reward pool
 Year 2  (2027): 12,000,000 FBiT emitted → reward pool
 ...
-Year 10 (2036): Reserve nominal runway complete
+Year 19 (2045): Reserve nominal runway complete
 ```
 
 ### 13.4 Deflationary Pressure
