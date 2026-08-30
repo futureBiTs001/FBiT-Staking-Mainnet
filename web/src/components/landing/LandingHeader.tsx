@@ -11,6 +11,7 @@ const NAV_LINKS = [
   { href: '#tokenomics', label: 'Tokenomics' },
   { href: '#security',   label: 'Security' },
   { href: '#roadmap',    label: 'Roadmap' },
+  { href: '#features',   label: 'How It Works' },
   { href: '#faq',        label: 'FAQ' },
 ];
 
