@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Connection, PublicKey } from '@solana/web3.js';
 import { useAppStore } from '@/lib/store';
 import { NETWORK_CONFIG } from '@/lib/config';
 
@@ -24,7 +25,7 @@ export interface TokenPriceData {
   lastUpdated: number | null;
   isLoading: boolean;
   error: string | null;
-  source: 'geckoterminal' | 'mock';
+  source: 'geckoterminal' | 'onchain' | 'mock';
 }
 
 // ── GeckoTerminal network IDs ─────────────────────────────────────────────────
@@ -147,6 +148,83 @@ async function fetchGeckoTokenLogo(network: string, tokenAddress: string): Promi
   }
 }
 
+// ── On-chain price/liquidity (authoritative, Solana only) ────────────────────
+// GeckoTerminal hasn't computed a real price for PINNED_FBIT_POOL yet — it has
+// no trades before the pool's own on-chain activation time (see /launch's
+// countdown), even though it already holds real reserves. GeckoTerminal's
+// filter drops any pool with base_token_price_usd falsy, which 0.0 is, so the
+// pinned-pool lookup below silently falls through to a *different*, nearly-
+// empty pool via the token/symbol-search fallbacks — a confident-looking but
+// wrong price. Reading the pool's vault balances directly avoids depending on
+// GeckoTerminal having indexed this specific pool at all.
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
+const METEORA_POOL_OWNER = 'cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG';
+
+async function fetchSolUsdPrice(): Promise<number | null> {
+  try {
+    const res = await fetch(
+      `https://api.geckoterminal.com/api/v2/simple/networks/solana/token_price/${SOL_MINT}`,
+      { headers: { Accept: 'application/json' }, cache: 'no-store' }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const price = Number(data?.data?.attributes?.token_prices?.[SOL_MINT]);
+    return Number.isFinite(price) && price > 0 ? price : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchOnChainPoolPrice(): Promise<DexPair | null> {
+  try {
+    const connection = new Connection(NETWORK_CONFIG.solana.rpcUrl, 'confirmed');
+    const poolPubkey  = new PublicKey(PINNED_FBIT_POOL);
+    const poolInfo    = await connection.getAccountInfo(poolPubkey);
+    if (!poolInfo || poolInfo.owner.toBase58() !== METEORA_POOL_OWNER) return null;
+
+    // Meteora cp-amm Pool account layout (offsets after the 8-byte discriminator),
+    // verified directly against this pool's on-chain bytes this session:
+    //   168 token_a_mint, 200 token_b_mint, 232 token_a_vault, 264 token_b_vault
+    const buf = poolInfo.data;
+    const tokenAMint  = new PublicKey(buf.subarray(168, 200)).toBase58();
+    const tokenBMint  = new PublicKey(buf.subarray(200, 232)).toBase58();
+    const tokenAVault = new PublicKey(buf.subarray(232, 264));
+    const tokenBVault = new PublicKey(buf.subarray(264, 296));
+
+    const [vaultABal, vaultBBal, solUsd] = await Promise.all([
+      connection.getTokenAccountBalance(tokenAVault),
+      connection.getTokenAccountBalance(tokenBVault),
+      fetchSolUsdPrice(),
+    ]);
+    if (!solUsd) return null;
+
+    const aAmount = vaultABal.value.uiAmount ?? 0;
+    const bAmount = vaultBBal.value.uiAmount ?? 0;
+    // Whichever side is native SOL sets the USD anchor for the whole pool.
+    const solAmount  = tokenAMint === SOL_MINT ? aAmount : (tokenBMint === SOL_MINT ? bAmount : null);
+    const fbitAmount = tokenAMint === SOL_MINT ? bAmount : aAmount;
+    if (solAmount === null || fbitAmount <= 0) return null;
+
+    const solValueUsd   = solAmount * solUsd;
+    const fbitPriceUsd  = solValueUsd / fbitAmount;
+    const liquidityUsd  = solValueUsd * 2; // balanced pool — both sides worth roughly the same
+
+    return {
+      dexId:          'Meteora',
+      pairAddress:    PINNED_FBIT_POOL,
+      quoteSymbol:    'SOL',
+      priceUsd:       fbitPriceUsd.toString(),
+      priceChange24h: 0, // not derivable from a single on-chain snapshot
+      volume24h:      0,
+      liquidityUsd,
+      txns24h: { buys: 0, sells: 0 },
+      url: `https://www.geckoterminal.com/solana/pools/${PINNED_FBIT_POOL}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Runs the actual GeckoTerminal fallback chain for one network and returns
 // the resulting state (never throws — always resolves to a usable value).
 async function fetchPriceData(network: string): Promise<TokenPriceData> {
@@ -154,6 +232,17 @@ async function fetchPriceData(network: string): Promise<TokenPriceData> {
   const tokenAddress = config?.stakeTokenAddress ?? '';
   const geckoNet     = GECKO_NETWORK[network] ?? network;
   const hasAddress   = tokenAddress.length > 10;
+
+  // ── 0. On-chain reserves for our own pinned pool (Solana, authoritative) ──
+  // Tried first — see fetchOnChainPoolPrice's comment for why GeckoTerminal
+  // can't be trusted for this specific pool yet.
+  if (network === 'solana') {
+    const onChainPair = await fetchOnChainPoolPrice();
+    if (onChainPair) {
+      const logoUrl = hasAddress ? await fetchGeckoTokenLogo('solana', tokenAddress) : null;
+      return { pairs: [onChainPair], logoUrl, lastUpdated: Date.now(), isLoading: false, error: null, source: 'onchain' };
+    }
+  }
 
   // ── 1. GeckoTerminal — hardcoded FBiT pool addresses (Solana) ───────────
   if (network === 'solana') {

@@ -80,9 +80,9 @@ export default function TokenPriceWidget() {
         </div>
 
         <div className="flex items-center gap-2">
-          {source === 'geckoterminal' && (
+          {(source === 'geckoterminal' || source === 'onchain') && (
             <span className="text-[10px] font-display px-2 py-1 rounded-md bg-brand-500/10 text-brand-400 border border-brand-500/20">
-              GeckoTerminal
+              {source === 'onchain' ? 'On-Chain' : 'GeckoTerminal'}
             </span>
           )}
           <button
