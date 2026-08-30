@@ -83,16 +83,23 @@ function getCpAmmClient(connection: Connection): CpAmm {
   return new CpAmm(connection);
 }
 
-/** Admin/fee-recipient wallet — resolved dynamically from the staking Platform account's
- *  `authority` field (same admin wallet already used for the 1% staking-platform fee),
+/** Admin/fee-recipient wallet — resolved dynamically from the staking Platform account,
  *  by reading the raw account bytes directly (mirrors solanaFetchPlatformStats' approach
- *  in ./solana.ts — authority is the first 32 bytes after the 8-byte discriminator). */
+ *  in ./solana.ts). Normally `authority` (offset 8-40), but once ownership is renounced
+ *  `authority` is zeroed out (Pubkey::default()) and fee routing must switch to the
+ *  dedicated `fee_recipient` field (offset 338-370, gated by `is_renounced` at offset 337)
+ *  — the same renounce-aware pattern already used for the 1% staking-platform fee. Without
+ *  this check, a post-renouncement deposit/withdraw would send its 0.1 SOL fee to the
+ *  unspendable zero address instead of the fee recipient. */
 async function getFeeRecipient(): Promise<PublicKey> {
   const connection = getRpcConnection();
   const [platPda] = platformPda();
   const info = await connection.getAccountInfo(platPda);
   if (!info) throw new Error('Could not resolve platform authority for fee routing.');
-  return new PublicKey(info.data.subarray(8, 40));
+  const isRenounced = info.data[337] === 1;
+  return isRenounced
+    ? new PublicKey(info.data.subarray(338, 370))
+    : new PublicKey(info.data.subarray(8, 40));
 }
 
 // ── Pool info ────────────────────────────────────────────────────────────────
@@ -239,7 +246,6 @@ export async function solanaLiquidityDeposit(
     instructions.push(...lockTx.instructions);
   } else {
     const cliffPoint = new BN(Math.floor(Date.now() / 1000) + LOCK_DURATION_SECONDS_24M);
-    const vestingAccount = Keypair.generate().publicKey; // placeholder PDA slot per SDK's expected shape
     const lockTx = await cpAmm.lockPosition({
       owner, payer: owner, position: positionAddress, positionNftAccount, pool: FBIT_POOL,
       cliffPoint,
@@ -296,8 +302,12 @@ export async function solanaLiquidityGetUserPositions(owner: PublicKey): Promise
     let unlockTimestampMs: number | null = null;
     if (isLocked && !isPermanent) {
       const vestings = await cpAmm.getAllVestingsByPosition(r.position);
+      // cliffPoint lives on the nested `innerVesting` struct, not on the vesting
+      // account directly — see @meteora-ag/cp-amm-sdk's `vesting` IDL type
+      // (vesting.innerVesting.cliffPoint), verified against the installed SDK's
+      // type definitions this session.
       const cliff = vestings[0]?.account as any;
-      unlockTimestampMs = cliff ? Number(cliff.cliffPoint) * 1000 : null;
+      unlockTimestampMs = cliff ? Number(cliff.innerVesting.cliffPoint) * 1000 : null;
     }
     return {
       positionAddress: r.position.toBase58(),
