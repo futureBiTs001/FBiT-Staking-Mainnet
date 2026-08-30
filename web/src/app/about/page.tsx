@@ -81,7 +81,7 @@ export default function AboutPage() {
           <ul style={{ paddingLeft: 20, lineHeight: 2, color: 'var(--text-secondary)' }}>
             <li><b style={{ color: '#f1f5f9' }}>Website:</b> <a href="https://futurebit.in" style={{ color: '#00E676' }}>futurebit.in</a></li>
             <li><b style={{ color: '#f1f5f9' }}>Twitter/X:</b> <a href="https://x.com/FUTURBIT" style={{ color: '#00E676' }}>@FUTURBIT</a></li>
-            <li><b style={{ color: '#f1f5f9' }}>Telegram:</b> <a href="https://t.me/FutureBiTToken" style={{ color: '#00E676' }}>t.me/FutureBiTToken</a></li>
+            <li><b style={{ color: '#f1f5f9' }}>Telegram:</b> <a href="https://t.me/FutureBit_Community" style={{ color: '#00E676' }}>t.me/FutureBit_Community</a></li>
             <li><b style={{ color: '#f1f5f9' }}>GitHub:</b> <a href="https://github.com/futurebitsmaxx/FBiT-Staking-Mainnet" style={{ color: '#00E676' }}>FBiT-Staking-Mainnet</a></li>
           </ul>
         </Section>

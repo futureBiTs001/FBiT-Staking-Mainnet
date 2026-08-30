@@ -31,7 +31,7 @@ const structuredData = {
       },
       sameAs: [
         'https://x.com/FUTURBIT',
-        'https://t.me/FutureBiTToken',
+        'https://t.me/FutureBit_Community',
         'https://github.com/futurebitsmaxx/FBiT-Staking-Mainnet',
       ],
     },
