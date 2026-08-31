@@ -39,7 +39,7 @@ export default function LandingFAQ() {
     <section id="faq" className="max-w-3xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
       <Reveal>
         <div className="text-center mb-8">
-          <h2 className="font-display font-bold text-2xl sm:text-3xl mb-2">Frequently Asked Questions</h2>
+          <h2 className="gradient-text font-display font-extrabold text-3xl sm:text-4xl mb-2">Frequently Asked Questions</h2>
         </div>
       </Reveal>
 
@@ -54,7 +54,7 @@ export default function LandingFAQ() {
                   onClick={() => setOpenIndex(isOpen ? null : i)}
                   className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left"
                 >
-                  <span className="font-display font-semibold text-sm sm:text-base">{item.q}</span>
+                  <span className="font-display font-bold text-base sm:text-lg">{item.q}</span>
                   <span className={`text-brand-400 text-lg shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-45' : ''}`}>
                     +
                   </span>

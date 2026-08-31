@@ -94,8 +94,8 @@ export default function LandingExchanges() {
     <section id="exchanges" className="max-w-5xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
       <Reveal>
         <div className="text-center mb-8">
-          <h2 className="font-display font-bold text-2xl sm:text-3xl mb-2">Where to Trade</h2>
-          <p className="text-text-muted text-sm">
+          <h2 className="text-gradient font-display font-extrabold text-3xl sm:text-4xl mb-2">Where to Trade</h2>
+          <p className="text-text-muted text-sm sm:text-base">
             FBiT is a permissionless SPL token — buy directly through any of these, no account or KYC required.
           </p>
         </div>

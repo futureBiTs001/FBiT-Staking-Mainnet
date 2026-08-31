@@ -39,8 +39,8 @@ export default function LandingRewards() {
     <section id="rewards" className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
       <Reveal>
         <div className="text-center mb-10">
-          <h2 className="font-display font-bold text-2xl sm:text-3xl mb-2">Referrals & Team Bonus</h2>
-          <p className="text-text-muted text-sm max-w-xl mx-auto">
+          <h2 className="text-gradient font-display font-extrabold text-3xl sm:text-4xl mb-2">Referrals & Team Bonus</h2>
+          <p className="text-text-muted text-sm sm:text-base max-w-xl mx-auto">
             Two extra reward layers on top of base staking APY — both calculated and paid automatically on-chain, no manual claiming.
           </p>
         </div>

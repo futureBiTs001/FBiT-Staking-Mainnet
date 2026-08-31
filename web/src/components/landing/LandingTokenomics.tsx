@@ -21,8 +21,8 @@ export default function LandingTokenomics() {
     <section id="tokenomics" className="max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
       <Reveal>
         <div className="text-center mb-8">
-          <h2 className="font-display font-bold text-2xl sm:text-3xl mb-2">Tokenomics</h2>
-          <p className="text-text-muted text-sm">250,000,000 FBiT total supply — fixed forever, mint authority renounced</p>
+          <h2 className="gradient-text font-display font-extrabold text-3xl sm:text-4xl mb-2">Tokenomics</h2>
+          <p className="text-text-muted text-sm sm:text-base">250,000,000 FBiT total supply — fixed forever, mint authority renounced</p>
         </div>
       </Reveal>
 

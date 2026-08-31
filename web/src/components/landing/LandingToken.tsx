@@ -25,8 +25,8 @@ export default function LandingToken() {
     <section id="token" className="max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
       <Reveal>
         <div className="text-center mb-8">
-          <h2 className="font-display font-bold text-2xl sm:text-3xl mb-2">Token Details</h2>
-          <p className="text-text-muted text-sm">
+          <h2 className="gradient-text font-display font-extrabold text-3xl sm:text-4xl mb-2">Token Details</h2>
+          <p className="text-text-muted text-sm sm:text-base">
             Everything here is verifiable on-chain — check it yourself before you stake.
           </p>
         </div>

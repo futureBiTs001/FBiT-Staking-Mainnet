@@ -89,8 +89,8 @@ export default function LandingRoadmap() {
     <section id="roadmap" className="max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
       <Reveal>
         <div className="text-center mb-10">
-          <h2 className="font-display font-bold text-2xl sm:text-3xl mb-2">Roadmap</h2>
-          <p className="text-text-muted text-sm max-w-xl mx-auto">
+          <h2 className="gradient-text font-display font-extrabold text-3xl sm:text-4xl mb-2">Roadmap</h2>
+          <p className="text-text-muted text-sm sm:text-base max-w-xl mx-auto">
             Goals we're building toward — not guarantees of a specific exchange or date.
           </p>
         </div>

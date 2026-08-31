@@ -41,8 +41,8 @@ export default function LandingSecurity() {
     <section id="security" className="max-w-7xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
       <Reveal>
         <div className="text-center mb-10">
-          <h2 className="font-display font-bold text-2xl sm:text-3xl mb-2">Built to Be Trusted</h2>
-          <p className="text-text-muted text-sm max-w-xl mx-auto">
+          <h2 className="text-gradient font-display font-extrabold text-3xl sm:text-4xl mb-2">Built to Be Trusted</h2>
+          <p className="text-text-muted text-sm sm:text-base max-w-xl mx-auto">
             Every claim below is independently verifiable on-chain — nothing here relies on taking our word for it.
           </p>
         </div>

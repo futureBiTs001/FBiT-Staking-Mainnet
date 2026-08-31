@@ -100,8 +100,8 @@ export default function LandingStats() {
     <section id="stats" className="max-w-7xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
       <Reveal>
         <div className="text-center mb-8">
-          <h2 className="font-display font-bold text-2xl sm:text-3xl mb-2">Live Protocol Stats</h2>
-          <p className="text-text-muted text-sm">
+          <h2 className="gradient-text font-display font-extrabold text-3xl sm:text-4xl mb-2">Live Protocol Stats</h2>
+          <p className="text-text-muted text-sm sm:text-base">
             Live FBiT market price plus on-chain protocol data — refreshed on every visit.
           </p>
         </div>
