@@ -18,11 +18,25 @@ import {
 const SLIPPAGE_OPTIONS = [50, 100, 300]; // bps: 0.5% / 1% / 3%
 const QUOTE_DEBOUNCE_MS = 500;
 const HIGH_IMPACT_PCT = 3;
-const LARGE_DEPOSIT_TIER_SOL = 10; // mirrors liquidity.ts — above this, 24-month isn't offered
+
+// Deposit-size tiers — mirrors DEPOSIT_TIERS in liquidity.ts. Shown as a reference
+// table so the lock duration for any amount is clear before the user commits.
+const TIER_TABLE = [
+  { range: '1 – 10 SOL',    months: 12 },
+  { range: '10 – 50 SOL',   months: 24 },
+  { range: '50 – 100 SOL',  months: 36 },
+  { range: '100 – 250 SOL', months: 48 },
+  { range: '250 – 500 SOL', months: 60 },
+  { range: '500+ SOL',      months: 72 },
+];
 
 const LOCK_OPTION_COPY: Record<LockType, { label: string; desc: string }> = {
+  '12m':      { label: '12-Month Lock', desc: 'Principal unlocks automatically after 12 months' },
   '24m':      { label: '24-Month Lock', desc: 'Principal unlocks automatically after 24 months' },
-  '5y':       { label: '5-Year Lock',   desc: 'Principal unlocks automatically after 5 years' },
+  '36m':      { label: '36-Month Lock', desc: 'Principal unlocks automatically after 36 months' },
+  '48m':      { label: '48-Month Lock', desc: 'Principal unlocks automatically after 48 months' },
+  '60m':      { label: '60-Month Lock', desc: 'Principal unlocks automatically after 60 months' },
+  '72m':      { label: '72-Month Lock', desc: 'Principal unlocks automatically after 72 months' },
   permanent:  { label: 'Permanent Lock', desc: 'Principal can never be withdrawn — irreversible' },
 };
 
@@ -33,7 +47,7 @@ interface Props {
 export default function DepositPanel({ onDeposited }: Props) {
   const { solanaAddress } = useWallet();
   const [amount, setAmount] = useState('');
-  const [lockType, setLockType] = useState<LockType>('24m');
+  const [lockType, setLockType] = useState<LockType>('12m');
   const [slippageBps, setSlippageBps] = useState(SLIPPAGE_OPTIONS[1]);
   const [quote, setQuote] = useState<LiquidityDepositQuote | null>(null);
   const [quoting, setQuoting] = useState(false);
@@ -70,9 +84,9 @@ export default function DepositPanel({ onDeposited }: Props) {
   const amountNum = Number(amount) || 0;
   const allowedLockTypes = getAllowedLockTypes(amountNum);
 
-  // If the entered amount crosses the 10 SOL tier boundary, swap the selected
-  // lock type to whichever option is actually valid for the new tier instead
-  // of leaving an invalid choice selected.
+  // If the entered amount crosses a tier boundary, swap the selected lock type
+  // to whichever option is actually valid for the new tier instead of leaving
+  // an invalid choice selected.
   useEffect(() => {
     if (!allowedLockTypes.includes(lockType)) {
       setLockType(allowedLockTypes[0]);
@@ -182,10 +196,16 @@ export default function DepositPanel({ onDeposited }: Props) {
         Lock Type
       </label>
       <p className="text-text-muted text-[11px] mb-2">
-        {amountNum > LARGE_DEPOSIT_TIER_SOL
-          ? `Deposits above ${LARGE_DEPOSIT_TIER_SOL} SOL require a 5-year or Permanent lock.`
-          : `Up to ${LARGE_DEPOSIT_TIER_SOL} SOL: choose 24-month or Permanent. Above ${LARGE_DEPOSIT_TIER_SOL} SOL: 5-year or Permanent instead.`}
+        The timed-lock duration is set by deposit size (Permanent is always available too):
       </p>
+      <div className="grid grid-cols-3 gap-x-3 gap-y-1 mb-3 text-[11px] font-mono">
+        {TIER_TABLE.map((t) => (
+          <div key={t.range} className="flex justify-between text-text-muted">
+            <span>{t.range}</span>
+            <span className="text-text-primary">{t.months}mo</span>
+          </div>
+        ))}
+      </div>
       <div className="grid grid-cols-2 gap-2 mb-4">
         {allowedLockTypes.map((lt) => (
           <button

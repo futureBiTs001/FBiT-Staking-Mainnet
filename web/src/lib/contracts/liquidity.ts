@@ -52,25 +52,42 @@ const FBIT_POOL  = new PublicKey('ECUsT6sdz9rAj7tPfHnnHwxdkLaDcafHEfWZEdzc7hQx')
 // countdown on the /launch page (LaunchCelebration.tsx's POOL_LAUNCH_TIMESTAMP_MS).
 export const POOL_ACTIVATION_TIMESTAMP_MS = 1788416999 * 1000;
 
-// ~24 months / ~5 years. Used as lockPosition cliff durations.
-const LOCK_DURATION_SECONDS_24M = 730 * 86400;
-const LOCK_DURATION_SECONDS_5Y  = 5 * 365 * 86400;
-
 const DEPOSIT_FEE_LAMPORTS  = Math.round(0.2 * LAMPORTS_PER_SOL); // flat 0.2 SOL on deposit
 const WITHDRAW_FEE_LAMPORTS = Math.round(0.5 * LAMPORTS_PER_SOL); // flat 0.5 SOL on withdraw
 const MIN_DEPOSIT_SOL = 1;
-// Deposit tiers (user-set): 1-10 SOL can pick 24-month or Permanent; anything
-// above 10 SOL must lock for at least 5 years (or Permanent) instead of 24
-// months — no upper cap on deposit size.
-const LARGE_DEPOSIT_TIER_SOL = 10;
 const DECIMALS = 9;
 const SCALE = 10 ** DECIMALS;
 
-export type LockType = '24m' | '5y' | 'permanent';
+export type LockType = '12m' | '24m' | '36m' | '48m' | '60m' | '72m' | 'permanent';
 
-/** Which lock types are offered for a given deposit size — see the tier comment above. */
+/**
+ * Deposit-size tiers: the timed-lock duration is determined by how much SOL is
+ * deposited (no user choice within a tier) — the only real choice is between
+ * that tier's duration and Permanent. No upper cap on deposit size (500+ SOL
+ * all land on the max 72-month tier).
+ */
+const DEPOSIT_TIERS: { maxSol: number; lockType: Exclude<LockType, 'permanent'>; months: number }[] = [
+  { maxSol: 10,        lockType: '12m', months: 12 },
+  { maxSol: 50,        lockType: '24m', months: 24 },
+  { maxSol: 100,       lockType: '36m', months: 36 },
+  { maxSol: 250,       lockType: '48m', months: 48 },
+  { maxSol: 500,       lockType: '60m', months: 60 },
+  { maxSol: Infinity,  lockType: '72m', months: 72 },
+];
+
+function getTierForAmount(solAmount: number) {
+  return DEPOSIT_TIERS.find(t => solAmount <= t.maxSol) ?? DEPOSIT_TIERS[DEPOSIT_TIERS.length - 1];
+}
+
+/** The one timed-lock option for this deposit size, plus Permanent — see DEPOSIT_TIERS above. */
 export function getAllowedLockTypes(solAmount: number): LockType[] {
-  return solAmount > LARGE_DEPOSIT_TIER_SOL ? ['5y', 'permanent'] : ['24m', 'permanent'];
+  return [getTierForAmount(solAmount).lockType, 'permanent'];
+}
+
+/** Months → seconds, via whole years (e.g. 24 months = 2 * 365 days) — matches the
+ *  convention already used for the original fixed 24-month lock this session. */
+function monthsToSeconds(months: number): number {
+  return Math.round(months / 12) * 365 * 86400;
 }
 
 export interface LiquidityDepositQuote {
@@ -177,13 +194,10 @@ export async function solanaLiquidityDeposit(
   lockType: LockType,
   slippageBps = 100,
 ): Promise<{ swapTxHash: string; positionTxHash: string; positionAddress: string }> {
+  const tier = getTierForAmount(solAmount);
   const allowed = getAllowedLockTypes(solAmount);
   if (!allowed.includes(lockType)) {
-    throw new Error(
-      solAmount > LARGE_DEPOSIT_TIER_SOL
-        ? `Deposits above ${LARGE_DEPOSIT_TIER_SOL} SOL require a 5-year or Permanent lock.`
-        : `Deposits up to ${LARGE_DEPOSIT_TIER_SOL} SOL require a 24-month or Permanent lock.`,
-    );
+    throw new Error(`This deposit size requires a ${tier.months}-month or Permanent lock.`);
   }
 
   const owner      = getOwner();
@@ -266,8 +280,8 @@ export async function solanaLiquidityDeposit(
     });
     instructions.push(...lockTx.instructions);
   } else {
-    const lockDurationSeconds = lockType === '5y' ? LOCK_DURATION_SECONDS_5Y : LOCK_DURATION_SECONDS_24M;
-    const cliffPoint = new BN(Math.floor(Date.now() / 1000) + lockDurationSeconds);
+    const lockMonths = DEPOSIT_TIERS.find(t => t.lockType === lockType)?.months ?? tier.months;
+    const cliffPoint = new BN(Math.floor(Date.now() / 1000) + monthsToSeconds(lockMonths));
     const lockTx = await cpAmm.lockPosition({
       owner, payer: owner, position: positionAddress, positionNftAccount, pool: FBIT_POOL,
       cliffPoint,
