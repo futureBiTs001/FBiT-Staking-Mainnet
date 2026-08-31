@@ -84,7 +84,10 @@ export default function LandingHeader() {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 glass border-b border-white/5">
+    <header
+      className="sticky top-0 z-50 border-b border-white/5"
+      style={{ background: 'rgba(5, 5, 5, 0.75)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Logo — links home from any page that reuses this header (e.g. /guide) */}
