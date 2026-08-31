@@ -14,7 +14,7 @@ import LiveTicker from '@/components/landing/LiveTicker';
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#050505' }}>
+    <div className="min-h-screen landing-page" style={{ backgroundColor: '#050505' }}>
       <LandingHeader />
 
       <main className="max-w-7xl mx-auto w-full">

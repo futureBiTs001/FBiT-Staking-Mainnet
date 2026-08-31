@@ -79,6 +79,18 @@
     box-shadow: 0 0 30px var(--glow-green);
   }
 
+  /* Landing page runs on a near-black body (see app/page.tsx) instead of the
+     app-wide navy surface — scope glass panels here so they read as black-
+     tinted frosted glass instead of showing the old navy tone through them. */
+  .landing-page .glass,
+  .landing-page .glass-card {
+    background: rgba(8, 8, 8, 0.65);
+  }
+
+  .landing-page .bg-surface-800 {
+    background-color: #0a0a0a;
+  }
+
   .btn-primary {
     @apply px-6 py-3 rounded-xl font-display font-semibold text-white transition-all duration-300;
     background: linear-gradient(90deg, var(--solana-purple), var(--solana-green));

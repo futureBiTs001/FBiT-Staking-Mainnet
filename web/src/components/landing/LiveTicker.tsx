@@ -102,7 +102,10 @@ export default function LiveTicker() {
   const marketCap = price != null ? price * TOTAL_SUPPLY : null;
 
   return (
-    <div className="fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-surface-dark/95 backdrop-blur-md">
+    <div
+      className="fixed bottom-0 inset-x-0 z-40 border-t border-white/10 backdrop-blur-md"
+      style={{ background: 'rgba(5, 5, 5, 0.95)' }}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-center gap-6 sm:gap-10 overflow-x-auto text-sm sm:text-base font-mono">
         <span className="flex items-center gap-2 shrink-0">
           <span className="w-2 h-2 rounded-full bg-brand-400 animate-pulse" />
