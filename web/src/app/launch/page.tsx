@@ -9,9 +9,9 @@ export const metadata: Metadata = {
 
 export default function LaunchPage() {
   return (
-    <>
+    <div className="min-h-screen landing-page" style={{ backgroundColor: '#050505' }}>
       <LandingHeader />
       <LaunchCelebration />
-    </>
+    </div>
   );
 }
