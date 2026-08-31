@@ -3,7 +3,8 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { useAppStore } from '@/lib/store';
 import { getReferrerFromUrl } from '@/lib/utils';
-import { appKitModal } from '@/lib/reown';
+import toast from 'react-hot-toast';
+import { appKitModal, isInsideBinanceAppBrowser } from '@/lib/reown';
 
 type WalletType = 'reown';
 
@@ -149,6 +150,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsConnecting(true);
     try { await appKitModal.disconnect(); } catch {}
     clearWcSessions();
+    if (isInsideBinanceAppBrowser()) {
+      // Inside Binance's own in-app browser, Binance already injects its Solana
+      // wallet directly (Wallet Standard) — picking the WalletConnect-routed
+      // "Binance Web3 Wallet" entry instead tries to deep-link back out to
+      // relaunch the app the user is already inside, which fails/bounces back.
+      toast('Binance app detected — pick your wallet under "Installed", not "Binance Web3 Wallet".', { duration: 6000, icon: '👛' });
+    }
     appKitModal.open({ view: 'Connect' });
   }, []);
 

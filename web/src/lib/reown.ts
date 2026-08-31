@@ -20,6 +20,21 @@ const solanaAdapter = new SolanaAdapter({
   wallets: [],
 });
 
+/**
+ * True when this page is running inside Binance Web3 Wallet's own in-app DApp
+ * browser. Binance's in-app browser injects a Wallet Standard-compliant Solana
+ * provider directly (per their docs) — so a user already inside it should
+ * connect via that auto-detected "installed" wallet, NOT via the WalletConnect
+ * "Binance Web3 Wallet" featured entry in the Reown modal, which tries to
+ * deep-link back out to relaunch the very app the user is already inside and
+ * fails/bounces back. See WalletContext's connect() for where this is used.
+ */
+export function isInsideBinanceAppBrowser(): boolean {
+  if (typeof window === 'undefined') return false;
+  const w = window as any;
+  return !!(w.binancew3w || w.ethereum?.isBinance);
+}
+
 export let appKitModal: ReturnType<typeof createAppKit> | undefined;
 
 // Holds the Reown-connected Solana wallet provider so solana.ts can use the
@@ -53,7 +68,12 @@ if (typeof window !== 'undefined') {
       swaps:            false,
       onramp:           false,
     },
-    featuredWalletIds: [
+    // Only feature the WalletConnect-routed Binance entry when we're NOT already
+    // inside Binance's own in-app browser — in that context Binance's already
+    // auto-detected Wallet Standard provider is the correct pick, and featuring
+    // the WC entry above it just steers users into the deep-link-to-self loop
+    // that fails (see isInsideBinanceAppBrowser's doc comment).
+    featuredWalletIds: isInsideBinanceAppBrowser() ? [] : [
       '8a0ee50d1f22f6651afcae7eb4253e52a3310b90af5daef78a8c4929a9bb99d4', // Binance Web3 Wallet
     ],
     allWallets: 'SHOW' as const,
