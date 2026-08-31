@@ -87,9 +87,18 @@ export default function MyPositions({ refreshKey }: { refreshKey: number }) {
     if (!checkRateLimit(`liquidity-withdraw-${p.positionAddress}`)) { toast.error('Please wait a moment.'); return; }
     setBusy(`withdraw-${p.positionAddress}`, true);
     try {
-      const { txHash } = await solanaLiquidityWithdraw(p.positionAddress);
+      const { removeTxHash, swapTxHash } = await solanaLiquidityWithdraw(p.positionAddress);
       toast.success(
-        <span>Withdrawn! <a href={getExplorerTxUrl('solana', txHash)} target="_blank" rel="noopener noreferrer" className="underline">View</a></span>,
+        <span>
+          Withdrawn to SOL!{' '}
+          <a href={getExplorerTxUrl('solana', removeTxHash)} target="_blank" rel="noopener noreferrer" className="underline">View</a>
+          {swapTxHash && (
+            <>
+              {' · '}
+              <a href={getExplorerTxUrl('solana', swapTxHash)} target="_blank" rel="noopener noreferrer" className="underline">Swap</a>
+            </>
+          )}
+        </span>,
       );
       load();
     } catch (e) {
@@ -121,7 +130,7 @@ export default function MyPositions({ refreshKey }: { refreshKey: number }) {
               <span className={`text-[10px] font-display uppercase tracking-wider px-2 py-1 rounded-full ${
                 isPermanent ? 'bg-accent-rose/15 text-accent-rose' : 'bg-brand-500/15 text-brand-400'
               }`}>
-                {isPermanent ? 'Permanent Lock' : '24-Month Lock'}
+                {isPermanent ? 'Permanent Lock' : 'Timed Lock'}
               </span>
               {!isPermanent && (
                 <span className="text-text-muted text-xs font-mono">

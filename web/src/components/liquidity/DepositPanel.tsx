@@ -9,6 +9,7 @@ import { getExplorerTxUrl } from '@/lib/config';
 import {
   solanaLiquidityGetDepositQuote,
   solanaLiquidityDeposit,
+  getAllowedLockTypes,
   MIN_DEPOSIT_SOL,
   type LiquidityDepositQuote,
   type LockType,
@@ -17,6 +18,13 @@ import {
 const SLIPPAGE_OPTIONS = [50, 100, 300]; // bps: 0.5% / 1% / 3%
 const QUOTE_DEBOUNCE_MS = 500;
 const HIGH_IMPACT_PCT = 3;
+const LARGE_DEPOSIT_TIER_SOL = 10; // mirrors liquidity.ts — above this, 24-month isn't offered
+
+const LOCK_OPTION_COPY: Record<LockType, { label: string; desc: string }> = {
+  '24m':      { label: '24-Month Lock', desc: 'Principal unlocks automatically after 24 months' },
+  '5y':       { label: '5-Year Lock',   desc: 'Principal unlocks automatically after 5 years' },
+  permanent:  { label: 'Permanent Lock', desc: 'Principal can never be withdrawn — irreversible' },
+};
 
 interface Props {
   onDeposited: () => void;
@@ -58,6 +66,19 @@ export default function DepositPanel({ onDeposited }: Props) {
     }, QUOTE_DEBOUNCE_MS);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [amount, slippageBps]);
+
+  const amountNum = Number(amount) || 0;
+  const allowedLockTypes = getAllowedLockTypes(amountNum);
+
+  // If the entered amount crosses the 10 SOL tier boundary, swap the selected
+  // lock type to whichever option is actually valid for the new tier instead
+  // of leaving an invalid choice selected.
+  useEffect(() => {
+    if (!allowedLockTypes.includes(lockType)) {
+      setLockType(allowedLockTypes[0]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allowedLockTypes.join(',')]);
 
   const handleDeposit = async () => {
     if (!solanaAddress) { toast.error('Connect your wallet first.'); return; }
@@ -160,25 +181,26 @@ export default function DepositPanel({ onDeposited }: Props) {
       <label className="text-text-muted text-[11px] font-display uppercase tracking-wider mb-1.5 block">
         Lock Type
       </label>
+      <p className="text-text-muted text-[11px] mb-2">
+        {amountNum > LARGE_DEPOSIT_TIER_SOL
+          ? `Deposits above ${LARGE_DEPOSIT_TIER_SOL} SOL require a 5-year or Permanent lock.`
+          : `Up to ${LARGE_DEPOSIT_TIER_SOL} SOL: choose 24-month or Permanent. Above ${LARGE_DEPOSIT_TIER_SOL} SOL: 5-year or Permanent instead.`}
+      </p>
       <div className="grid grid-cols-2 gap-2 mb-4">
-        <button
-          onClick={() => setLockType('24m')}
-          className={`rounded-xl border px-3 py-3 text-left transition-colors ${
-            lockType === '24m' ? 'border-brand-500/50 bg-brand-500/10' : 'border-white/10 bg-white/5'
-          }`}
-        >
-          <p className="font-display font-semibold text-sm">24-Month Lock</p>
-          <p className="text-text-muted text-[11px] mt-0.5">Principal unlocks automatically after 24 months</p>
-        </button>
-        <button
-          onClick={() => setLockType('permanent')}
-          className={`rounded-xl border px-3 py-3 text-left transition-colors ${
-            lockType === 'permanent' ? 'border-accent-rose/50 bg-accent-rose/10' : 'border-white/10 bg-white/5'
-          }`}
-        >
-          <p className="font-display font-semibold text-sm">Permanent Lock</p>
-          <p className="text-text-muted text-[11px] mt-0.5">Principal can never be withdrawn — irreversible</p>
-        </button>
+        {allowedLockTypes.map((lt) => (
+          <button
+            key={lt}
+            onClick={() => setLockType(lt)}
+            className={`rounded-xl border px-3 py-3 text-left transition-colors ${
+              lockType === lt
+                ? (lt === 'permanent' ? 'border-accent-rose/50 bg-accent-rose/10' : 'border-brand-500/50 bg-brand-500/10')
+                : 'border-white/10 bg-white/5'
+            }`}
+          >
+            <p className="font-display font-semibold text-sm">{LOCK_OPTION_COPY[lt].label}</p>
+            <p className="text-text-muted text-[11px] mt-0.5">{LOCK_OPTION_COPY[lt].desc}</p>
+          </button>
+        ))}
       </div>
 
       {lockType === 'permanent' && (

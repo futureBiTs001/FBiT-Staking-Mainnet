@@ -52,16 +52,26 @@ const FBIT_POOL  = new PublicKey('ECUsT6sdz9rAj7tPfHnnHwxdkLaDcafHEfWZEdzc7hQx')
 // countdown on the /launch page (LaunchCelebration.tsx's POOL_LAUNCH_TIMESTAMP_MS).
 export const POOL_ACTIVATION_TIMESTAMP_MS = 1788416999 * 1000;
 
-// ~24 months. Used as the lockPosition cliff duration.
+// ~24 months / ~5 years. Used as lockPosition cliff durations.
 const LOCK_DURATION_SECONDS_24M = 730 * 86400;
+const LOCK_DURATION_SECONDS_5Y  = 5 * 365 * 86400;
 
 const DEPOSIT_FEE_LAMPORTS  = Math.round(0.2 * LAMPORTS_PER_SOL); // flat 0.2 SOL on deposit
 const WITHDRAW_FEE_LAMPORTS = Math.round(0.5 * LAMPORTS_PER_SOL); // flat 0.5 SOL on withdraw
-const MIN_DEPOSIT_SOL = 2; // keeps the flat 0.2 SOL deposit fee to ~10% or less
+const MIN_DEPOSIT_SOL = 1;
+// Deposit tiers (user-set): 1-10 SOL can pick 24-month or Permanent; anything
+// above 10 SOL must lock for at least 5 years (or Permanent) instead of 24
+// months — no upper cap on deposit size.
+const LARGE_DEPOSIT_TIER_SOL = 10;
 const DECIMALS = 9;
 const SCALE = 10 ** DECIMALS;
 
-export type LockType = '24m' | 'permanent';
+export type LockType = '24m' | '5y' | 'permanent';
+
+/** Which lock types are offered for a given deposit size — see the tier comment above. */
+export function getAllowedLockTypes(solAmount: number): LockType[] {
+  return solAmount > LARGE_DEPOSIT_TIER_SOL ? ['5y', 'permanent'] : ['24m', 'permanent'];
+}
 
 export interface LiquidityDepositQuote {
   totalSolLamports: BN;
@@ -167,6 +177,15 @@ export async function solanaLiquidityDeposit(
   lockType: LockType,
   slippageBps = 100,
 ): Promise<{ swapTxHash: string; positionTxHash: string; positionAddress: string }> {
+  const allowed = getAllowedLockTypes(solAmount);
+  if (!allowed.includes(lockType)) {
+    throw new Error(
+      solAmount > LARGE_DEPOSIT_TIER_SOL
+        ? `Deposits above ${LARGE_DEPOSIT_TIER_SOL} SOL require a 5-year or Permanent lock.`
+        : `Deposits up to ${LARGE_DEPOSIT_TIER_SOL} SOL require a 24-month or Permanent lock.`,
+    );
+  }
+
   const owner      = getOwner();
   const wallet      = getSolanaWallet();
   const connection  = getRpcConnection();
@@ -247,7 +266,8 @@ export async function solanaLiquidityDeposit(
     });
     instructions.push(...lockTx.instructions);
   } else {
-    const cliffPoint = new BN(Math.floor(Date.now() / 1000) + LOCK_DURATION_SECONDS_24M);
+    const lockDurationSeconds = lockType === '5y' ? LOCK_DURATION_SECONDS_5Y : LOCK_DURATION_SECONDS_24M;
+    const cliffPoint = new BN(Math.floor(Date.now() / 1000) + lockDurationSeconds);
     const lockTx = await cpAmm.lockPosition({
       owner, payer: owner, position: positionAddress, positionNftAccount, pool: FBIT_POOL,
       cliffPoint,
@@ -283,7 +303,10 @@ export async function solanaLiquidityDeposit(
 export interface LiquidityPositionSummary {
   positionAddress: string;
   positionNftAccount: string;
-  lockType: LockType | 'none';
+  // 'timed' covers both the 24-month and 5-year options once deposited — the
+  // actual remaining duration is what unlockTimestampMs is for; which of the
+  // two the user originally picked doesn't need to survive as a separate tag.
+  lockType: 'timed' | 'permanent' | 'none';
   unlockedLiquidity: string;
   vestedLiquidity: string;
   permanentLockedLiquidity: string;
@@ -314,7 +337,7 @@ export async function solanaLiquidityGetUserPositions(owner: PublicKey): Promise
     return {
       positionAddress: r.position.toBase58(),
       positionNftAccount: r.positionNftAccount.toBase58(),
-      lockType: isPermanent ? 'permanent' : (isLocked ? '24m' : 'none'),
+      lockType: isPermanent ? 'permanent' : (isLocked ? 'timed' : 'none'),
       unlockedLiquidity: s.unlockedLiquidity.toString(),
       vestedLiquidity: s.vestedLiquidity.toString(),
       permanentLockedLiquidity: s.permanentLockedLiquidity.toString(),
@@ -407,9 +430,20 @@ export async function solanaLiquidityCompoundFees(positionAddress: string): Prom
   return { txHash };
 }
 
-/** Withdraw after unlock (24-month positions only — permanent-locked principal can never
- *  be withdrawn by design). Charges a separate flat 0.5 SOL platform fee. */
-export async function solanaLiquidityWithdraw(positionAddress: string): Promise<{ txHash: string }> {
+/**
+ * Withdraw after unlock (timed positions only — permanent-locked principal can
+ * never be withdrawn by design). Charges a separate flat 0.5 SOL platform fee.
+ *
+ * SOL-only by design (matches the SOL-only deposit): removeAllLiquidity hands
+ * back both FBiT and SOL from the pool — Tx 2 then swaps the FBiT side back to
+ * SOL via Jupiter (the same swap machinery deposit already uses, just
+ * reversed), so the user only ever sees SOL in and SOL out. This is why
+ * withdraw is a 2-transaction flow rather than one.
+ */
+export async function solanaLiquidityWithdraw(
+  positionAddress: string,
+  slippageBps = 100,
+): Promise<{ removeTxHash: string; swapTxHash: string | null }> {
   const owner = getOwner();
   const wallet = getSolanaWallet();
   const connection = getRpcConnection();
@@ -423,6 +457,13 @@ export async function solanaLiquidityWithdraw(positionAddress: string): Promise<
   );
   const vestings = await cpAmm.getAllVestingsByPosition(position);
 
+  // FBiT balance before removing liquidity, so we know exactly how much this
+  // withdrawal added (rather than assuming the ATA started at zero).
+  const fbitAta = ata(FBIT_MINT, owner);
+  const fbitBefore = await connection.getTokenAccountBalance(fbitAta).catch(() => null);
+  const fbitBeforeLamports = fbitBefore ? new BN(fbitBefore.value.amount) : new BN(0);
+
+  // ── Tx 1: remove liquidity (FBiT + SOL land in the user's wallet/ATAs) + fee ──
   const removeTx = await cpAmm.removeAllLiquidity({
     owner, position, pool: FBIT_POOL, positionNftAccount,
     tokenAAmountThreshold: new BN(0), tokenBAmountThreshold: new BN(0),
@@ -441,9 +482,27 @@ export async function solanaLiquidityWithdraw(positionAddress: string): Promise<
   tx.add(...removeTx.instructions, feeIx);
 
   const signedTx: Transaction = await wrapSolanaSign(() => wallet.signTransaction(tx));
-  const txHash = await connection.sendRawTransaction(signedTx.serialize(), { skipPreflight: false });
-  await connection.confirmTransaction({ signature: txHash, blockhash, lastValidBlockHeight }, 'confirmed');
-  return { txHash };
+  const removeTxHash = await connection.sendRawTransaction(signedTx.serialize(), { skipPreflight: false });
+  await connection.confirmTransaction({ signature: removeTxHash, blockhash, lastValidBlockHeight }, 'confirmed');
+
+  // ── Tx 2: swap the FBiT side back to SOL, so the user only ever sees SOL ──
+  const fbitAfter = await connection.getTokenAccountBalance(fbitAta).catch(() => null);
+  const fbitAfterLamports = fbitAfter ? new BN(fbitAfter.value.amount) : new BN(0);
+  const fbitReceivedLamports = fbitAfterLamports.sub(fbitBeforeLamports);
+
+  let swapTxHash: string | null = null;
+  if (fbitReceivedLamports.gtn(0)) {
+    const quote = await jupiterGetQuote(
+      FBIT_MINT.toBase58(),
+      SOL_MINT.toBase58(),
+      fbitReceivedLamports.toString(),
+      slippageBps,
+    );
+    const { txHash } = await jupiterExecuteSwap(quote);
+    swapTxHash = txHash;
+  }
+
+  return { removeTxHash, swapTxHash };
 }
 
 export { MIN_DEPOSIT_SOL, FBIT_MINT, FBIT_POOL, SOL_MINT };
