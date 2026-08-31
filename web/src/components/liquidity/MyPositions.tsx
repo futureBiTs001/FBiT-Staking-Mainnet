@@ -158,13 +158,16 @@ export default function MyPositions({ refreshKey }: { refreshKey: number }) {
                 {actionLoading[`compound-${p.positionAddress}`] ? 'Compounding…' : 'Compound'}
               </button>
               {!isPermanent && isUnlocked && (
-                <button
-                  onClick={() => handleWithdraw(p)}
-                  disabled={actionLoading[`withdraw-${p.positionAddress}`]}
-                  className="btn-primary text-xs px-3 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {actionLoading[`withdraw-${p.positionAddress}`] ? 'Withdrawing…' : 'Withdraw'}
-                </button>
+                <div className="flex flex-col items-start gap-1">
+                  <button
+                    onClick={() => handleWithdraw(p)}
+                    disabled={actionLoading[`withdraw-${p.positionAddress}`]}
+                    className="btn-primary text-xs px-3 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {actionLoading[`withdraw-${p.positionAddress}`] ? 'Withdrawing…' : 'Withdraw'}
+                  </button>
+                  <span className="text-text-muted text-[10px]">Platform fee: 0.5 SOL</span>
+                </div>
               )}
             </div>
           </div>

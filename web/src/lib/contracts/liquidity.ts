@@ -14,7 +14,8 @@
  *   Tx 1 — swap half to FBiT via Jupiter (reuses jupiterGetQuote/jupiterExecuteSwap).
  *   Tx 2 — wrap the kept SOL half, createPositionAndAddLiquidity (owner = user),
  *          then lockPosition (24-month cliff) or permanentLockPosition, plus a flat
- *          0.1 SOL platform-fee transfer. All built as one combined legacy Transaction.
+ *          0.2 SOL platform-fee transfer. All built as one combined legacy Transaction.
+ *          Withdraw (after unlock) charges a separate flat 0.5 SOL fee.
  */
 
 import {
@@ -54,8 +55,9 @@ export const POOL_ACTIVATION_TIMESTAMP_MS = 1788416999 * 1000;
 // ~24 months. Used as the lockPosition cliff duration.
 const LOCK_DURATION_SECONDS_24M = 730 * 86400;
 
-const PLATFORM_FEE_LAMPORTS = Math.round(0.1 * LAMPORTS_PER_SOL); // flat 0.1 SOL, on deposit AND withdraw
-const MIN_DEPOSIT_SOL = 2; // keeps the flat 0.1 SOL fee to ~5% or less
+const DEPOSIT_FEE_LAMPORTS  = Math.round(0.2 * LAMPORTS_PER_SOL); // flat 0.2 SOL on deposit
+const WITHDRAW_FEE_LAMPORTS = Math.round(0.5 * LAMPORTS_PER_SOL); // flat 0.5 SOL on withdraw
+const MIN_DEPOSIT_SOL = 2; // keeps the flat 0.2 SOL deposit fee to ~10% or less
 const DECIMALS = 9;
 const SCALE = 10 ** DECIMALS;
 
@@ -89,7 +91,7 @@ function getCpAmmClient(connection: Connection): CpAmm {
  *  `authority` is zeroed out (Pubkey::default()) and fee routing must switch to the
  *  dedicated `fee_recipient` field (offset 338-370, gated by `is_renounced` at offset 337)
  *  — the same renounce-aware pattern already used for the 1% staking-platform fee. Without
- *  this check, a post-renouncement deposit/withdraw would send its 0.1 SOL fee to the
+ *  this check, a post-renouncement deposit/withdraw would send its fee to the
  *  unspendable zero address instead of the fee recipient. */
 async function getFeeRecipient(): Promise<PublicKey> {
   const connection = getRpcConnection();
@@ -130,7 +132,7 @@ export async function solanaLiquidityGetDepositQuote(
     throw new Error(`Minimum deposit is ${MIN_DEPOSIT_SOL} SOL.`);
   }
   const totalSolLamports = toLamports(solAmount);
-  const feeLamports      = new BN(PLATFORM_FEE_LAMPORTS);
+  const feeLamports      = new BN(DEPOSIT_FEE_LAMPORTS);
   if (totalSolLamports.lte(feeLamports)) {
     throw new Error('Deposit amount is too small to cover the platform fee.');
   }
@@ -258,7 +260,7 @@ export async function solanaLiquidityDeposit(
     instructions.push(...lockTx.instructions);
   }
 
-  // Flat 0.1 SOL platform fee (deducted from the deposit total, see solanaLiquidityGetDepositQuote).
+  // Flat 0.2 SOL platform fee (deducted from the deposit total, see solanaLiquidityGetDepositQuote).
   const feeRecipient = await getFeeRecipient();
   instructions.push(
     SystemProgram.transfer({ fromPubkey: owner, toPubkey: feeRecipient, lamports: BigInt(quote.feeLamports.toString()) }),
@@ -406,7 +408,7 @@ export async function solanaLiquidityCompoundFees(positionAddress: string): Prom
 }
 
 /** Withdraw after unlock (24-month positions only — permanent-locked principal can never
- *  be withdrawn by design). Charges the same flat 0.1 SOL platform fee as deposit. */
+ *  be withdrawn by design). Charges a separate flat 0.5 SOL platform fee. */
 export async function solanaLiquidityWithdraw(positionAddress: string): Promise<{ txHash: string }> {
   const owner = getOwner();
   const wallet = getSolanaWallet();
@@ -432,7 +434,7 @@ export async function solanaLiquidityWithdraw(positionAddress: string): Promise<
   });
 
   const feeRecipient = await getFeeRecipient();
-  const feeIx = SystemProgram.transfer({ fromPubkey: owner, toPubkey: feeRecipient, lamports: BigInt(PLATFORM_FEE_LAMPORTS) });
+  const feeIx = SystemProgram.transfer({ fromPubkey: owner, toPubkey: feeRecipient, lamports: BigInt(WITHDRAW_FEE_LAMPORTS) });
 
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
   const tx = new Transaction({ feePayer: owner, recentBlockhash: blockhash });

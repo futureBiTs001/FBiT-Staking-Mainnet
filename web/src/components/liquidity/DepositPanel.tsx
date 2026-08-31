@@ -142,7 +142,7 @@ export default function DepositPanel({ onDeposited }: Props) {
 
       {quote && (
         <div className="bg-white/5 rounded-xl p-4 mb-4 text-sm space-y-1.5">
-          <div className="flex justify-between"><span className="text-text-muted">Platform fee</span><span className="font-mono">0.1 SOL</span></div>
+          <div className="flex justify-between"><span className="text-text-muted">Platform fee</span><span className="font-mono">0.2 SOL</span></div>
           <div className="flex justify-between"><span className="text-text-muted">Stays as SOL</span><span className="font-mono">{formatNumber(solKept)} SOL</span></div>
           <div className="flex justify-between"><span className="text-text-muted">Swapped to FBiT</span><span className="font-mono">≈ {formatNumber(fbitOut)} FBiT</span></div>
           <div className="flex justify-between">
