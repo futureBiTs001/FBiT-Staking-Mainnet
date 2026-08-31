@@ -10,6 +10,15 @@ const PROGRAM_ID = '8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp';
 const GITHUB_URL = 'https://github.com/futurebitsmaxx/FBiT-Staking-Mainnet';
 const SOLANA_ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
+// Rounding a genuinely-small-but-nonzero amount (e.g. 0.0757 FBiT burned so far,
+// on a platform with very little claim volume yet) to 0 decimals reads as "0" —
+// which looks like burning isn't working, when it actually is. Show more
+// precision for sub-1 amounts so a real, working mechanism doesn't look broken.
+function formatFBiT(v: number): string {
+  if (v > 0 && v < 1) return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
 function StatCard({ icon, value, label, loading }: { icon: string; value: string; label: string; loading: boolean }) {
   return (
     <div className="rounded-2xl bg-white/3 border border-white/10 px-5 py-6 text-center">
@@ -126,19 +135,19 @@ export default function TrustPage() {
             <StatCard
               icon="🪙"
               loading={loadingStats}
-              value={stats ? `${stats.totalStaked.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+              value={stats ? formatFBiT(stats.totalStaked) : '—'}
               label="FBiT Currently Staked"
             />
             <StatCard
               icon="💸"
               loading={loadingStats}
-              value={stats ? `${stats.totalEmissionReleased.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+              value={stats ? formatFBiT(stats.totalEmissionReleased) : '—'}
               label="FBiT Released to Reward Pool"
             />
             <StatCard
               icon="🔥"
               loading={loadingStats}
-              value={stats ? `${stats.totalBurned.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+              value={stats ? formatFBiT(stats.totalBurned) : '—'}
               label="FBiT Burned Forever"
             />
           </div>
