@@ -58,7 +58,7 @@ const STEPS = [
 
 export default function GuidePage() {
   return (
-    <>
+    <div className="min-h-screen landing-page" style={{ backgroundColor: '#050505' }}>
       <LandingHeader />
 
       <main className="max-w-4xl mx-auto w-full px-4 sm:px-6 py-12 sm:py-16">
@@ -178,6 +178,6 @@ export default function GuidePage() {
           </div>
         </div>
       </footer>
-    </>
+    </div>
   );
 }
