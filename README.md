@@ -655,6 +655,10 @@ npm start
 
 ## 17. Changelog
 
+### v2.6 — September 2026
+
+**Critical fix: referral registration was completely broken for every new user.** The v2.4 referral-cycle-exploit fix added an on-chain check requiring `register_user`'s new `referrer_account` to match the referrer's wallet key — but the check compared the account's own address (a PDA) directly against the referrer's raw wallet pubkey (`require!(ref_ai.key() == ref_key, ...)`), two values that can never be equal by construction. This meant the check failed unconditionally for every legitimate referral, blocking all new referred registrations (and therefore staking, since staking auto-registers first) since that fix went live — found after a user reported a referred wallet stuck on "Failed to simulate transaction." Root-caused by reproducing the exact failure via a direct mainnet `simulateTransaction` call (confirmed `AnchorError: ReferrerMismatch`), fixed by re-deriving the referrer's PDA on-chain (`Pubkey::find_program_address`) and comparing against that instead of the raw wallet key. Deployed to mainnet via `solana program deploy` (no `program extend` needed — new binary was smaller than the currently allocated space) and confirmed fixed with another direct `simulateTransaction` call before closing it out.
+
 ### v2.5 — August 2026
 
 **New feature: single-sided SOL Liquidity provision with size-based auto-lock.** Added a full "Liquidity" tab to the `/app` dashboard letting anyone deepen the real FBiT/SOL trading pool using only SOL — no FBiT needed upfront. On deposit, half the SOL is swapped to FBiT via the existing Jupiter integration and both halves are added as a locked position on the live Meteora DAMM v2 pool; on withdraw, the FBiT leg is swapped back to SOL so the user only ever handles SOL going in and out. Built entirely as a client-side orchestration layer composing Jupiter's swap API with Meteora's own already-audited DAMM v2 instructions (`@meteora-ag/cp-amm-sdk`) — no new on-chain program, so no new custody surface for user funds.

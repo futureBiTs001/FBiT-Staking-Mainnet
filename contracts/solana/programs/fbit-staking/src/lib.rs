@@ -304,7 +304,12 @@ pub mod fbit_staking {
             // cyclic referrer graph and have their own stake pay referral rewards back to
             // themselves across alternating levels.
             let ref_ai = &ctx.accounts.referrer_account;
-            require!(ref_ai.key() == ref_key, StakingError::ReferrerMismatch);
+            // referrer_account must be the referrer's own UserAccount PDA — re-derive it
+            // on-chain rather than trusting the caller. (Comparing ref_ai.key() directly
+            // to ref_key was wrong: a PDA never equals the wallet pubkey it's derived
+            // from, so that check failed unconditionally for every legitimate referral.)
+            let (expected_ref_pda, _) = Pubkey::find_program_address(&[b"user", ref_key.as_ref()], ctx.program_id);
+            require!(ref_ai.key() == expected_ref_pda, StakingError::ReferrerMismatch);
             require!(ref_ai.owner == ctx.program_id, StakingError::ReferrerNotActive);
             let data = ref_ai.try_borrow_data().map_err(|_| error!(StakingError::ReferrerNotActive))?;
             require!(data.len() > 8, StakingError::ReferrerNotActive);
