@@ -165,13 +165,15 @@ export default function ReferralPanel() {
   const myReferrer      = userAccount?.referrer ?? null;
   const totalReferrals  = referralInfo?.totalReferrals ?? 0;    // L1 direct count
   const networkTotal    = referralInfo?.referrals.length ?? 0;  // all-level count
-  // Calculated commission = sum of (stakedAmount × level%) across all referrals.
-  // This mirrors the contract's REFERRAL_PERCENTAGES and is the amount A earns
-  // from each referral's staked tokens. Falls back to on-chain totalReferralRewards.
+  // The authoritative figure is the on-chain total_referral_rewards — it reflects
+  // what was actually paid out at the BPS rates in effect at each stake. The
+  // per-row "estimate" (stakedAmount × current level%) is only a projection —
+  // it drifts from reality whenever a downline's stake changed since being paid,
+  // or admin has since adjusted the referral percentages — so it must never be
+  // preferred over real on-chain data, only stand in when none is available yet.
   const calculatedCommission = displayedTree.reduce((s, r) => s + r.rewardEarned, 0);
-  const totalRewards    = calculatedCommission > 0
-    ? calculatedCommission
-    : (userAccount?.totalReferralRewards ?? referralInfo?.totalReferralRewards ?? 0);
+  const authoritativeRewards = userAccount?.totalReferralRewards ?? referralInfo?.totalReferralRewards;
+  const totalRewards    = authoritativeRewards !== undefined ? authoritativeRewards : calculatedCommission;
   const activeReferrals = referralInfo?.referrals.filter(r => r.stakedAmount > 0).length ?? 0;
   // Use BFS network count as fallback when on-chain team_size is 0.
   // team_size is only updated inside the referral loop (requires remaining_accounts at stake time);
@@ -367,7 +369,7 @@ export default function ReferralPanel() {
                       <th className="text-center pb-3">Lv</th>
                       <th className="text-center pb-3">Status</th>
                       <th className="text-right pb-3">Staked</th>
-                      <th className="text-right pb-3">Earned</th>
+                      <th className="text-right pb-3" title="Estimated from this referral's current stake — not a record of what was actually paid">Est. Earned</th>
                       <th className="text-right pb-3 pr-3 hidden sm:table-cell">Joined</th>
                     </tr>
                   </thead>
