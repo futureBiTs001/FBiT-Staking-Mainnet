@@ -157,11 +157,6 @@ export default function AdminPanel() {
     run('fund', () => contract.fundRewardPool(n), `Funded reward pool with ${formatNumber(n)} FBiT`);
   };
 
-  const handleToggleReferralSystem = () => {
-    const next = platformStats.referralRewardRate > 0 ? 0 : 1;
-    run('referralRate', () => contract.setReferralRewardRate(next), `Referral system turned ${next > 0 ? 'ON' : 'OFF'}`);
-  };
-
   const handleSetReferralPercentages = () => {
     if (refPct.length !== 10) { toast.error('Exactly 10 referral percentages required.'); return; }
     const total = refPct.reduce((s, v) => s + v, 0);
@@ -671,30 +666,6 @@ export default function AdminPanel() {
       {/* ── Rates ── */}
       {activeSection === 'rates' && (
         <div className="space-y-4">
-          <div className="glass-card space-y-4">
-            <h3 className="font-display font-semibold text-lg">Referral System</h3>
-            <p className="text-text-muted text-xs -mt-2">
-              Master on/off switch for the entire 10-level referral system. This is <strong>not</strong> a
-              percentage — the contract only checks whether this value is zero or non-zero. The actual
-              per-level reward percentages are set separately below, under "Referral Level Percentages".
-            </p>
-            <div className={`p-3 rounded-xl border text-sm font-display font-semibold text-center ${
-              platformStats.referralRewardRate > 0
-                ? 'bg-brand-500/10 border-brand-500/20 text-brand-400'
-                : 'bg-accent-rose/10 border-accent-rose/20 text-accent-rose'
-            }`}>
-              Referral System is currently {platformStats.referralRewardRate > 0 ? 'ON' : 'OFF'}
-            </div>
-            <AdminButton
-              label={platformStats.referralRewardRate > 0 ? 'Turn Referral System OFF' : 'Turn Referral System ON'}
-              loadingLabel="Updating…"
-              onClick={handleToggleReferralSystem}
-              disabled={isRenounced}
-              loading={busy('referralRate')}
-              variant={platformStats.referralRewardRate > 0 ? 'rose' : 'cyan'}
-            />
-          </div>
-
           {/* Per-level referral percentages — Solana only */}
           {selectedNetwork === 'solana' && (
             <div className="glass-card space-y-4">
