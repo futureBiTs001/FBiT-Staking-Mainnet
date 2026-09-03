@@ -25,15 +25,9 @@ export default function AdminPanel() {
 
   const [fundAmount, setFundAmount]         = useState('');
   const [reserveAmount, setReserveAmount]   = useState('');
-  const [userAddress, setUserAddress]   = useState('');
   const [processing, setProcessing]       = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<'pool' | 'rates' | 'users' | 'tiers' | 'platform'>('pool');
   const [renounceConfirm, setRenounceConfirm] = useState(false);
-
-  // Blocked users list (no backend/indexer — fetched on demand by scanning on-chain state)
-  const [blockedUsers, setBlockedUsers]           = useState<{ address: string; totalStaked: number }[]>([]);
-  const [isFetchingBlocked, setIsFetchingBlocked] = useState(false);
-  const [hasFetchedBlocked, setHasFetchedBlocked] = useState(false);
 
   // Per-level referral percentages state (10 levels, default values in BPS)
   const DEFAULT_REF_PCT = [25, 50, 125, 150, 200, 325, 350, 425, 550, 800];
@@ -179,50 +173,6 @@ export default function AdminPanel() {
       `Referral % updated (total: ${(total / 100).toFixed(2)}%)`
     );
   };
-
-  const handleBlock = () => {
-    const addr = sanitizeText(userAddress);
-    if (!isValidWalletAddress(addr)) { toast.error('Invalid wallet address format.'); return; }
-    run('block', () => contract.blockUser(addr), `User ${addr.slice(0, 8)}… blocked`);
-  };
-
-  const handleUnblock = () => {
-    const addr = sanitizeText(userAddress);
-    if (!isValidWalletAddress(addr)) { toast.error('Invalid wallet address format.'); return; }
-    run('unblock', () => contract.unblockUser(addr), `User ${addr.slice(0, 8)}… unblocked`);
-  };
-
-  const refreshBlockedUsers = useCallback(async () => {
-    setIsFetchingBlocked(true);
-    try {
-      const list = await contract.getBlockedUsers();
-      setBlockedUsers(list);
-    } catch {
-      toast.error('Failed to load blocked users list.');
-    } finally {
-      setIsFetchingBlocked(false);
-      setHasFetchedBlocked(true);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedNetwork]);
-
-  // Auto-fetch the first time the User Mgmt tab is opened (and again on network switch)
-  useEffect(() => {
-    if (activeSection === 'users') {
-      setHasFetchedBlocked(false);
-      refreshBlockedUsers();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSection, selectedNetwork]);
-
-  const handleUnblockFromList = (addr: string) => {
-    run('unblock', () => contract.unblockUser(addr), `User ${addr.slice(0, 8)}… unblocked`);
-    // Optimistically drop from the list; a full refresh will confirm shortly after the tx lands
-    setBlockedUsers((prev) => prev.filter((u) => u.address.toLowerCase() !== addr.toLowerCase()));
-  };
-
-  const handleTogglePause = () =>
-    run('pause', () => contract.togglePause(platformStats.isPaused), platformStats.isPaused ? 'Platform resumed' : 'Platform paused');
 
   const handleRenounceOwnership = () => {
     setRenounceConfirm(false);
@@ -1171,92 +1121,6 @@ export default function AdminPanel() {
       {/* ── User Management ── */}
       {activeSection === 'users' && (
         <div className="space-y-4">
-          {/* Block / Unblock */}
-          <div className="glass-card space-y-4">
-            <h3 className="font-display font-semibold text-lg">Block / Unblock User</h3>
-            <div>
-              <label className="text-sm text-text-secondary font-display mb-1 block">Wallet Address</label>
-              <input
-                type="text"
-                value={userAddress}
-                onChange={(e) => setUserAddress(e.target.value)}
-                placeholder="Enter full wallet address…"
-                className="input-field font-mono text-sm"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <AdminButton
-                label="Block User"
-                loadingLabel="Blocking…"
-                onClick={handleBlock}
-                disabled={isRenounced || !userAddress.trim()}
-                loading={busy('block')}
-                variant="rose"
-              />
-              <AdminButton
-                label="Unblock User"
-                loadingLabel="Unblocking…"
-                onClick={handleUnblock}
-                disabled={isRenounced || !userAddress.trim()}
-                loading={busy('unblock')}
-                variant="primary"
-              />
-            </div>
-          </div>
-
-          {/* Blocked Users List */}
-          <div className="glass-card space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-display font-semibold text-lg">
-                Blocked Users {hasFetchedBlocked && <span className="text-text-muted font-normal text-sm">({blockedUsers.length})</span>}
-              </h3>
-              <button
-                type="button"
-                onClick={refreshBlockedUsers}
-                disabled={isFetchingBlocked}
-                className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-white/5 transition-all"
-                title="Refresh blocked users list"
-              >
-                <span className={isFetchingBlocked ? 'inline-block animate-spin' : 'inline-block'}>↻</span>
-              </button>
-            </div>
-
-            {isFetchingBlocked ? (
-              <p className="text-text-muted text-sm text-center py-4 animate-pulse">Scanning on-chain state…</p>
-            ) : blockedUsers.length === 0 ? (
-              <p className="text-text-muted text-sm text-center py-4">
-                {hasFetchedBlocked ? 'No blocked users.' : 'Loading…'}
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {blockedUsers.map(({ address: addr, totalStaked }) => (
-                  <div
-                    key={addr}
-                    className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-surface-800/40 border border-white/5"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-mono text-xs text-accent-rose truncate">{addr}</p>
-                      <p className="text-text-muted text-[11px] mt-0.5">{formatNumber(totalStaked)} FBiT staked</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleUnblockFromList(addr)}
-                      disabled={isRenounced || processing !== null}
-                      className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-display font-semibold bg-brand-500/10 text-brand-400 border border-brand-500/20 hover:bg-brand-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {busy('unblock') ? 'Unblocking…' : 'Unblock'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <p className="text-text-muted text-[10px]">
-              {selectedNetwork === 'solana'
-                ? 'Scanned directly from on-chain program accounts — always complete and current.'
-                : 'Reconstructed from block/unblock events over the last ~2M blocks (~11 days). Older actions outside this window may not appear.'}
-            </p>
-          </div>
-
           {/* Update Team Stats — Solana only */}
           {selectedNetwork === 'solana' && (
             <div className="glass-card space-y-4 border border-accent-cyan/20">
@@ -1321,32 +1185,6 @@ export default function AdminPanel() {
       {activeSection === 'platform' && (
         <div className="glass-card space-y-4">
           <h3 className="font-display font-semibold text-lg">Platform Controls</h3>
-
-          <div className="flex items-center justify-between p-4 rounded-xl bg-surface-800/50 border border-white/5">
-            <div>
-              <p className="font-display font-medium">Platform Status</p>
-              <p className="text-text-muted text-sm mt-0.5">
-                {platformStats.isPaused
-                  ? 'Platform is paused. All operations are disabled.'
-                  : 'Platform is active and processing transactions.'}
-              </p>
-            </div>
-            <AdminButton
-              label={platformStats.isPaused ? 'Unpause' : 'Pause'}
-              loadingLabel={platformStats.isPaused ? 'Resuming…' : 'Pausing…'}
-              onClick={handleTogglePause}
-              disabled={isRenounced}
-              loading={busy('pause')}
-              variant={platformStats.isPaused ? 'primary' : 'rose'}
-            />
-          </div>
-
-          <div className="p-4 rounded-xl bg-accent-amber/5 border border-accent-amber/10">
-            <p className="text-accent-amber font-display font-medium text-sm mb-1">⚠ Warning</p>
-            <p className="text-text-muted text-xs">
-              Pausing the platform prevents all staking, claiming, and unstaking operations. Use only in emergencies.
-            </p>
-          </div>
 
           {/* Renounce Ownership */}
           <div className={`p-4 rounded-xl border space-y-3 ${isRenounced ? 'bg-surface-800/20 border-white/5 opacity-60' : 'bg-accent-rose/5 border-accent-rose/20'}`}>
