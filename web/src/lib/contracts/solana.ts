@@ -660,13 +660,21 @@ export async function solanaStake(
     throw new Error(`Failed to fetch user stake count — please retry. (${(e as Error).message})`);
   }
 
-  // adminStakeAccount = platform authority ATA — MUST succeed or stake goes to wrong account
+  // adminStakeAccount — the authority's ATA normally, or the fee_recipient's ATA
+  // after renouncement (mirrors the on-chain constraint in the Stake accounts
+  // struct — see solanaClaimRewards/solanaCompoundRewards for the same pattern).
+  // MUST succeed or stake goes to wrong account / fails the on-chain constraint.
   let adminStakeAccount: import('@solana/web3.js').PublicKey;
   try {
     const [pda] = platformPda();
     const platformData: any = await (program.account as any).platform.fetch(pda);
-    const authorityKey = new PublicKey(platformData.authority.toString());
-    adminStakeAccount = ata(stakeMint, authorityKey);
+    if (platformData.isRenounced && platformData.feeRecipient) {
+      const feeRecipientKey = new PublicKey(platformData.feeRecipient.toString());
+      adminStakeAccount = ata(stakeMint, feeRecipientKey);
+    } else {
+      const authorityKey = new PublicKey(platformData.authority.toString());
+      adminStakeAccount = ata(stakeMint, authorityKey);
+    }
   } catch (e) {
     throw new Error(`Failed to fetch platform authority — please retry. (${(e as Error).message})`);
   }
