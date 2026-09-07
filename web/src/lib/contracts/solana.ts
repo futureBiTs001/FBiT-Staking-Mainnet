@@ -777,6 +777,54 @@ async function buildReleaseIxIfReady(program: any, platformData?: any): Promise<
   }
 }
 
+const CLAIM_REFERRAL_LEVELS = 5;
+
+// Builds remaining_accounts for the claim/compound-time recurring referral (levels
+// 1-5, separate from the 10-level one-time stake referral) — pairs of
+// [UserAccount PDA (mut), reward ATA (mut)], pair 0 = level 1 (direct referrer).
+// Mirrors solanaStake's chain-walk, capped at CLAIM_REFERRAL_LEVELS instead of 10.
+// Best-effort: any failure just means fewer/no levels get paid on-chain (the
+// contract treats missing levels as "unpaid", not an error — see lib.rs).
+async function buildClaimReferralRemainingAccounts(
+  program: any,
+  userAccPda: PublicKey,
+  ownerKey: PublicKey,
+  rewardMint: PublicKey,
+): Promise<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[]> {
+  const remainingAccounts: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = [];
+  try {
+    const userAccData: any = await program.account.userAccount.fetch(userAccPda);
+    let currentReferrerKey: PublicKey | null = userAccData.referrer
+      ? new PublicKey(userAccData.referrer.toString())
+      : null;
+    const seenKeys = new Set<string>([ownerKey.toBase58()]);
+
+    for (let lvl = 0; lvl < CLAIM_REFERRAL_LEVELS && currentReferrerKey !== null; lvl++) {
+      const keyStr = currentReferrerKey.toBase58();
+      if (seenKeys.has(keyStr)) break;
+      seenKeys.add(keyStr);
+
+      const [referrerUserPda] = userPda(currentReferrerKey);
+      const referrerRewardAta = ata(rewardMint, currentReferrerKey);
+      remainingAccounts.push(
+        { pubkey: referrerUserPda, isSigner: false, isWritable: true },
+        { pubkey: referrerRewardAta, isSigner: false, isWritable: true },
+      );
+
+      try {
+        const refData: any = await program.account.userAccount.fetch(referrerUserPda);
+        currentReferrerKey = refData.referrer ? new PublicKey(refData.referrer.toString()) : null;
+      } catch {
+        break;
+      }
+    }
+  } catch {
+    // Chain fetch failed — proceed without the claim-referral layer (safe degradation,
+    // same as solanaStake's equivalent chain walk).
+  }
+  return remainingAccounts;
+}
+
 export async function solanaClaimRewards(
   stakeId: number | string,
   _stakedAt: number
@@ -838,6 +886,9 @@ export async function solanaClaimRewards(
   // Pass already-fetched platform to avoid an extra RPC call that could fail silently.
   const releaseIx = await buildReleaseIxIfReady(program, fetchedPlatform);
 
+  // Claim-time recurring referral (levels 1-5) — see buildClaimReferralRemainingAccounts.
+  const claimReferralAccounts = await buildClaimReferralRemainingAccounts(program, userAccPda, owner, rewardMint);
+
   const tx = await (program.methods as any)
     .claimRewards(new BN(Number(stakeId)))
     .accounts({
@@ -851,6 +902,7 @@ export async function solanaClaimRewards(
       owner,
       tokenProgram:               TOKEN_PROGRAM_ID,
     })
+    .remainingAccounts(claimReferralAccounts)
     .preInstructions(releaseIx ? [releaseIx] : [])
     .rpc();
 
@@ -914,6 +966,9 @@ export async function solanaCompoundRewards(
   // Pass already-fetched platform to avoid an extra RPC call that could fail silently.
   const releaseIx = await buildReleaseIxIfReady(program, fetchedPlatform);
 
+  // Claim-time recurring referral (levels 1-5) — see buildClaimReferralRemainingAccounts.
+  const claimReferralAccounts = await buildClaimReferralRemainingAccounts(program, userAccPda, owner, rewardMint);
+
   const tx = await (program.methods as any)
     .compoundRewards()
     .accounts({
@@ -926,6 +981,7 @@ export async function solanaCompoundRewards(
       owner,
       tokenProgram:              TOKEN_PROGRAM_ID,
     })
+    .remainingAccounts(claimReferralAccounts)
     .preInstructions(releaseIx ? [releaseIx] : [])
     .rpc();
 

@@ -39,12 +39,13 @@ FBiT Staking is a fully on-chain staking DApp where users lock FBiT tokens for *
 | Lock Period | 30 days (fixed) |
 | Claim Interval | Every 6 hours (4 intervals/day) |
 | APY Range | 10% – 300% (auto-adjusting, PoS) |
-| Burn Rate | 10% of the after-fee reward amount (locked permanently — was admin-adjustable 0–50% pre-renouncement) |
-| Referral Levels | 10 levels deep |
-| Referral Total | 17.75% distributed across all 10 levels (live on-chain config, confirmed current; contract's compile-time default is 30% and only applies if this is ever unset) |
+| Burn Rate | 5% base (of the after-fee reward amount) + up to another 5% from any unpaid claim-referral levels — see the new Claim Referral row below (locked permanently, self-corrected in code — `set_burn_bps` is disabled post-renouncement) |
+| Referral Levels | 10 levels deep (one-time, on stake) |
+| Referral Total | 17.75% distributed across all 10 levels on stake (live on-chain config, confirmed current; contract's compile-time default is 30% and only applies if this is ever unset) |
+| Claim Referral (v2.7) | A *separate* recurring referral layer paid on every claim/compound — levels 1-5 only, 3%/2.5%/2%/1.5%/1% (10% max), carved out of that claim's own after-fee amount, not the pool — see Section 3 |
 | Team Bonus | Up to +10% on top of staking rewards |
 | Network | Solana Mainnet |
-| Platform Fee | 1% on all operations, routed to `feeRecipient` now that ownership is renounced (see Section 3) |
+| Platform Fee | 0.25% on all operations, routed to `feeRecipient` now that ownership is renounced (see Section 3) |
 | AI Support Chat | Claude-powered widget answering platform FAQs (`/api/support-chat`) |
 
 ---
@@ -98,21 +99,28 @@ Once the lock period expires, the user calls Unstake. The contract:
 
 ## 3. Reward & Fee System
 
-The 1% platform fee and 10% burn apply identically whether ownership is renounced or not — renouncing only changes *where* the 1% fee is sent (see below). There is no separate, larger fee that appears after renouncement — an earlier design had one (a 25%-of-gross cut funded from the pool), but it was simplified away in v2.1 in favor of just keeping the same 1% fee flowing, permanently, to whichever address is entitled to it.
+The 0.25% platform fee applies identically on **every** operation (stake, claim, compound, unstake) whether ownership is renounced or not — renouncing only changes *where* it's sent (see below). There is no separate, larger fee that appears after renouncement — an earlier design had one (a 25%-of-gross cut funded from the pool), but it was simplified away in v2.1 in favor of just keeping the platform fee flowing, permanently, to whichever address is entitled to it.
+
+Burn and the new claim-referral layer (v2.7) only apply to **claim** and **compound** — stake and unstake only ever pay the 0.25% fee.
 
 ```
-Gross Reward (R)
+Claim / Compound Gross Reward (R)
     │
-    ├─ 1% Platform Fee  ───────→ Admin wallet (pre-renounce) / feeRecipient (post-renounce)
+    ├─ 0.25% Platform Fee  ───────→ Admin wallet (pre-renounce) / feeRecipient (post-renounce)
     │
-    └─ 99% After Fee (A)
+    └─ 99.75% After Fee (A)
             │
-            ├─ 10% Burn (A × 10%)  ───────────→ Burned on-chain 🔥
+            ├─ 5% Base Burn (A × 5%)  ─────────────────→ Burned on-chain 🔥
             │
-            └─ 90% Net Reward (A × 90%)  ──────→ User wallet ✅
+            ├─ Up to 10% Claim Referral, levels 1-5 ──→ Referrer wallets (3%/2.5%/2%/1.5%/1%)
+            │     (whatever isn't actually paid — no referrer, inactive, blocked,
+            │      or a bad ATA — splits 50/50 into extra burn + back to the user)
+            │
+            └─ Remainder ──────────────────────────────→ User wallet ✅
+                (85% of A with a full active 5-level chain, up to 90% of A with none)
 ```
 
-> **Note:** Ownership on this deployment **has already been renounced** — the 1% fee that used to go to the admin wallet now flows permanently to `feeRecipient` (the former admin's address, frozen in at the moment of renouncing) on every stake, claim, compound, and unstake. It is not a separate pool-funded income stream — it's the exact same 1% fee, just re-routed. The burn (10%, of the after-fee amount) applies the same way regardless of renouncement status.
+> **Note:** Ownership on this deployment **has already been renounced** — the platform fee that used to go to the admin wallet now flows permanently to `feeRecipient` (the former admin's address, frozen in at the moment of renouncing) on every operation. It is not a separate pool-funded income stream — it's the exact same fee, just re-routed. The claim-referral layer (see [Section 4](#4-10-level-referral-system)) is entirely separate from this fee and from the one-time stake-time referral — it's carved out of the claiming user's own after-fee reward, never drawn from the pool beyond what that claim already costs it.
 
 ### Team Bonus
 If the user qualifies for a Team Target Tier (see Section 5), the bonus is added on top of the gross reward before any deductions:
@@ -142,6 +150,22 @@ When user A refers user B (and B stakes), users in the referral chain up to 10 l
 | **Total** | **17.75%** | Distributed instantly on stake (contract default is 30% — an admin lowered this on-chain post-deploy) |
 
 Referral commissions are paid **immediately** when the downstream user stakes — no waiting for claims.
+
+### Claim Referral (v2.7) — a second, separate recurring layer
+
+Independent of the one-time table above, **every claim and compound** also pays the claiming user's referral chain up to 5 levels — funded entirely out of that claim's own after-fee reward, not the pool:
+
+| Level | Commission | Who Receives |
+|-------|-----------|-------------|
+| 1 | 3.00% | Direct referrer |
+| 2 | 2.50% | Referrer's referrer |
+| 3 | 2.00% | Level 3 upline |
+| 4 | 1.50% | Level 4 upline |
+| 5 | 1.00% | Level 5 upline |
+| 6-10 | — | Not paid on this layer |
+| **Total (max)** | **10.00%** | Only actually paid to levels whose referrer exists, has staked at least once, isn't blocked, and has a valid reward token account |
+
+Any level that can't be paid has its share split 50/50 between extra burn and the claiming user — see [Section 3](#3-reward--fee-system) for the full math and the (slightly unintuitive) consequence that a user with **no** referrer keeps *more* of their own claim than one with a full active 5-level chain above them.
 
 ### Referral Link Format
 ```
@@ -687,6 +711,16 @@ npm start
 ---
 
 ## 17. Changelog
+
+### v2.7 — September 2026
+
+**New feature: recurring claim/compound-time referral passive income (levels 1-5).** On top of the existing one-time, stake-time 10-level referral (Section 4, unchanged), every `claim_rewards`/`compound_rewards` now also pays the claiming user's direct referral chain up to 5 levels: 3%, 2.5%, 2%, 1.5%, 1% (10% max total) of that claim's own after-fee amount. This is entirely carved out of the claim's existing cost — the reward pool is charged exactly the same `total_gross` as before, so it cannot shorten the emission-reserve runway; it only changes how a claim's cost is split between {burn, referral, user}. Designed and specified interactively with the project owner over several rounds to land on final numbers that keep the split sustainable while giving real, recurring passive income to referrers and team leaders.
+
+- **Platform fee cut from 1% to 0.25%.** Applies everywhere `PLATFORM_FEE_BPS` is used (stake, claim, compound, unstake) — a straightforward reduction in what `feeRecipient` collects, in exchange for making room for the new referral layer.
+- **Burn cut from 10% to 5% (base).** `set_burn_bps` is permanently disabled post-renouncement, so the live `burn_bps` field is now force-corrected to 5% at the top of every `claim_rewards`/`compound_rewards` call instead — same self-healing pattern the v2.1 Changelog entry already established for exactly this class of "displayed vs. actual" drift.
+- **Unfilled referral levels split 50/50, never silently absorbed.** If a level's referrer doesn't exist, isn't active (hasn't staked — mirrors the register_user rule), is blocked, or supplies a malformed reward ATA, that level's share is split: half added to burn, half returned to the claiming user — rather than either reverting the whole claim or quietly handing the user 100% of it. A concrete consequence worth knowing: a user with **no** referrer nets *more* of their own claim (90% of after-fee) than a user with a full 5-level **active** chain above them (85%) — since an unpaid level only returns half its share, while a paid level's share leaves entirely.
+- Chain-walk security mirrors the stake-time referral loop exactly: each level's identity is verified via the on-chain `UserAccount.referrer` link before advancing, and a broken/mismatched link stops the walk (deeper levels can't be trusted past that point) — but a *validly identified* level that simply can't be paid (blocked, inactive, bad ATA) doesn't stop the walk for levels beyond it, since the chain identity is already confirmed independent of payability.
+- Deployed to mainnet via `solana program extend` (+10,240 bytes) then `solana program deploy`, and verified with a direct `simulateTransaction` call before closing out: for a no-referrer account, the emitted `TokensBurned`/`RewardsClaimed` events confirmed exactly 0.25% fee and the user netting exactly 90% of the after-fee amount (10% total burn, 0% referral, no referrer to pay) — math matched the hand-derived formula precisely.
 
 ### v2.6 — September 2026
 

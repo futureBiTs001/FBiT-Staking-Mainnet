@@ -10,8 +10,21 @@ pub const SECONDS_PER_DAY: i64 = 86400;
 pub const CLAIM_INTERVAL: i64 = 21600;           // 6 hours (4 intervals/day)
 pub const LOCK_PERIODS: [u64; 1] = [30];
 pub const DEFAULT_APY: [u64; 1] = [1_000]; // 10% — PoS minimum
-pub const PLATFORM_FEE_BPS:  u64 = 100;    // 1% — applies always, including after renouncement (routes to fee_recipient instead of authority)
-pub const BURN_BPS:          u64 = 1000;   // 10% burn on every claim/compound
+pub const PLATFORM_FEE_BPS:  u64 = 25;     // 0.25% — applies always, including after renouncement (routes to fee_recipient instead of authority)
+pub const BURN_BPS:          u64 = 1000;   // 10% burn on every claim/compound (initialize()-only default; live burn_bps is force-set to CLAIM_BURN_BPS below, see claim_rewards/compound_rewards)
+
+// ── Claim/compound-time recurring referral passive income (separate from the
+// one-time 10-level referral paid on stake() — see REFERRAL_PERCENTAGES above).
+// Reverse-weighted vs. the stake-time table: the direct referrer (level 1) earns
+// the most here, tapering off through level 5; levels 6-10 earn nothing from this
+// layer. Entirely carved out of the claiming user's own after-fee reward (never
+// drawn from the reward pool beyond what a claim already costs it), so it cannot
+// shorten the emission-reserve runway — it only changes how a claim's existing
+// cost is split between {burn, referral, user}.
+pub const CLAIM_REFERRAL_LEVELS: usize = 5;
+pub const CLAIM_REFERRAL_BPS: [u64; CLAIM_REFERRAL_LEVELS] = [300, 250, 200, 150, 100]; // 3%, 2.5%, 2%, 1.5%, 1% = 10% max
+pub const CLAIM_REFERRAL_TOTAL_BPS: u64 = 1000; // sum of CLAIM_REFERRAL_BPS — kept as a named constant for the leftover-share math
+pub const CLAIM_BURN_BPS: u64 = 500; // 5% — the live burn_bps is force-set to this in claim_rewards/compound_rewards (set_burn_bps is permanently disabled post-renouncement)
 pub const MAX_APY_BPS:       u64 = 30_000; // 300% max APY (safety ceiling)
 pub const MIN_FUND_LAMPORTS:  u64 = 100_000_000;                      // 0.1 FBiT  (9 decimals)
 pub const MAX_FUND_LAMPORTS:  u64 = 250_000_000 * 1_000_000_000;     // 250 M FBiT
@@ -533,7 +546,7 @@ pub mod fbit_staking {
         Ok(())
     }
 
-    pub fn claim_rewards(ctx: Context<ClaimRewards>, _stake_entry_id: u64) -> Result<()> {
+    pub fn claim_rewards<'info>(ctx: Context<'_, '_, '_, 'info, ClaimRewards<'info>>, _stake_entry_id: u64) -> Result<()> {
         require!(!ctx.accounts.platform.is_paused, StakingError::PlatformPaused);
         require!(!ctx.accounts.user_account.is_blocked, StakingError::UserBlocked);
         require!(ctx.accounts.stake_entry.is_active, StakingError::StakeNotActive);
@@ -564,13 +577,20 @@ pub mod fbit_staking {
         let team_bonus     = gross_reward.checked_mul(team_bonus_bps).unwrap().checked_div(10_000).unwrap();
         let total_gross    = gross_reward.checked_add(team_bonus).unwrap();
 
-        // Platform fee (1%) — applies always, whether renounced or not. Routes to
+        // Platform fee (0.25%) — applies always, whether renounced or not. Routes to
         // admin_reward_account, which resolves to the authority's ATA normally or
         // the fee_recipient's ATA after renouncement (see ClaimRewards account constraints).
         let fee         = total_gross.checked_mul(PLATFORM_FEE_BPS).unwrap().checked_div(10_000).unwrap();
         let after_fee   = total_gross.checked_sub(fee).unwrap();
-        let burn_amount = after_fee.checked_mul(ctx.accounts.platform.burn_bps).unwrap().checked_div(10_000).unwrap();
-        let user_reward = after_fee.checked_sub(burn_amount).unwrap();
+
+        // Live burn_bps is force-kept at CLAIM_BURN_BPS (5%) here — set_burn_bps is
+        // permanently disabled post-renouncement, so this self-corrects the stored
+        // field on every claim instead of letting it drift stale (see the v2.1
+        // "displayed vs. actual burn rate" incident in the Changelog).
+        if ctx.accounts.platform.burn_bps != CLAIM_BURN_BPS {
+            ctx.accounts.platform.burn_bps = CLAIM_BURN_BPS;
+        }
+        let base_burn = after_fee.checked_mul(CLAIM_BURN_BPS).unwrap().checked_div(10_000).unwrap();
 
         let total_required = total_gross;
         require!(ctx.accounts.platform.reward_pool_balance >= total_required, StakingError::InsufficientRewardPool);
@@ -597,6 +617,102 @@ pub mod fbit_staking {
                 });
             }
         }
+
+        // ── Claim-time recurring referral (levels 1-5, see CLAIM_REFERRAL_BPS) ──
+        // Separate from the one-time stake-time referral (REFERRAL_PERCENTAGES) —
+        // paid entirely out of THIS claim's own after-fee amount, never drawn from
+        // the pool beyond what this claim already costs it (total_required above is
+        // unchanged by this). remaining_accounts layout: pairs of
+        // [UserAccount PDA (mut), reward ATA (mut)], pair 0 = level 1 (direct referrer).
+        let mut referral_paid_amount: u64 = 0;
+        let mut referral_paid_bps: u64 = 0;
+        {
+            let remaining        = ctx.remaining_accounts;
+            let mut cur_referrer = ctx.accounts.user_account.referrer;
+            let reward_mint_key  = ctx.accounts.reward_vault.mint;
+
+            for level in 0..CLAIM_REFERRAL_LEVELS {
+                let pair_start = level * 2;
+                if pair_start + 1 >= remaining.len() { break; }
+                let Some(expected_key) = cur_referrer else { break; };
+                if expected_key == ctx.accounts.owner.key() { break; }
+
+                let ref_user_ai   = &remaining[pair_start];
+                let ref_reward_ai = &remaining[pair_start + 1];
+
+                if ref_user_ai.owner != ctx.program_id { break; }
+
+                let (user_owner, is_blocked, referrer_staked, next_ref): (Pubkey, bool, u64, Option<Pubkey>) = {
+                    let data = ref_user_ai.try_borrow_data()
+                        .map_err(|_| error!(StakingError::Unauthorized))?;
+                    let mut slice: &[u8] = &data[8..];
+                    match UserAccount::deserialize(&mut slice) {
+                        Ok(u) => (u.owner, u.is_blocked, u.total_staked, u.referrer),
+                        Err(_) => break,
+                    }
+                };
+
+                // Verify identity BEFORE advancing the chain — same reasoning as stake()'s
+                // referral walk: continuing with an unverified account would let an
+                // attacker inject a fake ancestor. Once verified, advance regardless of
+                // whether this level ends up actually payable (blocked/inactive/bad ATA
+                // below don't invalidate the verified chain for deeper levels).
+                if user_owner != expected_key { break; }
+                cur_referrer = next_ref;
+
+                let level_bps    = CLAIM_REFERRAL_BPS[level];
+                let level_amount = after_fee.checked_mul(level_bps).unwrap().checked_div(10_000).unwrap();
+                // "Active" mirrors the stake-time referral rule (register_user):
+                // a referrer must already have staked to keep earning here too.
+                let can_pay = !is_blocked && referrer_staked > 0 && level_amount > 0;
+                if !can_pay { continue; }
+
+                if ref_reward_ai.owner != &token::ID { continue; }
+                let ata_ok = {
+                    let ata_data = match ref_reward_ai.try_borrow_data() { Ok(d) => d, Err(_) => continue };
+                    if ata_data.len() < 64 { false } else {
+                        let ata_mint: [u8; 32]  = ata_data[0..32].try_into().unwrap();
+                        let ata_owner: [u8; 32] = ata_data[32..64].try_into().unwrap();
+                        Pubkey::from(ata_mint) == reward_mint_key && Pubkey::from(ata_owner) == expected_key
+                    }
+                };
+                if !ata_ok { continue; } // malformed/mismatched ATA — this level's share stays unpaid, not an error
+
+                token::transfer(CpiContext::new_with_signer(
+                    tp.clone(),
+                    Transfer { from: vault.clone(), to: ref_reward_ai.clone(), authority: plat_ai.clone() },
+                    signer,
+                ), level_amount)?;
+
+                {
+                    let mut data = ref_user_ai.try_borrow_mut_data()
+                        .map_err(|_| error!(StakingError::Unauthorized))?;
+                    let mut updated = {
+                        let mut slice: &[u8] = &data[8..];
+                        UserAccount::deserialize(&mut slice).map_err(|_| error!(StakingError::Unauthorized))?
+                    };
+                    updated.total_referral_rewards = updated.total_referral_rewards.checked_add(level_amount).unwrap();
+                    updated.serialize(&mut &mut data[8..]).map_err(|_| error!(StakingError::Unauthorized))?;
+                }
+
+                referral_paid_amount = referral_paid_amount.checked_add(level_amount).unwrap();
+                referral_paid_bps    = referral_paid_bps.checked_add(level_bps).unwrap();
+                emit!(ClaimReferralPaid { claimant: ctx.accounts.owner.key(), referrer: expected_key, level: level as u8, amount: level_amount });
+            }
+        }
+
+        // Any level that wasn't paid (chain too short, blocked/inactive referrer, no
+        // referrer at all, or a malformed ATA) has its share split 50/50 between extra
+        // burn and the claiming user — it never silently reverts to the user in full,
+        // and it never inflates what the reward pool has to fund.
+        let unpaid_bps    = CLAIM_REFERRAL_TOTAL_BPS.checked_sub(referral_paid_bps).unwrap();
+        let unpaid_amount = after_fee.checked_mul(unpaid_bps).unwrap().checked_div(10_000).unwrap();
+        let burn_extra    = unpaid_amount.checked_div(2).unwrap();
+        let burn_amount   = base_burn.checked_add(burn_extra).unwrap();
+        let user_reward   = after_fee
+            .checked_sub(burn_amount).unwrap()
+            .checked_sub(referral_paid_amount).unwrap();
+
         token::transfer(CpiContext::new_with_signer(tp.clone(), Transfer {
             from: vault.clone(), to: ctx.accounts.user_token_account.to_account_info(), authority: plat_ai.clone(),
         }, signer), user_reward)?;
@@ -626,7 +742,7 @@ pub mod fbit_staking {
         Ok(())
     }
 
-    pub fn compound_rewards(ctx: Context<CompoundRewards>) -> Result<()> {
+    pub fn compound_rewards<'info>(ctx: Context<'_, '_, '_, 'info, CompoundRewards<'info>>) -> Result<()> {
         require!(!ctx.accounts.platform.is_paused, StakingError::PlatformPaused);
         require!(!ctx.accounts.user_account.is_blocked, StakingError::UserBlocked);
         require!(ctx.accounts.stake_entry.is_active, StakingError::StakeNotActive);
@@ -657,13 +773,17 @@ pub mod fbit_staking {
         let team_bonus     = gross_reward.checked_mul(team_bonus_bps).unwrap().checked_div(10_000).unwrap();
         let total_gross    = gross_reward.checked_add(team_bonus).unwrap();
 
-        // Platform fee (1%) — applies always, whether renounced or not. Routes to
+        // Platform fee (0.25%) — applies always, whether renounced or not. Routes to
         // admin_reward_account, which resolves to the authority's ATA normally or
         // the fee_recipient's ATA after renouncement (see CompoundRewards account constraints).
         let fee             = total_gross.checked_mul(PLATFORM_FEE_BPS).unwrap().checked_div(10_000).unwrap();
         let after_fee       = total_gross.checked_sub(fee).unwrap();
-        let burn_amount     = after_fee.checked_mul(ctx.accounts.platform.burn_bps).unwrap().checked_div(10_000).unwrap();
-        let compound_amount = after_fee.checked_sub(burn_amount).unwrap();
+
+        // Live burn_bps is force-kept at CLAIM_BURN_BPS (5%) — see claim_rewards for why.
+        if ctx.accounts.platform.burn_bps != CLAIM_BURN_BPS {
+            ctx.accounts.platform.burn_bps = CLAIM_BURN_BPS;
+        }
+        let base_burn = after_fee.checked_mul(CLAIM_BURN_BPS).unwrap().checked_div(10_000).unwrap();
 
         let total_required = total_gross;
         require!(
@@ -693,6 +813,87 @@ pub mod fbit_staking {
                 });
             }
         }
+
+        // ── Claim-time recurring referral (levels 1-5) — see claim_rewards for the
+        // full explanation; identical logic, mirrored here since compound_rewards
+        // has its own separate account list / remaining_accounts.
+        let mut referral_paid_amount: u64 = 0;
+        let mut referral_paid_bps: u64 = 0;
+        {
+            let remaining        = ctx.remaining_accounts;
+            let mut cur_referrer = ctx.accounts.user_account.referrer;
+            let reward_mint_key  = ctx.accounts.reward_vault.mint;
+
+            for level in 0..CLAIM_REFERRAL_LEVELS {
+                let pair_start = level * 2;
+                if pair_start + 1 >= remaining.len() { break; }
+                let Some(expected_key) = cur_referrer else { break; };
+                if expected_key == ctx.accounts.owner.key() { break; }
+
+                let ref_user_ai   = &remaining[pair_start];
+                let ref_reward_ai = &remaining[pair_start + 1];
+
+                if ref_user_ai.owner != ctx.program_id { break; }
+
+                let (user_owner, is_blocked, referrer_staked, next_ref): (Pubkey, bool, u64, Option<Pubkey>) = {
+                    let data = ref_user_ai.try_borrow_data()
+                        .map_err(|_| error!(StakingError::Unauthorized))?;
+                    let mut slice: &[u8] = &data[8..];
+                    match UserAccount::deserialize(&mut slice) {
+                        Ok(u) => (u.owner, u.is_blocked, u.total_staked, u.referrer),
+                        Err(_) => break,
+                    }
+                };
+
+                if user_owner != expected_key { break; }
+                cur_referrer = next_ref;
+
+                let level_bps    = CLAIM_REFERRAL_BPS[level];
+                let level_amount = after_fee.checked_mul(level_bps).unwrap().checked_div(10_000).unwrap();
+                let can_pay = !is_blocked && referrer_staked > 0 && level_amount > 0;
+                if !can_pay { continue; }
+
+                if ref_reward_ai.owner != &token::ID { continue; }
+                let ata_ok = {
+                    let ata_data = match ref_reward_ai.try_borrow_data() { Ok(d) => d, Err(_) => continue };
+                    if ata_data.len() < 64 { false } else {
+                        let ata_mint: [u8; 32]  = ata_data[0..32].try_into().unwrap();
+                        let ata_owner: [u8; 32] = ata_data[32..64].try_into().unwrap();
+                        Pubkey::from(ata_mint) == reward_mint_key && Pubkey::from(ata_owner) == expected_key
+                    }
+                };
+                if !ata_ok { continue; }
+
+                token::transfer(CpiContext::new_with_signer(
+                    tp.clone(),
+                    Transfer { from: vault.clone(), to: ref_reward_ai.clone(), authority: plat_ai.clone() },
+                    signer,
+                ), level_amount)?;
+
+                {
+                    let mut data = ref_user_ai.try_borrow_mut_data()
+                        .map_err(|_| error!(StakingError::Unauthorized))?;
+                    let mut updated = {
+                        let mut slice: &[u8] = &data[8..];
+                        UserAccount::deserialize(&mut slice).map_err(|_| error!(StakingError::Unauthorized))?
+                    };
+                    updated.total_referral_rewards = updated.total_referral_rewards.checked_add(level_amount).unwrap();
+                    updated.serialize(&mut &mut data[8..]).map_err(|_| error!(StakingError::Unauthorized))?;
+                }
+
+                referral_paid_amount = referral_paid_amount.checked_add(level_amount).unwrap();
+                referral_paid_bps    = referral_paid_bps.checked_add(level_bps).unwrap();
+                emit!(ClaimReferralPaid { claimant: ctx.accounts.owner.key(), referrer: expected_key, level: level as u8, amount: level_amount });
+            }
+        }
+
+        let unpaid_bps       = CLAIM_REFERRAL_TOTAL_BPS.checked_sub(referral_paid_bps).unwrap();
+        let unpaid_amount    = after_fee.checked_mul(unpaid_bps).unwrap().checked_div(10_000).unwrap();
+        let burn_extra       = unpaid_amount.checked_div(2).unwrap();
+        let burn_amount      = base_burn.checked_add(burn_extra).unwrap();
+        let compound_amount  = after_fee
+            .checked_sub(burn_amount).unwrap()
+            .checked_sub(referral_paid_amount).unwrap();
 
         // Burn 1:1 equivalent from the reward vault
         token::burn(CpiContext::new_with_signer(tp, Burn {
@@ -1471,6 +1672,7 @@ pub struct FixBump<'info> {
 #[event] pub struct RewardsCompounded      { pub user: Pubkey, pub amount: u64, pub fee: u64, pub new_stake: u64, pub timestamp: i64 }
 #[event] pub struct TokensUnstaked         { pub user: Pubkey, pub amount: u64, pub fee: u64, pub timestamp: i64 }
 #[event] pub struct ReferralReward         { pub staker: Pubkey, pub referrer: Pubkey, pub amount: u64, pub level: u8 }
+#[event] pub struct ClaimReferralPaid      { pub claimant: Pubkey, pub referrer: Pubkey, pub level: u8, pub amount: u64 }
 #[event] pub struct ReferralRateUpdated    { pub new_rate: u64 }
 #[event] pub struct LockPeriodAPYUpdated   { pub index: u8, pub apy: u64 }
 #[event] pub struct UserBlocked            { pub user: Pubkey }
