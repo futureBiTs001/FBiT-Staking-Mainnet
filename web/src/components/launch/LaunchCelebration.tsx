@@ -145,7 +145,7 @@ export default function LaunchCelebration() {
         </span>
 
         <h1 className="font-display font-black text-4xl sm:text-6xl leading-tight mb-4 animate-fade-in">
-          <span className="bg-gradient-to-r from-white via-brand-400 to-[#9945FF] bg-clip-text text-transparent">
+          <span className="bg-linear-to-r from-white via-brand-400 to-[#9945FF] bg-clip-text text-transparent">
             FutureBit Staking
           </span>
           <br />

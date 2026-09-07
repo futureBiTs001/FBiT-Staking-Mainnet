@@ -107,7 +107,7 @@ export default function TrustPage() {
             ✓ Verified On-Chain
           </span>
           <h1 className="font-display font-black text-3xl sm:text-5xl leading-tight mb-4">
-            <span className="bg-gradient-to-r from-white via-brand-400 to-[#9945FF] bg-clip-text text-transparent">
+            <span className="bg-linear-to-r from-white via-brand-400 to-[#9945FF] bg-clip-text text-transparent">
               Nothing Here Requires Trust.
             </span>
             <br />
