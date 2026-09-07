@@ -92,12 +92,15 @@ function useHolderCount(): number | null {
  *  from the same GeckoTerminal-backed hook already used for the Stake/Swap tabs, plus
  *  a holder count from Helius. */
 export default function LiveTicker() {
-  const { pairs, isLoading } = useTokenPrice();
+  const { pairs, isLoading, source } = useTokenPrice();
   const holders = useHolderCount();
   const pair = pairs[0];
 
   const price     = pair ? parseFloat(pair.priceUsd) : null;
-  const change    = pair ? pair.priceChange24h : null;
+  // The on-chain fallback source can't derive a real 24h change from a single
+  // snapshot — it hardcodes 0, which would otherwise render as a confident-looking
+  // "▲ 0.00%" instead of the "we don't know yet" it actually means.
+  const change    = pair && source === 'geckoterminal' ? pair.priceChange24h : null;
   const liquidity = pair ? pair.liquidityUsd : null;
   const marketCap = price != null ? price * TOTAL_SUPPLY : null;
 

@@ -113,12 +113,14 @@ function Confetti() {
 }
 
 export default function LaunchCelebration() {
-  const { pairs, isLoading } = useTokenPrice();
+  const { pairs, isLoading, source } = useTokenPrice();
   const [showConfetti, setShowConfetti] = useState(true);
   const pair = pairs[0];
 
   const price     = pair ? parseFloat(pair.priceUsd) : null;
-  const change    = pair ? pair.priceChange24h : null;
+  // On-chain fallback can't derive a real 24h change from one snapshot — hide
+  // rather than show a hardcoded "0.00%" that would look like a real reading.
+  const change    = pair && source === 'geckoterminal' ? pair.priceChange24h : null;
   const marketCap = price != null ? price * TOTAL_SUPPLY : null;
 
   useEffect(() => {

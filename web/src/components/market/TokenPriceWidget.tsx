@@ -18,7 +18,13 @@ function dexColor(dexId: string) {
   return DEX_COLORS[dexId.toLowerCase()] ?? 'bg-brand-500/20 text-brand-400';
 }
 
-function PriceChange({ pct }: { pct: number }) {
+// pct is null when the price came from the on-chain fallback, which can't derive
+// a real 24h change from a single snapshot — showing "0.00%" there would look
+// like a confident real reading instead of "unknown."
+function PriceChange({ pct }: { pct: number | null }) {
+  if (pct == null) {
+    return <span className="font-mono text-xs text-text-muted">—</span>;
+  }
   const isPos = pct >= 0;
   return (
     <span className={`font-mono text-xs font-semibold ${isPos ? 'text-brand-400' : 'text-accent-rose'}`}>
@@ -74,7 +80,7 @@ export default function TokenPriceWidget() {
               <span className="font-display font-bold text-lg text-text-primary">
                 ${Number(bestPair.priceUsd).toFixed(4)}
               </span>
-              <PriceChange pct={bestPair.priceChange24h} />
+              <PriceChange pct={source === 'geckoterminal' ? bestPair.priceChange24h : null} />
             </div>
           )}
         </div>
@@ -149,7 +155,7 @@ export default function TokenPriceWidget() {
 
               {/* 24h change */}
               <span className="hidden sm:flex justify-end">
-                <PriceChange pct={pair.priceChange24h} />
+                <PriceChange pct={source === 'geckoterminal' ? pair.priceChange24h : null} />
               </span>
 
               {/* Volume */}
