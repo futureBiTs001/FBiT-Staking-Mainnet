@@ -959,13 +959,23 @@ export async function solanaUnstake(stakeId: number): Promise<{ txHash: string }
     // If account fetch fails, let the contract handle it
   }
 
-  // adminStakeAccount = authority's stake token ATA
-  let adminStakeAccount = ata(stakeMint, owner); // fallback
+  // adminStakeAccount — the authority's ATA normally, or the fee_recipient's ATA
+  // after renouncement (mirrors the on-chain constraint in the Unstake accounts
+  // struct — see solanaStake/solanaClaimRewards/solanaCompoundRewards for the
+  // same pattern). MUST succeed or unstake fails the on-chain constraint.
+  let adminStakeAccount: PublicKey;
   try {
     const platformData: any = await (program.account as any).platform.fetch(platPda);
-    const authorityKey = new PublicKey(platformData.authority.toString());
-    adminStakeAccount = ata(stakeMint, authorityKey);
-  } catch {}
+    if (platformData.isRenounced && platformData.feeRecipient) {
+      const feeRecipientKey = new PublicKey(platformData.feeRecipient.toString());
+      adminStakeAccount = ata(stakeMint, feeRecipientKey);
+    } else {
+      const authorityKey = new PublicKey(platformData.authority.toString());
+      adminStakeAccount = ata(stakeMint, authorityKey);
+    }
+  } catch (e) {
+    throw new Error(`Failed to fetch platform authority — please retry. (${(e as Error).message})`);
+  }
 
   const tx = await (program.methods as any)
     .unstake()
