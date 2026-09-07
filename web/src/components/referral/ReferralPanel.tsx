@@ -163,8 +163,18 @@ export default function ReferralPanel() {
   const chainAddress = solanaAddress ?? address;
   const referralLink    = chainAddress ? generateReferralLink(chainAddress) : '';
   const myReferrer      = userAccount?.referrer ?? null;
-  const totalReferrals  = referralInfo?.totalReferrals ?? 0;    // L1 direct count
   const networkTotal    = referralInfo?.referrals.length ?? 0;  // all-level count
+  // On-chain UserAccount.referral_count only increments inside stake()'s referral
+  // loop, and only on a referral's very first stake — if that particular stake's
+  // remaining_accounts was ever built incorrectly (client bug, RPC hiccup walking
+  // the chain), this field silently undercounts forever after, with no way to
+  // self-correct. The BFS-computed Level 1 count (every account whose `referrer`
+  // field points at this wallet, scanned directly) doesn't depend on that at all —
+  // it's ground truth. Same bug class already fixed for teamSize below; take the
+  // higher of the two so a stale/undercounted on-chain field can never show a
+  // smaller number than what's independently provable on-chain.
+  const bfsDirectCount  = referralInfo?.referrals.filter(r => r.level === 1).length ?? 0;
+  const totalReferrals  = Math.max(referralInfo?.totalReferrals ?? 0, bfsDirectCount); // L1 direct count
   // The authoritative figure is the on-chain total_referral_rewards — it reflects
   // what was actually paid out at the BPS rates in effect at each stake. The
   // per-row "estimate" (stakedAmount × current level%) is only a projection —
@@ -292,7 +302,7 @@ export default function ReferralPanel() {
             <p className="text-text-muted text-[10px] mt-0.5">of {networkTotal} in network</p>
           )}
         </div>
-        <div className="glass-card text-center">
+        <div className="glass-card text-center" title="Includes both the one-time stake referral commission and the recurring claim/compound referral — the table below's 'Est. Earned' column only estimates the first of the two, so summing it won't match this total">
           <p className="text-text-muted text-xs font-display uppercase tracking-wider">Total Earned</p>
           <p className="font-display font-bold text-2xl mt-1 text-accent-cyan">{formatNumber(totalRewards, 8)}</p>
           <UsdValue amount={totalRewards} priceUsd={fbitPriceUsd} className="text-[11px]" />
@@ -369,7 +379,7 @@ export default function ReferralPanel() {
                       <th className="text-center pb-3">Lv</th>
                       <th className="text-center pb-3">Status</th>
                       <th className="text-right pb-3">Staked</th>
-                      <th className="text-right pb-3" title="Estimated from this referral's current stake — not a record of what was actually paid">Est. Earned</th>
+                      <th className="text-right pb-3" title="Estimated one-time stake commission only, from this referral's current stake — not a record of what was actually paid, and doesn't include the separate recurring claim/compound referral (see Total Earned above)">Est. Earned</th>
                       <th className="text-right pb-3 pr-3 hidden sm:table-cell">Joined</th>
                     </tr>
                   </thead>
