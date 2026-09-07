@@ -3,6 +3,7 @@
 import React from 'react';
 import toast from 'react-hot-toast';
 import { shortenAddress } from '@/lib/utils';
+import { useTokenPrice } from '@/hooks/useTokenPrice';
 import Reveal from './Reveal';
 
 const FBIT_MINT = '5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME';
@@ -13,6 +14,10 @@ function copyMint() {
   toast.success('Mint address copied!');
 }
 
+function formatPrice(n: number): string {
+  return n < 0.01 ? `$${n.toPrecision(3)}` : `$${n.toFixed(4)}`;
+}
+
 const STATS = [
   { icon: '🪙', label: 'Total Supply',   value: '250M',       sub: 'FBiT, fixed forever' },
   { icon: '🔢', label: 'Decimals',       value: '9',          sub: 'SPL token precision' },
@@ -21,6 +26,13 @@ const STATS = [
 ];
 
 export default function LandingToken() {
+  const { pairs, isLoading, source } = useTokenPrice();
+  const pair = pairs[0];
+  const price = pair ? parseFloat(pair.priceUsd) : null;
+  // On-chain fallback can't derive a real 24h change from one snapshot — hide
+  // rather than show a hardcoded "0.00%" that would look like a real reading.
+  const change = pair && source === 'geckoterminal' ? pair.priceChange24h : null;
+
   return (
     <section id="token" className="max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
       <Reveal>
@@ -35,23 +47,39 @@ export default function LandingToken() {
       <Reveal delay={80}>
         <div className="glass-card overflow-hidden">
           {/* Identity strip */}
-          <div className="flex flex-wrap items-center gap-4 pb-6 mb-6 border-b border-white/10">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="FBiT logo" className="w-14 h-14 rounded-2xl object-cover shrink-0" />
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-display font-bold text-xl">FutureBit</h3>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-display font-bold bg-brand-500/15 text-brand-400 border border-brand-500/30">
-                  FBiT
-                </span>
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-6 mb-6 border-b border-white/10">
+            <div className="flex items-center gap-4 min-w-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="FBiT logo" className="w-14 h-14 rounded-2xl object-cover shrink-0" />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-display font-bold text-xl">FutureBit</h3>
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-display font-bold bg-brand-500/15 text-brand-400 border border-brand-500/30">
+                    FBiT
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mt-1.5 text-xs text-text-muted flex-wrap">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#9945FF]" /> Solana Mainnet
+                  </span>
+                  <span className="text-white/15">·</span>
+                  <span>SPL Token</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 mt-1.5 text-xs text-text-muted flex-wrap">
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#9945FF]" /> Solana Mainnet
-                </span>
-                <span className="text-white/15">·</span>
-                <span>SPL Token</span>
-              </div>
+            </div>
+
+            {/* Live price */}
+            <div className="text-right shrink-0">
+              <p className={`font-display font-bold text-xl sm:text-2xl text-text-primary ${isLoading && price == null ? 'animate-pulse opacity-50' : ''}`}>
+                {price != null ? formatPrice(price) : (isLoading ? '···' : '—')}
+              </p>
+              {change != null ? (
+                <p className={`font-mono text-xs font-semibold mt-0.5 ${change >= 0 ? 'text-brand-400' : 'text-accent-rose'}`}>
+                  {change >= 0 ? '▲' : '▼'} {Math.abs(change).toFixed(2)}% (24h)
+                </p>
+              ) : (
+                <p className="text-text-muted text-[10px] uppercase tracking-wider mt-0.5">Live Price</p>
+              )}
             </div>
           </div>
 
