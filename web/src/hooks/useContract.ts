@@ -70,8 +70,8 @@ export interface ContractHook {
   isReady: boolean;
 
   stake(amount: number, referrer?: string): Promise<{ txHash: string; stakeIndex?: number; stakedAt?: number }>;
-  claimRewards(stakeId: number | string, stakedAt: number): Promise<{ txHash: string; reward: number }>;
-  compoundRewards(stakeId: number | string, stakedAt: number): Promise<{ txHash: string; reward: number }>;
+  claimRewards(stakeId: number | string, stakedAt: number): Promise<{ txHash: string; reward: number; burned: number | null }>;
+  compoundRewards(stakeId: number | string, stakedAt: number): Promise<{ txHash: string; reward: number; burned: number | null }>;
   unstake(stakeId: number | string, stakedAt: number): Promise<{ txHash: string }>;
 
   /** Fetch on-chain platform stats and sync them into the Zustand store */

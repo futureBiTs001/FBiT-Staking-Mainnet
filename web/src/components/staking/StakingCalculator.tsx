@@ -13,6 +13,15 @@ const APY_BOUNDS: Record<NetworkType, { min: number; max: number }> = {
 
 const INTERVALS_PER_DAY = 4;         // one claim/compound window every 6h
 const INTERVALS_PER_YEAR = 1_460;    // 4 * 365 — matches the on-chain reward formula
+// Platform fee is a compile-time contract constant (PLATFORM_FEE_BPS), not
+// stored on-chain or admin-adjustable, so it isn't part of PlatformStats —
+// hardcoded here to match lib.rs.
+const PLATFORM_FEE_BPS = 25; // 0.25%
+// Worst-case (most conservative/honest) assumption: the full claim-time
+// referral chain (levels 1-5) is active and gets paid on every claim/compound
+// — see CLAIM_REFERRAL_TOTAL_BPS in lib.rs. A user with fewer/no active
+// referrers above them will actually net more than this estimate, never less.
+const MAX_CLAIM_REFERRAL_BPS = 1_000; // 10%
 const DURATION_OPTIONS = [
   { label: '30D',  days: 30 },
   { label: '90D',  days: 90 },
@@ -29,7 +38,7 @@ interface Props {
 export default function StakingCalculator({ network, stats }: Props) {
   const bounds = APY_BOUNDS[network];
   const liveApyBps = Math.min(bounds.max, Math.max(bounds.min, stats.effectiveAPY || bounds.min));
-  const burnBps = stats.burnBps ?? 1_000; // default 10%, matches the rest of the dashboard
+  const burnBps = stats.burnBps ?? 500; // default 5%, matches the rest of the dashboard
   const { pairs: pricePairs } = useTokenPrice();
   const fbitPriceUsd = pricePairs[0]?.priceUsd ? Number(pricePairs[0].priceUsd) : null;
 
@@ -41,7 +50,11 @@ export default function StakingCalculator({ network, stats }: Props) {
     const principal = Number(amount);
     if (!Number.isFinite(principal) || principal <= 0) return null;
 
-    const netMultiplier = (10_000 - burnBps) / 10_000;
+    // Fee, then burn, then the (worst-case, full-chain) claim-referral cut —
+    // same order of operations as claim_rewards()/compound_rewards() in lib.rs.
+    const afterFeeMultiplier = (10_000 - PLATFORM_FEE_BPS) / 10_000;
+    const afterBurnAndReferralMultiplier = (10_000 - burnBps - MAX_CLAIM_REFERRAL_BPS) / 10_000;
+    const netMultiplier = afterFeeMultiplier * afterBurnAndReferralMultiplier;
     const perIntervalRate = apyBps / 10_000 / INTERVALS_PER_YEAR;
     const totalIntervals = Math.round(durationDays * INTERVALS_PER_DAY);
 
@@ -185,8 +198,10 @@ export default function StakingCalculator({ network, stats }: Props) {
       </div>
 
       <p className="text-[10px] text-text-muted mt-3">
-        Estimate only — includes the current {(burnBps / 100).toFixed(1)}% burn fee, excludes referral/team
-        bonuses. Actual APY is dynamic and adjusts on-chain as total staked changes.
+        Estimate only — includes the {(PLATFORM_FEE_BPS / 100).toFixed(2)}% platform fee, the current {(burnBps / 100).toFixed(1)}% burn, and assumes the
+        worst case for the claim-time referral cut (a full 5-level active chain, {(MAX_CLAIM_REFERRAL_BPS / 100).toFixed(0)}%) — you&apos;ll net
+        more than this if your referral chain is shorter or inactive. Excludes Team Target Bonus. Actual APY is
+        dynamic and adjusts on-chain as total staked changes.
       </p>
     </div>
   );

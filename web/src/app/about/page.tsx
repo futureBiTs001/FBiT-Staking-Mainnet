@@ -51,9 +51,9 @@ export default function AboutPage() {
         <Section title="Our Technology">
           <ul style={{ paddingLeft: 20, lineHeight: 2, color: 'var(--text-secondary)' }}>
             <li><b style={{ color: '#f1f5f9' }}>Solana Smart Contract</b> — written in Rust using the Anchor framework. Deployed on Solana Mainnet.</li>
-            <li><b style={{ color: '#f1f5f9' }}>10-Level Referral System</b> — on-chain referral commissions auto-distributed to up to 10 levels of referrers.</li>
+            <li><b style={{ color: '#f1f5f9' }}>10-Level Referral System</b> — on-chain referral commissions auto-distributed to up to 10 levels of referrers on every new stake, plus a separate recurring commission to levels 1-5 on every claim/compound.</li>
             <li><b style={{ color: '#f1f5f9' }}>Dynamic APY</b> — reward rate adjusts automatically based on total tokens staked (up to 300%).</li>
-            <li><b style={{ color: '#f1f5f9' }}>10% Burn Mechanism</b> — a portion of fees is burned to reduce supply and increase token value over time.</li>
+            <li><b style={{ color: '#f1f5f9' }}>5% Burn Mechanism</b> — a portion of every claim/compound reward is burned to reduce supply and increase token value over time.</li>
           </ul>
         </Section>
 

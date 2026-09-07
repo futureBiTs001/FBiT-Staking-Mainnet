@@ -86,9 +86,10 @@ export default function TermsPage() {
         <Section title="6. Platform Fees">
           The Platform charges the following fees:
           <ul style={{ paddingLeft: 20, lineHeight: 2, marginTop: 8 }}>
-            <li><b style={{ color: '#f1f5f9' }}>Staking Fee:</b> 1% of staked amount at time of staking.</li>
-            <li><b style={{ color: '#f1f5f9' }}>Burn:</b> 10% of collected fees are burned (permanently destroyed).</li>
-            <li><b style={{ color: '#f1f5f9' }}>Referral Commissions:</b> Up to 17.75% of rewards distributed to referrers (10 levels).</li>
+            <li><b style={{ color: '#f1f5f9' }}>Platform Fee:</b> 0.25% on staking, claiming, compounding, and unstaking.</li>
+            <li><b style={{ color: '#f1f5f9' }}>Burn:</b> 5% of the after-fee reward is burned (permanently destroyed) on every claim or compound.</li>
+            <li><b style={{ color: '#f1f5f9' }}>One-Time Referral Commission:</b> Up to 17.75% of a new stake distributed instantly to the referral chain (10 levels), paid from the reward pool.</li>
+            <li><b style={{ color: '#f1f5f9' }}>Recurring Claim Referral:</b> Up to another 10% of every claim/compound's after-fee reward goes to the claiming user&apos;s own referral chain (levels 1-5), carved out of that reward — not an additional pool cost.</li>
             <li><b style={{ color: '#f1f5f9' }}>Blockchain Gas Fees:</b> You are responsible for all network transaction fees (SOL).</li>
           </ul>
         </Section>

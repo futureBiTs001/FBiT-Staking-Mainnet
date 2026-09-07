@@ -149,13 +149,11 @@ export default function Dashboard() {
       if (!contract.isLive) throw new Error('Contract not configured. Set up your deployment addresses to execute on-chain transactions.');
       const result = await contract.claimRewards(stakeId, stake.stakedAt);
       const txHash = result.txHash;
-      const reward = result.reward > 0 ? result.reward
-        : getDiscretePending(stake);
-
-      // Burn always applies: burnBps% of gross reward burned from user's share
-      const burnBps = platformStats.burnBps ?? 1000; // default 10%
-      const burned  = reward * (burnBps / 10000);
-      const net     = reward - burned; // user always receives net
+      // result.reward is already the true net amount (post fee, burn, and the
+      // claim-time referral cut) read directly from the confirmed transaction's
+      // own on-chain event — not a client-side estimate (see solanaClaimRewards).
+      const net    = result.reward > 0 ? result.reward : getDiscretePending(stake);
+      const burned = result.burned; // exact, from the same transaction's TokensBurned event (may be null on a parse failure)
 
       void contract.syncPlatformStats().catch(() => {});
       void contract.syncUserData().catch(() => {});
@@ -163,20 +161,22 @@ export default function Dashboard() {
 
       claimStakeReward(stakeId, net);
 
-      // The 1% platform fee applies identically whether renounced or not — it
-      // just routes to fee_recipient instead of the former admin — so the
-      // claim message no longer needs to branch on renounced state.
+      const burnedLabel = burned != null ? ` (burned ${formatNumber(burned)})` : '';
       addTransaction({
         id: Date.now().toString(),
         type: 'claim',
-        label: `Claimed ${formatNumber(net)} FBiT (burned ${formatNumber(burned)})`,
+        label: `Claimed ${formatNumber(net)} FBiT${burnedLabel}`,
         amount: net,
         txHash,
         timestamp: Date.now(),
         status: 'success',
         network: selectedNetwork,
       });
-      toast.success(`✓ Claimed ${formatNumber(net)} FBiT · ${formatNumber(burned)} FBiT burned 🔥`);
+      toast.success(
+        burned != null
+          ? `✓ Claimed ${formatNumber(net)} FBiT · ${formatNumber(burned)} FBiT burned 🔥`
+          : `✓ Claimed ${formatNumber(net)} FBiT`
+      );
     } catch (err: any) {
       console.error('[handleClaim] error:', err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -210,33 +210,33 @@ export default function Dashboard() {
       if (!contract.isLive) throw new Error('Contract not configured. Set up your deployment addresses to execute on-chain transactions.');
       const result = await contract.compoundRewards(stakeId, stake.stakedAt);
       const txHash = result.txHash;
-      const reward = result.reward > 0 ? result.reward
-        : getDiscretePending(stake);
-
-      // Burn always applies: burnBps% of gross reward burned from user's share
-      const burnBps = platformStats.burnBps ?? 1000; // default 10%
-      const burned  = reward * (burnBps / 10000);
-      const net     = reward - burned; // user always re-stakes net
+      // result.reward is already the true net compound amount (post fee, burn,
+      // and the claim-time referral cut), read from the confirmed transaction's
+      // own on-chain event — not a client-side estimate (see solanaCompoundRewards).
+      const net    = result.reward > 0 ? result.reward : getDiscretePending(stake);
+      const burned = result.burned; // exact, from the same transaction's TokensBurned event (may be null on a parse failure)
 
       void contract.syncPlatformStats().catch(() => {});
       void contract.syncUserData().catch(() => {});
 
       compoundStakeReward(stakeId, net);
 
-      // The 1% platform fee applies identically whether renounced or not — it
-      // just routes to fee_recipient instead of the former admin — so the
-      // compound message no longer needs to branch on renounced state.
+      const burnedLabel = burned != null ? ` (burned ${formatNumber(burned, 8)})` : '';
       addTransaction({
         id: Date.now().toString(),
         type: 'compound',
-        label: `Compounded ${formatNumber(net, 8)} FBiT (burned ${formatNumber(burned, 8)})`,
+        label: `Compounded ${formatNumber(net, 8)} FBiT${burnedLabel}`,
         amount: net,
         txHash,
         timestamp: Date.now(),
         status: 'success',
         network: selectedNetwork,
       });
-      toast.success(`↑ Compounded ${formatNumber(net, 8)} FBiT · ${formatNumber(burned, 8)} FBiT burned 🔥`);
+      toast.success(
+        burned != null
+          ? `↑ Compounded ${formatNumber(net, 8)} FBiT · ${formatNumber(burned, 8)} FBiT burned 🔥`
+          : `↑ Compounded ${formatNumber(net, 8)} FBiT`
+      );
     } catch (err: any) {
       console.error('[handleCompound] error:', err);
       const msg = err instanceof Error ? err.message : String(err);

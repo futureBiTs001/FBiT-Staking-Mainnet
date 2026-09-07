@@ -179,7 +179,7 @@ export default function AdminPanel() {
         updatePlatformStats({ isRenounced: true, feeRecipient: address ?? '' });
         return result;
       },
-      'Ownership renounced — the 1% platform fee now goes to you automatically',
+      'Ownership renounced — the 0.25% platform fee now goes to you automatically',
     );
   };
 
@@ -293,7 +293,7 @@ export default function AdminPanel() {
           <div className="glass-card max-w-sm w-full text-left border border-accent-amber/20 bg-accent-amber/5 space-y-1 mt-2">
             <p className="text-accent-amber text-xs font-display font-semibold">Passive Fee Mode Active</p>
             <p className="text-text-muted text-xs">
-              The standard 1% platform fee (on stake, unstake, claim, and compound) is sent directly to your wallet automatically — no action needed.
+              The standard 0.25% platform fee (on stake, unstake, claim, and compound) is sent directly to your wallet automatically — no action needed.
             </p>
           </div>
         )}
@@ -335,7 +335,7 @@ export default function AdminPanel() {
           <p className="font-display font-semibold text-accent-amber text-sm">Passive Fee Mode Active</p>
           <p className="text-text-secondary text-xs leading-relaxed">
             You have permanently renounced admin ownership. All platform controls are disabled.
-            The standard <span className="text-accent-amber font-semibold">1% platform fee</span> — the
+            The standard <span className="text-accent-amber font-semibold">0.25% platform fee</span> — the
             same fee that always applied on stake, unstake, claim, and compound — is automatically
             sent to your wallet instead of the former admin's. No action required on your part.
           </p>
@@ -354,7 +354,7 @@ export default function AdminPanel() {
           </div>
           <div className="glass-card text-center p-5">
             <p className="text-text-muted text-xs font-display uppercase tracking-wider mb-2">Fee Rate</p>
-            <p className="font-display font-bold text-2xl text-brand-400">1%</p>
+            <p className="font-display font-bold text-2xl text-brand-400">0.25%</p>
             <p className="text-text-muted text-xs mt-1">of stake, unstake, claim & compound</p>
           </div>
           <div className="glass-card text-center p-5">
@@ -733,17 +733,17 @@ export default function AdminPanel() {
                 <p className="text-text-muted text-xs">No FBiT is being burned when users claim or compound. Set a burn rate to start permanently reducing total supply.</p>
                 <button
                   type="button"
-                  onClick={() => { setBurnBpsValue('1000'); }}
+                  onClick={() => { setBurnBpsValue('500'); }}
                   className="text-xs px-3 py-1.5 rounded-lg bg-accent-rose/20 border border-accent-rose/40 text-accent-rose font-semibold hover:bg-accent-rose/30 transition-colors"
                 >
-                  Fill 1000 bps (10% default)
+                  Fill 500 bps (5% default)
                 </button>
               </div>
             )}
 
             <div className="p-3 rounded-xl bg-accent-rose/5 border border-accent-rose/10 text-xs text-text-muted space-y-1">
-              <p>On-chain burn rate: <span className="text-accent-rose font-mono font-semibold">{((platformStats.burnBps ?? 0) / 100).toFixed(2)}%</span> ({platformStats.burnBps ?? 0} bps)</p>
-              <p>Example: 100 FBiT reward → <span className="text-accent-rose font-semibold">{((platformStats.burnBps ?? 0) / 100).toFixed(2)} FBiT permanently burned</span> (SPL burn, reduces total supply), {(100 - (platformStats.burnBps ?? 0) / 100).toFixed(2)} FBiT to user</p>
+              <p>On-chain burn rate: <span className="text-accent-rose font-mono font-semibold">{((platformStats.burnBps ?? 0) / 100).toFixed(2)}%</span> ({platformStats.burnBps ?? 0} bps) — this control is permanently disabled post-renouncement; the live rate is force-kept at 5% in code (see lib.rs) regardless of what this field shows until it self-corrects on the next real claim/compound.</p>
+              <p>Example: 100 FBiT after-fee reward → <span className="text-accent-rose font-semibold">{((platformStats.burnBps ?? 0) / 100).toFixed(2)} FBiT permanently burned</span>, plus up to another 10 FBiT to the claiming user&apos;s own referral chain (levels 1-5) — the rest goes to the user.</p>
             </div>
             <div>
               <label className="text-sm text-text-secondary font-display mb-1 block">New Burn Rate (basis points — 100 bps = 1%)</label>
@@ -1172,7 +1172,7 @@ export default function AdminPanel() {
                 <p className="text-text-muted text-sm mt-0.5">
                   {isRenounced
                     ? `Ownership permanently renounced. Fee recipient: ${platformStats.feeRecipient?.slice(0, 10)}…`
-                    : 'Permanently surrender admin control. The standard 1% platform fee keeps flowing to you forever. Irreversible.'}
+                    : 'Permanently surrender admin control. The standard 0.25% platform fee keeps flowing to you forever. Irreversible.'}
                 </p>
               </div>
               <AdminButton
@@ -1187,9 +1187,10 @@ export default function AdminPanel() {
             {!isRenounced && (
               <div className="text-xs text-text-muted p-3 rounded-xl bg-surface-800/40 border border-white/5 space-y-1">
                 <p><span className="text-accent-amber">●</span> You will permanently lose all admin privileges.</p>
-                <p><span className="text-accent-cyan">●</span> The same 1% platform fee that already applies on stake, unstake, claim, and compound keeps applying — it just routes to you instead of the former admin.</p>
-                <p><span className="text-brand-400">●</span> Burn still applies too: 10% of the remainder (after the 1% fee) is burned on every claim/compound.</p>
-                <p><span className="text-accent-purple">●</span> Example (claim): user earns 1 FBiT gross → 0.01 to you (1% fee) → 0.099 burned (10% of the rest) → user gets 0.891 FBiT.</p>
+                <p><span className="text-accent-cyan">●</span> The same 0.25% platform fee that already applies on stake, unstake, claim, and compound keeps applying — it just routes to you instead of the former admin.</p>
+                <p><span className="text-brand-400">●</span> Burn still applies too: 5% of the remainder (after the 0.25% fee) is burned on every claim/compound.</p>
+                <p><span className="text-accent-purple">●</span> A separate recurring referral cut (up to 10%, levels 1-5) also applies on every claim/compound — carved out of the claiming user's own reward, not an extra cost to you or the pool.</p>
+                <p><span className="text-accent-purple">●</span> Example (claim, no referral chain): user earns 1 FBiT gross → 0.0025 to you (0.25% fee) → 0.0997 burned (10% of the rest — 5% base + the unpaid referral share's burn half) → user gets ~0.898 FBiT.</p>
                 <p><span className="text-accent-rose">●</span> This action cannot be undone, even by deploying a new contract.</p>
               </div>
             )}
@@ -1212,8 +1213,8 @@ export default function AdminPanel() {
                   <p>By confirming, you agree to:</p>
                   <ul className="space-y-1.5 text-xs pl-3">
                     <li className="flex items-start gap-2"><span className="text-accent-rose mt-0.5">✕</span> Permanently lose all admin rights — fund pool, set rates, block users, pause platform, update APYs</li>
-                    <li className="flex items-start gap-2"><span className="text-brand-400 mt-0.5">✓</span> The standard <strong className="text-white">1% platform fee</strong> (stake, unstake, claim, compound) keeps applying — it just routes to your wallet instead of the former admin's</li>
-                    <li className="flex items-start gap-2"><span className="text-accent-amber mt-0.5">🔥</span> Burn still applies too: 10% of the remainder (after the 1% fee) is burned on every claim/compound</li>
+                    <li className="flex items-start gap-2"><span className="text-brand-400 mt-0.5">✓</span> The standard <strong className="text-white">0.25% platform fee</strong> (stake, unstake, claim, compound) keeps applying — it just routes to your wallet instead of the former admin's</li>
+                    <li className="flex items-start gap-2"><span className="text-accent-amber mt-0.5">🔥</span> Burn still applies too: 5% of the remainder (after the 0.25% fee) is burned on every claim/compound, plus a recurring referral cut (up to 10%, levels 1-5) that goes to the claiming user's own referrers</li>
                     <li className="flex items-start gap-2"><span className="text-brand-400 mt-0.5">✓</span> Fees accumulate indefinitely with no further action required</li>
                   </ul>
                 </div>

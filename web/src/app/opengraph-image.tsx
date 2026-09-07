@@ -85,7 +85,7 @@ export default function OgImage() {
             { label: 'APY',      value: '247%',   color: '#00E676' },
             { label: 'Networks', value: '2 Chains', color: '#06b6d4' },
             { label: 'Referral', value: '10 Levels', color: '#a855f7' },
-            { label: 'Fee',      value: '1% Only',  color: '#f59e0b' },
+            { label: 'Fee',      value: '0.25% Only', color: '#f59e0b' },
           ].map(s => (
             <div key={s.label} style={{
               display: 'flex',

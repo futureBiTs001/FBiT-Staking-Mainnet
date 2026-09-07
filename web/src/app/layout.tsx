@@ -62,7 +62,7 @@ const structuredData = {
       featureList: [
         'Dynamic PoS APY (up to 300%)',
         '10-Level Referral System',
-        '10% Burn Mechanism',
+        '5% Burn Mechanism',
         'Team Target Bonuses',
         'Built on Solana',
         'Non-Custodial',

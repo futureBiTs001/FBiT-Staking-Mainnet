@@ -56,6 +56,58 @@ const IX_DISCRIMINATORS: Record<string, number[]> = {
   fixBump:               [ 55, 162,  45, 211, 135, 185,  66, 103],
 };
 
+// Event discriminators: sha256("event:<Name>")[0..8]. Used to pull the exact,
+// contract-computed net amount and burn amount out of a confirmed claim/compound
+// transaction's logs — see fetchClaimResultFromTx below. Computing these
+// client-side instead (fee % + burn % + referral %) would require re-deriving
+// which referral levels actually got paid, which only the contract can
+// determine authoritatively (see lib.rs's claim_rewards/compound_rewards).
+const EVENT_DISCRIMINATORS: Record<string, number[]> = {
+  RewardsClaimed:    [75,  98,  88,  18, 219, 112,  88, 121],
+  RewardsCompounded: [145, 86,  94,  94, 103, 143, 189,  95],
+  TokensBurned:      [230, 255,  34, 113, 226,  53, 227,   9],
+};
+
+function decodeEventFromLogs(logs: string[], eventName: keyof typeof EVENT_DISCRIMINATORS): Buffer | null {
+  const wantDisc = Buffer.from(EVENT_DISCRIMINATORS[eventName]);
+  for (const log of logs) {
+    if (!log.startsWith('Program data: ')) continue;
+    const raw = Buffer.from(log.slice('Program data: '.length), 'base64');
+    if (raw.length >= 8 && raw.subarray(0, 8).equals(wantDisc)) return raw;
+  }
+  return null;
+}
+
+// Reads a just-confirmed claim/compound transaction's logs and extracts the
+// exact net amount (RewardsClaimed/RewardsCompounded.amount, after platform
+// fee, burn, and the claim-time referral cut) and burn amount (TokensBurned.
+// burn_amount) the contract actually computed — not client-side estimates.
+// Falls back to `fallbackReward`/`null` if parsing fails for any reason, so a
+// transient RPC hiccup never breaks the UI.
+async function fetchClaimResultFromTx(
+  connection: Connection,
+  txHash: string,
+  eventName: 'RewardsClaimed' | 'RewardsCompounded',
+  fallbackReward: number,
+): Promise<{ netAmount: number; burnAmount: number | null }> {
+  try {
+    const tx = await connection.getTransaction(txHash, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 });
+    const logs = tx?.meta?.logMessages ?? [];
+
+    const rewardEvent = decodeEventFromLogs(logs, eventName);
+    // Both events: [discriminator(8), user: Pubkey(32), amount: u64(8), ...more fields]
+    const netAmount = rewardEvent ? Number(rewardEvent.readBigUInt64LE(8 + 32)) / SCALE : fallbackReward;
+
+    const burnEvent = decodeEventFromLogs(logs, 'TokensBurned');
+    // TokensBurned: [discriminator(8), user: Pubkey(32), burn_amount: u64(8), total_burned: u64(8)]
+    const burnAmount = burnEvent ? Number(burnEvent.readBigUInt64LE(8 + 32)) / SCALE : null;
+
+    return { netAmount, burnAmount };
+  } catch {
+    return { netAmount: fallbackReward, burnAmount: null };
+  }
+}
+
 /**
  * Patch an old-format Anchor IDL for compatibility with Anchor 0.32:
  *  1. "publicKey" type string → "pubkey"       (borsh coder expects lowercase)
@@ -828,7 +880,7 @@ async function buildClaimReferralRemainingAccounts(
 export async function solanaClaimRewards(
   stakeId: number | string,
   _stakedAt: number
-): Promise<{ txHash: string; reward: number }> {
+): Promise<{ txHash: string; reward: number; burned: number | null }> {
   const program  = getProgram();
   const owner    = getOwner();
   const [platPda] = platformPda();
@@ -906,13 +958,19 @@ export async function solanaClaimRewards(
     .preInstructions(releaseIx ? [releaseIx] : [])
     .rpc();
 
-  return { txHash: tx, reward };
+  // The pre-tx `reward` above is only a gross estimate — pull the exact net
+  // amount (post fee, burn, and claim-referral cut) and burn amount from the
+  // confirmed transaction's own events instead of trying to replicate that
+  // math client-side (see fetchClaimResultFromTx).
+  const { netAmount, burnAmount } = await fetchClaimResultFromTx(getRpcConnection(), tx, 'RewardsClaimed', reward);
+
+  return { txHash: tx, reward: netAmount, burned: burnAmount };
 }
 
 export async function solanaCompoundRewards(
   stakeId: number | string,
   _stakedAt: number
-): Promise<{ txHash: string; reward: number }> {
+): Promise<{ txHash: string; reward: number; burned: number | null }> {
   const program  = getProgram();
   const owner    = getOwner();
   const [platPda] = platformPda();
@@ -985,7 +1043,11 @@ export async function solanaCompoundRewards(
     .preInstructions(releaseIx ? [releaseIx] : [])
     .rpc();
 
-  return { txHash: tx, reward };
+  // See solanaClaimRewards — pull the exact net compound amount and burn
+  // amount from the confirmed transaction's own events rather than estimating.
+  const { netAmount, burnAmount } = await fetchClaimResultFromTx(getRpcConnection(), tx, 'RewardsCompounded', reward);
+
+  return { txHash: tx, reward: netAmount, burned: burnAmount };
 }
 
 export async function solanaUnstake(stakeId: number): Promise<{ txHash: string }> {
