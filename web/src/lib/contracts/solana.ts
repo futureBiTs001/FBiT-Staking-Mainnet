@@ -921,7 +921,7 @@ export async function solanaClaimRewards(
   const userTokenAcc = ata(rewardMint, owner);
   const rewardVault  = getRewardVault();
 
-  // Resolve the admin/fee-recipient account (1% fee) from the platform state
+  // Resolve the admin/fee-recipient account (0.25% fee) from the platform state
   // fetched above — the authority's ATA normally, or the fee_recipient's ATA
   // after renouncement (the fee still applies post-renounce).
   let adminRewardAccount = userTokenAcc; // fallback
@@ -1009,7 +1009,7 @@ export async function solanaCompoundRewards(
   const rewardMint  = new PublicKey(NETWORK_CONFIG.solana.rewardTokenAddress);
   const rewardVault = getRewardVault();
 
-  // Resolve the admin/fee-recipient account (1% fee) from the platform state
+  // Resolve the admin/fee-recipient account (0.25% fee) from the platform state
   // fetched above — the authority's ATA normally, or the fee_recipient's ATA
   // after renouncement (the fee still applies post-renounce).
   let adminRewardAccount = ata(rewardMint, owner); // fallback

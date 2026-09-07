@@ -351,9 +351,9 @@ export default function HistoryPanel() {
             <p className="text-text-muted text-xs">Current APY</p>
             <p className="font-display font-bold text-accent-amber">{Math.round((platformStats.effectiveAPY ?? 1000) / 100)}%</p>
           </div>
-          <div>
-            <p className="text-text-muted text-xs">Burn Rate</p>
-            <p className="font-display font-bold text-accent-rose">{((platformStats.burnBps ?? 1000) / 100).toFixed(1)}%</p>
+          <div title="Base rate — up to another 5% may burn on top of this if a claim's referral chain isn't fully active">
+            <p className="text-text-muted text-xs">Base Burn Rate</p>
+            <p className="font-display font-bold text-accent-rose">{((platformStats.burnBps ?? 500) / 100).toFixed(1)}%</p>
           </div>
         </div>
       </div>

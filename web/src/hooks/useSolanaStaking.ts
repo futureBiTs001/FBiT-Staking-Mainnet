@@ -209,7 +209,7 @@ export function useSolanaStaking() {
 
       const totalStaked      = fromLamports(account.totalStaked);
       const annualEmission   = fromLamports(account.annualEmission);
-      const burnBps          = account.burnBps ? Number(account.burnBps) : 1000;
+      const burnBps          = account.burnBps ? Number(account.burnBps) : 500;
 
       // Derive effectiveAPY same way as lib/contracts/solana.ts
       let effectiveAPY = 1_000;

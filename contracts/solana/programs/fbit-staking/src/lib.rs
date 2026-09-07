@@ -373,7 +373,7 @@ pub mod fbit_staking {
         let _referrer  = ctx.accounts.user_account.referrer;
         let ref_rate   = ctx.accounts.platform.referral_reward_rate;
 
-        // Platform fee (1%) — applies always, whether renounced or not. Routes to
+        // Platform fee (0.25%) — applies always, whether renounced or not. Routes to
         // admin_stake_account, which resolves to the authority's ATA normally or
         // the fee_recipient's ATA after renouncement (see Stake account constraints).
         let fee           = amount.checked_mul(PLATFORM_FEE_BPS).unwrap().checked_div(10_000).unwrap();
@@ -938,7 +938,7 @@ pub mod fbit_staking {
         require!(now >= ctx.accounts.stake_entry.unlock_at, StakingError::LockPeriodActive);
 
         let amount      = ctx.accounts.stake_entry.amount;
-        // Platform fee (1%) — applies always, whether renounced or not. Routes to
+        // Platform fee (0.25%) — applies always, whether renounced or not. Routes to
         // admin_stake_account, which resolves to the authority's ATA normally or
         // the fee_recipient's ATA after renouncement (see Unstake account constraints).
         let fee         = amount.checked_mul(PLATFORM_FEE_BPS).unwrap().checked_div(10_000).unwrap();
@@ -1461,7 +1461,7 @@ pub struct Stake<'info> {
         constraint = stake_vault.owner == platform.key() @ StakingError::InvalidVault,
         constraint = stake_vault.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
     pub stake_vault:        Box<Account<'info, TokenAccount>>,
-    /// Receives the 1% platform fee — the authority's ATA normally, or the
+    /// Receives the 0.25% platform fee — the authority's ATA normally, or the
     /// fee_recipient's ATA after renouncement (fee still applies post-renounce).
     #[account(mut,
         constraint = (
@@ -1502,7 +1502,7 @@ pub struct ClaimRewards<'info> {
         constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
         constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
     pub reward_vault:        Box<Account<'info, TokenAccount>>,
-    /// Receives the 1% platform fee — the authority's ATA normally, or the
+    /// Receives the 0.25% platform fee — the authority's ATA normally, or the
     /// fee_recipient's ATA after renouncement (fee still applies post-renounce).
     #[account(mut,
         constraint = (
@@ -1533,7 +1533,7 @@ pub struct CompoundRewards<'info> {
         constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
         constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
     pub reward_vault:         Box<Account<'info, TokenAccount>>,
-    /// Receives the 1% platform fee — the authority's ATA normally, or the
+    /// Receives the 0.25% platform fee — the authority's ATA normally, or the
     /// fee_recipient's ATA after renouncement (fee still applies post-renounce).
     #[account(mut,
         constraint = (
@@ -1568,7 +1568,7 @@ pub struct Unstake<'info> {
         constraint = stake_vault.owner == platform.key() @ StakingError::InvalidVault,
         constraint = stake_vault.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
     pub stake_vault:         Box<Account<'info, TokenAccount>>,
-    /// Receives the 1% platform fee — the authority's ATA normally, or the
+    /// Receives the 0.25% platform fee — the authority's ATA normally, or the
     /// fee_recipient's ATA after renouncement (fee still applies post-renounce).
     #[account(mut,
         constraint = (

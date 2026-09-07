@@ -1,6 +1,6 @@
 # Future Bit (FBiT) Staking Platform — Whitepaper
 
-> **Version 2.1 · August 2026**
+> **Version 2.7 · September 2026**
 > Solana Staking Protocol
 
 ---
@@ -15,7 +15,7 @@
 6. [Reward & APY Model](#6-reward--apy-model)
 7. [Emission & Reserve System](#7-emission--reserve-system)
 8. [Burn Mechanism](#8-burn-mechanism)
-9. [Referral Program (10-Level)](#9-referral-program-10-level)
+9. [Referral Program (10-Level + Recurring Claim Layer)](#9-referral-program-10-level)
 10. [Team Bonus Tier System](#10-team-bonus-tier-system)
 11. [Security Architecture](#11-security-architecture)
 12. [Smart Contract Addresses](#12-smart-contract-addresses)
@@ -29,16 +29,18 @@
 
 **Future Bit (FBiT) Staking** is a decentralized staking protocol on **Solana**. The platform allows FBiT token holders to stake and earn a dynamic Annual Percentage Yield (APY), compoundable every 6 hours, ranging from **10% to 300%** based on real-time on-chain conditions.
 
-Beyond simple staking, FBiT introduces a **10-level deep referral system** and a **10-tier team bonus structure** that rewards community builders with additional on-chain bonuses. The protocol funds rewards from a long-term **on-chain emission reserve**, giving reward sustainability without centralized re-funding.
+Beyond simple staking, FBiT introduces a **10-level deep one-time referral system**, a **second recurring referral layer paid on every claim/compound** (5 levels deep), and a **10-tier team bonus structure** that rewards community builders with additional on-chain bonuses. The protocol funds rewards from a long-term **on-chain emission reserve**, giving reward sustainability without centralized re-funding.
 
 Key highlights:
 
 - Up to **300% APY** (dynamic, PoS-based, 10% floor)
 - **30-day lock period** with 6-hour claim intervals
-- **10-level referral rewards** totaling **17.75%** passive income
+- **10-level one-time referral rewards** totaling **17.75%** passive income, paid the moment a referral first stakes
+- **Recurring claim referral** — up to **10%** more, paid to your active upline (levels 1-5) on every single claim/compound, carved from that claim's own reward
 - **10-tier team bonus** (Bronze → Titan) up to +10% additional APY
 - **229,830,026 FBiT reserve** funding a **12,000,000 FBiT/year** target emission (~19-year runway)
-- **Deflationary burn** on every claim, compound, and unstake
+- **Deflationary burn** — 5% base on every claim/compound, plus up to another 5% if part of the claim-referral chain above is inactive
+- **0.25% platform fee** on stake/claim/compound/unstake
 - **250,000,000 fixed FBiT supply** — mint authority renounced on-chain
 - Live on **Solana Mainnet** (Program ID `8AYv6AAqYxHzLxARsFRsqGSbhDuEmbnsGoLExpdcP4pp`)
 
@@ -230,17 +232,24 @@ The active reward pool (`rewardPoolBalance`) is what pays out staking rewards, r
 
 ## 8. Burn Mechanism
 
-FBiT incorporates a **deflationary burn** that permanently removes tokens from circulation on every staking event.
+FBiT incorporates a **deflationary burn** that permanently removes tokens from circulation on every claim and compound.
 
-### 8.1 Transaction Burn
+### 8.1 Base Burn + Variable Burn
 
-A **BURN_BPS** fee (configurable, capped by `MAX_BURN_BPS`, default 10%) is deducted from the reward/principal on:
+Burn is no longer a single fixed percentage. Two components apply to the **after-fee reward** on every `claimRewards`/`compoundRewards` call:
+
+| Component         | Rate                              | Trigger                                                                 |
+| ------------------ | ----------------------------------- | -------------------------------------------------------------------------- |
+| **Base burn**     | **5%** (`CLAIM_BURN_BPS`, fixed)   | Always applied.                                                            |
+| **Variable burn** | up to **5%** more                 | Applies only to the portion of the claim-referral chain (§9.4) that couldn't be paid — e.g. a level has no referrer, or the referrer isn't active. That unpaid share splits 50/50 between extra burn and being returned to the claimant — it is never simply kept by the platform. |
+
+So total burn ranges from **5%** (full 5-level referral chain active and paid) up to **10%** (no active referral chain at all) of the after-fee reward. `set_burn_bps` is permanently disabled — the base rate is fixed in code, not admin-adjustable.
 
 | Action            | Burn Applied To                    |
 | ------------------ | ------------------------------------ |
-| `claimRewards`    | Reward amount                      |
-| `compoundRewards` | Reward amount (before compounding) |
-| `unstake`         | Reward amount at unstake            |
+| `claimRewards`    | After-fee reward amount            |
+| `compoundRewards` | After-fee reward amount (before compounding) |
+| `unstake`         | Any unclaimed reward settled at unstake |
 
 The burn amount is permanently removed from circulating supply via an on-chain burn instruction and tracked in the `totalBurned` counter.
 
@@ -248,7 +257,9 @@ The burn amount is permanently removed from circulating supply via an on-chain b
 
 ## 9. Referral Program (10-Level)
 
-FBiT's referral system is one of its most distinctive features. When a user registers with a referrer address, a 10-level referral chain is established on-chain.
+FBiT's referral system is one of its most distinctive features, and now consists of **two separate layers**: a one-time 10-level program paid when a referral first stakes (§9.1–§9.3), and a recurring 5-level layer paid on every claim/compound (§9.4). They are funded and accounted for completely independently — a user's totals from one layer do not add into the other.
+
+When a user registers with a referrer address, a 10-level referral chain is established on-chain — this same chain is what both layers walk.
 
 ### 9.1 How Referrals Work
 
@@ -283,6 +294,40 @@ Percentages are applied to each claimant's **reward amount**, not their stake pr
 - The referral chain is stored on-chain and immutable after registration.
 - `getReferralChain(user)` returns the full 10-address chain.
 - `getReferrals(user)` returns direct (Level 1) referrals.
+- **Unstaking is blocked for a referred user until their referrer has staked at least once.** A user can register with a referrer immediately, but cannot actually stake until that referrer becomes active — this mirrors the "referrer must be active" rule enforced on both referral layers, applied at the earliest possible point.
+
+### 9.4 Recurring Claim Referral (v2.7)
+
+Introduced in v2.7, this is a **second, independent referral layer** on top of the one-time 10-level program above. It is designed so that referrers earn ongoing passive income from their downline's activity — not just a one-time bonus — **without drawing anything extra from the reward pool beyond what the claim already costs it.** Every dollar paid out here is carved from the claiming user's own after-fee reward.
+
+**How it works**, on every `claimRewards` or `compoundRewards` call:
+
+1. After the 0.25% platform fee is deducted, the program walks the claimant's upline up to **5 levels** deep (not 10 — this layer is intentionally shallower than the one-time program).
+2. Each level's referrer must be **active** (has an existing stake) and not blocked to receive a payment — the same activity requirement as the one-time program.
+3. Each valid, active referrer receives their level's percentage of the claimant's after-fee reward, transferred directly and immediately.
+4. Any level that can't be paid (no referrer at that depth, referrer inactive, referrer blocked, or a bad token account) has its share split **50/50**: half is added to that claim's burn, half is returned to the claimant instead. This guarantees the claimant is never worse off than under the old single-burn model, no matter how sparse their upline is.
+
+### 9.5 Claim Referral Commission Table
+
+| Level     | Percentage |
+| ---------- | ---------- |
+| 1         | **3.00%**  |
+| 2         | **2.50%**  |
+| 3         | **2.00%**  |
+| 4         | **1.50%**  |
+| 5         | **1.00%**  |
+| **Total** | **10.00%** |
+
+### 9.6 Worked Example
+
+A user claims 1 FBiT gross reward with no active referrer at any of the 5 levels:
+
+1. **0.25% platform fee**: 0.0025 FBiT to `feeRecipient` → 0.9975 FBiT remains.
+2. **Referral chain empty**: all 10% of the claim-referral allocation is unpaid → splits 50/50: 5% of 0.9975 FBiT (~0.0499 FBiT) adds to burn, 5% (~0.0499 FBiT) returns to the claimant.
+3. **Total burn**: base 5% + variable 5% = ~10% of 0.9975 FBiT (~0.0997 FBiT).
+4. **Claimant receives**: ~0.898 FBiT (~90% of the after-fee reward).
+
+With a full, active 5-level chain instead, the claimant nets ~85% (0.9975 − 5% burn − 10% referral), and five different upline wallets share the other 10% — proportionally to their level.
 
 ---
 
@@ -341,8 +386,7 @@ The Solana program is written in Rust using the **Anchor framework**, which prov
 The program includes a `renounce_ownership` instruction. When called:
 
 - Ownership is permanently renounced (no admin instructions can be called after)
-- A **25% passive fee** (of gross reward) is paid to the former admin wallet from the reward pool on every future claim/compound, in exchange for giving up all control
-- The 1% platform fee on stake/claim/unstake is waived once renounced
+- The **0.25% platform fee** on stake/claim/compound/unstake continues, paid to the fixed `feeRecipient` wallet set at renouncement time — it is not waived
 - An on-chain event is emitted
 - The platform becomes fully autonomous and immutable
 
@@ -472,7 +516,7 @@ The phases below describe goals the team is building toward — they are not com
 
 ## 15. Conclusion
 
-FBiT Staking Platform represents a new generation of DeFi staking — one that combines **long-term financial sustainability** (on-chain emission reserve), **community-driven growth mechanics** (10-level referrals + 10-tier team bonuses), and **deflationary tokenomics** (burn on every transaction) into a single, non-custodial protocol.
+FBiT Staking Platform represents a new generation of DeFi staking — one that combines **long-term financial sustainability** (on-chain emission reserve), **community-driven growth mechanics** (10-level one-time referrals, a recurring 5-level claim referral, and 10-tier team bonuses), and **deflationary tokenomics** (burn on every claim/compound) into a single, non-custodial protocol.
 
 The platform is live and fully operational on Solana Mainnet. Its transparent on-chain architecture — a verifiable program, public emission tracking, locked/burned liquidity, and ownership renouncement capability — ensures that FBiT Staking can operate autonomously and trustlessly for the long term.
 
@@ -491,7 +535,9 @@ The platform is live and fully operational on Solana Mainnet. Its transparent on
 | `ANNUAL_EMISSION`    | 12,000,000 FBiT (target, admin-settable)                |
 | `MIN_STAKE_AMOUNT`   | 0.1 FBiT                                                |
 | `MAX_STAKE_PER_USER` | 250,000,000 FBiT (per `stake()` call — see note below)  |
-| `BURN_BPS`           | Admin-settable, 0–5,000 (0%–50%), default 1,000 (10%)   |
+| `PLATFORM_FEE_BPS`   | 25 (0.25%), fixed                                       |
+| `CLAIM_BURN_BPS`     | 500 (5%), fixed — base burn on every claim/compound. `set_burn_bps` is permanently disabled |
+| `CLAIM_REFERRAL_BPS` | [300, 250, 200, 150, 100] (levels 1-5, 10% max total)   |
 | Token Decimals       | 9                                                        |
 
 > **Note:** `MAX_STAKE_PER_USER` is enforced per individual `stake()` call, not against the user's cumulative total staked. A user can exceed the intended per-user ceiling by splitting a large position across multiple `stake()` calls. This is a known limitation in the currently deployed program — see [SECURITY.md](SECURITY.md) for details.

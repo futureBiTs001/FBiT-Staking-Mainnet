@@ -60,7 +60,7 @@ Before staking, a user can click a referral link (`?ref=<address>`). This stores
 
 ### Step 3 — Stake FBiT Tokens
 1. User enters an amount of FBiT tokens.
-2. Smart contract deducts a **1% platform fee** (routed to `feeRecipient`, the former admin's address — ownership is already renounced on this deployment, see Section 7).
+2. Smart contract deducts a **0.25% platform fee** (routed to `feeRecipient`, the former admin's address — ownership is already renounced on this deployment, see Section 7).
 3. Remaining tokens are locked for **30 days**.
 4. The contract records the effective APY at stake time for display.
 5. The referral chain (up to 10 levels) immediately receives commissions from the reward pool.
@@ -92,7 +92,7 @@ In both cases, the burn mechanism applies (see Section 3).
 
 ### Step 6 — Unstake After 30 Days
 Once the lock period expires, the user calls Unstake. The contract:
-1. Deducts the same 1% fee from the principal (this applies whether ownership is renounced or not — it just routes to `feeRecipient` post-renouncement instead of the admin wallet, see Section 3).
+1. Deducts the same 0.25% fee from the principal (this applies whether ownership is renounced or not — it just routes to `feeRecipient` post-renouncement instead of the admin wallet, see Section 3).
 2. Transfers the remaining principal back to the user.
 
 ---
@@ -197,11 +197,11 @@ The bonus applies automatically on every claim or compound — no user action re
 
 ## 6. Burn & PoS Emission System
 
-### Reward Burn (10% per Claim/Compound)
-Every time a user claims or compounds, **10% of their gross reward is permanently burned** via an on-chain SPL token burn instruction. This is deflationary — it reduces the total circulating supply over time.
+### Reward Burn (5%–10% per Claim/Compound)
+Every time a user claims or compounds, **5% of their after-fee reward is always permanently burned** via an on-chain SPL token burn instruction, with **up to another 5%** burned on top if part of the claim-referral chain (Section 4) can't be paid — that unpaid share splits 50/50 between extra burn and being returned to the user. This is deflationary — it reduces the total circulating supply over time.
 
 - The burn comes from the **user's share** — the reward pool does not pay extra for this.
-- The burn percentage (`burnBps`) can be adjusted by the admin (range: 0–50%).
+- `set_burn_bps` is **permanently disabled** — the 5% base rate is fixed in code, not admin-adjustable. (It was admin-adjustable pre-v2.7; that capability no longer exists.)
 
 ### Automated Annual Emission Reserve
 The contract includes a long-term **emission reserve** system:
@@ -232,12 +232,12 @@ The admin can call **Renounce Ownership** from the Admin Panel. This is a **one-
 
 | Before Renounce | After Renounce (current state) |
 |----------------|----------------|
-| 1% fee on all operations → admin wallet | Same 1% fee → `feeRecipient` (the former admin's address, frozen in at the moment of renouncing) |
+| 0.25% fee on all operations → admin wallet | Same 0.25% fee → `feeRecipient` (the former admin's address, frozen in at the moment of renouncing) |
 | Admin can pause/unpause, block users, etc. | No admin — every `AdminAction`-gated instruction fails permanently (there is no key that can ever sign as the zeroed authority again) |
 | Admin can fund reward pool, set rates | Cannot change any parameter, ever |
 | Admin can set annual emission | Emission rate locked forever at whatever it was set to |
 
-The former admin's address does **not** get any special extra income beyond that same 1% fee — it's the identical fee that always applied, just re-routed to `feeRecipient` instead of `authority` once `is_renounced` is true (see [Section 3](#3-reward--fee-system)). All of the admin's actual admin *powers* (pausing, blocking users, changing rates, funding the pool, adjusting emission) are gone permanently; only the passive fee-routing target survives.
+The former admin's address does **not** get any special extra income beyond that same 0.25% fee — it's the identical fee that always applied, just re-routed to `feeRecipient` instead of `authority` once `is_renounced` is true (see [Section 3](#3-reward--fee-system)). All of the admin's actual admin *powers* (pausing, blocking users, changing rates, funding the pool, adjusting emission) are gone permanently; only the passive fee-routing target survives.
 
 > Before renouncing, the checklist that was followed was:
 > - Deposit the full reserve allocation (`depositReserve`)
