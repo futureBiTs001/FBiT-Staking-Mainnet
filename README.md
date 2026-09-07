@@ -2,7 +2,7 @@
 
 A production-ready, decentralized staking platform for the **FBiT token** on **Solana**. The platform implements Proof-of-Stake (PoS) APY, a 10-level referral commission system, a Team Target Bonus program, a deflationary burn mechanism, and an automated emission reserve — all governed by an on-chain Anchor smart contract.
 
-**Live Demo:** [https://stake.futurebit.in](https://stake.futurebit.in)
+**Live Demo:** [https://futurebit.in](https://futurebit.in)
 
 ---
 
@@ -30,7 +30,7 @@ A production-ready, decentralized staking platform for the **FBiT token** on **S
 
 ## 1. Project Overview
 
-FBiT Staking is a fully on-chain staking DApp where users lock FBiT tokens for **30 days** and earn rewards. The APY is not fixed — it adjusts automatically based on how many tokens are currently staked (Proof-of-Stake model). As more users stake, the APY decreases; as users unstake, the APY rises. The system is designed to be fully autonomous — once the admin deposits the full token reserve and renounces ownership, the contract runs indefinitely without any human intervention.
+FBiT Staking is a fully on-chain staking DApp where users lock FBiT tokens for **30 days** and earn rewards. The APY is not fixed — it adjusts automatically based on how many tokens are currently staked (Proof-of-Stake model). As more users stake, the APY decreases; as users unstake, the APY rises. The system is designed to be fully autonomous: the admin deposited the full token reserve and **renounced ownership on-chain** (see [Section 7](#7-ownership-renouncement)) — the contract now runs indefinitely with no admin able to change any parameter, ever.
 
 ### Core Highlights
 
@@ -39,12 +39,12 @@ FBiT Staking is a fully on-chain staking DApp where users lock FBiT tokens for *
 | Lock Period | 30 days (fixed) |
 | Claim Interval | Every 6 hours (4 intervals/day) |
 | APY Range | 10% – 300% (auto-adjusting, PoS) |
-| Burn Rate | 10% of gross reward, adjustable 0–50% by admin |
+| Burn Rate | 10% of the after-fee reward amount (locked permanently — was admin-adjustable 0–50% pre-renouncement) |
 | Referral Levels | 10 levels deep |
-| Referral Total | 17.75% distributed across all 10 levels (live on-chain config; contract default is 30%) |
+| Referral Total | 17.75% distributed across all 10 levels (live on-chain config, confirmed current; contract's compile-time default is 30% and only applies if this is ever unset) |
 | Team Bonus | Up to +10% on top of staking rewards |
 | Network | Solana Mainnet |
-| Platform Fee | 1% on all operations (applies before and after ownership renouncement — see v2.1) |
+| Platform Fee | 1% on all operations, routed to `feeRecipient` now that ownership is renounced (see Section 3) |
 | AI Support Chat | Claude-powered widget answering platform FAQs (`/api/support-chat`) |
 
 ---
@@ -55,11 +55,11 @@ FBiT Staking is a fully on-chain staking DApp where users lock FBiT tokens for *
 Users connect their Solana wallet (Phantom, Solflare, Backpack, or any Wallet Standard-compliant wallet) via **Reown AppKit**.
 
 ### Step 2 — Register with a Referral Link (Optional)
-Before staking, a user can click a referral link (`?ref=<address>`). This stores the referrer on-chain and credits all 10 levels of the referral chain when the user stakes.
+Before staking, a user can click a referral link (`?ref=<address>`). This stores the referrer on-chain and credits all 10 levels of the referral chain when the user stakes. **The referrer must already have an active stake themselves** (`total_staked > 0`) for their link to work — this is a deliberate security requirement (see the v2.4/v2.6 Changelog entries) that also makes a circular referral chain impossible to construct.
 
 ### Step 3 — Stake FBiT Tokens
 1. User enters an amount of FBiT tokens.
-2. Smart contract deducts a **1% platform fee** (sent to admin).
+2. Smart contract deducts a **1% platform fee** (routed to `feeRecipient`, the former admin's address — ownership is already renounced on this deployment, see Section 7).
 3. Remaining tokens are locked for **30 days**.
 4. The contract records the effective APY at stake time for display.
 5. The referral chain (up to 10 levels) immediately receives commissions from the reward pool.
@@ -91,19 +91,19 @@ In both cases, the burn mechanism applies (see Section 3).
 
 ### Step 6 — Unstake After 30 Days
 Once the lock period expires, the user calls Unstake. The contract:
-1. Deducts 1% fee from the principal (removed after renouncement).
+1. Deducts the same 1% fee from the principal (this applies whether ownership is renounced or not — it just routes to `feeRecipient` post-renouncement instead of the admin wallet, see Section 3).
 2. Transfers the remaining principal back to the user.
 
 ---
 
 ## 3. Reward & Fee System
 
-### Before Ownership Renouncement
+The 1% platform fee and 10% burn apply identically whether ownership is renounced or not — renouncing only changes *where* the 1% fee is sent (see below). There is no separate, larger fee that appears after renouncement — an earlier design had one (a 25%-of-gross cut funded from the pool), but it was simplified away in v2.1 in favor of just keeping the same 1% fee flowing, permanently, to whichever address is entitled to it.
 
 ```
 Gross Reward (R)
     │
-    ├─ 1% Platform Fee  ──────────────────────→ Admin wallet
+    ├─ 1% Platform Fee  ───────→ Admin wallet (pre-renounce) / feeRecipient (post-renounce)
     │
     └─ 99% After Fee (A)
             │
@@ -112,25 +112,7 @@ Gross Reward (R)
             └─ 90% Net Reward (A × 90%)  ──────→ User wallet ✅
 ```
 
-### After Ownership Renouncement
-
-```
-Gross Reward (R)
-    │
-    ├─ 0% Platform Fee  (removed — no admin)
-    │
-    └─ 100% After Fee (A = R)
-            │
-            ├─ 10% Burn (R × 10%)  ───────────→ Burned on-chain 🔥
-            │
-            ├─ 25% Fee  ──────────────────────→ feeRecipient (former admin)
-            │   (of gross reward, from pool separately)
-            │
-            └─ Remaining  ────────────────────→ User wallet ✅
-                (from pool — pool provides extra for feeRecipient)
-```
-
-> **Note:** After renouncement, the 1% transaction fee disappears. Instead, the former admin's address (`feeRecipient`) receives a passive income from the reward pool on every claim and compound. The burn (10%) always applies regardless of renouncement status.
+> **Note:** Ownership on this deployment **has already been renounced** — the 1% fee that used to go to the admin wallet now flows permanently to `feeRecipient` (the former admin's address, frozen in at the moment of renouncing) on every stake, claim, compound, and unstake. It is not a separate pool-funded income stream — it's the exact same 1% fee, just re-routed. The burn (10%, of the after-fee amount) applies the same way regardless of renouncement status.
 
 ### Team Bonus
 If the user qualifies for a Team Target Tier (see Section 5), the bonus is added on top of the gross reward before any deductions:
@@ -222,18 +204,18 @@ As more tokens are staked: APY decreases automatically toward the 10% floor.
 
 ## 7. Ownership Renouncement
 
-The admin can call **Renounce Ownership** from the Admin Panel. This is a **one-way, irreversible action**. After renouncement:
+The admin can call **Renounce Ownership** from the Admin Panel. This is a **one-way, irreversible action** — and **it has already been called on this deployment**: `Platform.is_renounced` is `true` on-chain, and `Platform.authority` is permanently zeroed out.
 
-| Before Renounce | After Renounce |
+| Before Renounce | After Renounce (current state) |
 |----------------|----------------|
-| 1% fee on all operations → admin wallet | 0% platform fee |
-| Admin can pause/unpause, block users, etc. | No admin — contract is autonomous |
-| Admin can fund reward pool, set rates | Cannot change any parameter |
-| Admin can set annual emission | Emission locked forever |
+| 1% fee on all operations → admin wallet | Same 1% fee → `feeRecipient` (the former admin's address, frozen in at the moment of renouncing) |
+| Admin can pause/unpause, block users, etc. | No admin — every `AdminAction`-gated instruction fails permanently (there is no key that can ever sign as the zeroed authority again) |
+| Admin can fund reward pool, set rates | Cannot change any parameter, ever |
+| Admin can set annual emission | Emission rate locked forever at whatever it was set to |
 
-After renouncement, the former admin's address becomes `feeRecipient` and passively earns income from the reward pool on every user claim/compound. This is the admin's permanent passive revenue in exchange for giving up control.
+The former admin's address does **not** get any special extra income beyond that same 1% fee — it's the identical fee that always applied, just re-routed to `feeRecipient` instead of `authority` once `is_renounced` is true (see [Section 3](#3-reward--fee-system)). All of the admin's actual admin *powers* (pausing, blocking users, changing rates, funding the pool, adjusting emission) are gone permanently; only the passive fee-routing target survives.
 
-> **Important:** Before renouncing, the admin must:
+> Before renouncing, the checklist that was followed was:
 > - Deposit the full reserve allocation (`depositReserve`)
 > - Set the desired annual emission (`setAnnualEmission`)
 > - Configure all Team Target Tiers correctly
@@ -243,36 +225,31 @@ After renouncement, the former admin's address becomes `feeRecipient` and passiv
 
 ## 8. Admin Panel
 
-The Admin Panel is accessible only to wallet addresses whose SHA-256 hash is listed in `NEXT_PUBLIC_ADMIN_ADDRESS_HASHES`. It provides:
+The Admin Panel is accessible only to wallet addresses whose SHA-256 hash is listed in `NEXT_PUBLIC_ADMIN_ADDRESS_HASHES`. Since ownership has already been renounced on this deployment, every action below is on-chain-disabled and the panel now renders as a read-only **"Fee Recipient Panel"** instead — all buttons are permanently greyed out (`is_renounced` disables them client-side, and the contract itself would reject any of them regardless). The sections below describe what the panel controlled *before* renouncing, for reference:
 
 ### Reward Pool Management
 | Action | Description |
 |--------|-------------|
 | Fund Reward Pool | Directly add tokens to the active reward pool |
 | Deposit Reserve | Deposit tokens into the long-term emission reserve |
-| Release Emission | Manually trigger release of pending reserve emission |
+| Release Emission | Manually trigger release of pending reserve emission (this one instruction stayed permissionless and still runs automatically, bundled into user transactions — see Section 6) |
 
 ### Platform Parameters
 | Action | Description |
 |--------|-------------|
-| Set Reward Rate | Adjust the base reward multiplier |
-| Set Referral Reward Rate | Adjust referral commission multiplier |
+| Set Referral Percentages | Adjust each of the 10 referral levels' commission % |
 | Set Annual Emission | Set tokens distributed per year (drives PoS APY) |
 | Set Burn % | Set the burn rate on claims (0–50%, in basis points) |
+| Set Token Mints | Repoint the platform at a new stake/reward SPL mint (migration tool) |
 
 ### Team Target Tiers
-Admin can update all 10 Team Target Tiers on-chain — minimum team staked threshold and bonus percentage for each tier.
+Admin could update all 10 Team Target Tiers on-chain — minimum team staked threshold and bonus percentage for each tier.
 
-### User Management
-| Action | Description |
-|--------|-------------|
-| Block User | Prevent a wallet from staking/claiming |
-| Unblock User | Restore access for a blocked wallet |
-| Pause Platform | Emergency halt — disables all staking operations |
-| Unpause Platform | Resume normal operations |
+### User Management (cleanup tools, not exposed in the UI)
+`block_user`, `unblock_user`, and `toggle_pause` still exist as contract instructions (see Section 9) but their controls were deliberately removed from the Admin Panel UI — they're callable directly if ever needed, just not surfaced as buttons. `void_stale_stake`, `reset_user_account`, `close_user_account`, and `close_stake_entry` are one-off cleanup instructions used during the v2.0/v2.1 migration (see Changelog) and aren't exposed in the UI either.
 
 ### Ownership Renouncement
-Permanently transfers to a trustless, admin-free operation mode.
+Already exercised on this deployment — permanently transferred the contract to a trustless, admin-free operation mode. See Section 7.
 
 ---
 
@@ -284,19 +261,29 @@ Permanently transfers to a trustless, admin-free operation mode.
 
 Built with the Anchor framework for Solana. Uses PDAs (Program Derived Addresses) for trustless account management.
 
-**Program Instructions:**
-- `initialize` — Set up the platform PDA
-- `register_user` — Create a UserAccount PDA for new users
-- `stake` — Stake FBiT SPL tokens
+**Program Instructions** (all 30, current as of v2.6 — grouped by who can call them):
+
+User-facing:
+
+- `register_user` — Create a UserAccount PDA for new users (requires an already-active referrer's PDA, or admin bootstrap — see Section 4)
+- `stake` — Stake FBiT SPL tokens, pays the 10-level referral chain via `remaining_accounts`
 - `claim_rewards` — Claim accumulated rewards
 - `compound_rewards` — Compound rewards back into stake
-- `unstake` — Withdraw principal after lock period
-- `fund_reward_pool` — Admin: add tokens to pool
-- `set_reward_rate` — Admin: update reward rate
-- `set_referral_reward_rate` — Admin: update referral rate
-- `block_user` / `unblock_user` — Admin: user management
-- `toggle_pause` — Admin: emergency pause
-- `renounce_ownership` — Admin: one-way autonomy
+- `unstake` — Withdraw principal after the 30-day lock period
+- `release_emission` — Permissionless; tops up the reward pool from the reserve (bundled automatically into the above four)
+
+Admin-gated (`AdminAction`/`AdminUserAction` — all permanently disabled now that ownership is renounced):
+
+- `initialize` — One-time: set up the platform PDA
+- `fund_reward_pool` / `deposit_reserve` / `refund_reward_pool` — Move tokens into/out of the active pool or long-term reserve
+- `set_annual_emission` / `set_burn_bps` / `set_referral_percentages` / `set_referral_reward_rate` — Tune emission, burn, and referral parameters
+- `set_lock_period_apy` / `set_batch_apy` / `set_team_target_tier` — Tune APY and Team Target Bonus tiers
+- `set_token_mints` — Repoint the platform at a new stake/reward mint (used for the v2.0 migration)
+- `block_user` / `unblock_user` / `toggle_pause` — User/platform controls (contract instructions still exist; their Admin Panel UI controls were deliberately removed — see Section 8)
+- `update_user_team_stats` / `reset_user_account` / `reset_platform_stats` — Manual data-correction tools
+- `void_stale_stake` / `burn_stale_vault` / `close_user_account` / `close_stake_entry` — One-off cleanup instructions used during the v2.0/v2.1 mint migration
+- `fix_bump` — One-off PDA-bump repair utility
+- `renounce_ownership` — One-way: the instruction that was actually called to reach the current state
 
 **Accounts:**
 - `Platform` PDA — global state (total staked, pool balance, rates, etc.)
@@ -316,8 +303,10 @@ Built with **Next.js 16** (App Router, Turbopack) + **TypeScript** + **Tailwind 
 | Route | Component | Description |
 |-------|-----------|-------------|
 | `/` | `page.tsx` | Marketing landing page — live stats, tokenomics, security, roadmap, FAQ |
-| `/app` | `app/page.tsx` | Staking dashboard (Dashboard / Swap / Stake / Referral / Calculator / History / Admin tabs) |
-| `/guide` | `guide/page.tsx` | Step-by-step staking tutorial |
+| `/app` | `app/page.tsx` | Staking dashboard (Dashboard / Swap / Stake / Liquidity / Referral / Calculator / History / Admin tabs) |
+| `/guide` | `guide/page.tsx` | Step-by-step staking tutorial with real screenshots |
+| `/trust` | `trust/page.tsx` | Live on-chain verification page — protocol stats and a wallet-lookup tool, no login required |
+| `/launch` | `launch/page.tsx` | Mainnet-launch celebration/countdown page |
 | `/about` | `about/page.tsx` | About FBiT Staking (SEO landing content) |
 | `/terms` | `terms/page.tsx` | Terms of Service |
 | `/privacy` | `privacy/page.tsx` | Privacy Policy |
@@ -333,11 +322,30 @@ Built with **Next.js 16** (App Router, Turbopack) + **TypeScript** + **Tailwind 
 |------|---------|
 | `Dashboard.tsx` | Main view: Active Stakes list, Burn & PoS panel, Team Bonus panel, Transaction History |
 | `StakePanel.tsx` | Stake form: amount input, APY display, reward estimation, stake button |
+| `StakingCalculator.tsx` / `CalculatorPanel.tsx` | Claim-only vs. compound reward projection (no wallet needed) |
+
+#### `web/src/components/liquidity/`
+| File | Purpose |
+|------|---------|
+| `LiquidityPanel.tsx` | Root of the Liquidity tab — the single-sided SOL deposit + auto-lock feature (see `lib/contracts/liquidity.ts`) |
+| `DepositPanel.tsx` | SOL amount input, live split/quote preview, lock-type selection (tier-based + Permanent) |
+| `MyPositions.tsx` | Per-position view: locked value, lock type, unlock countdown, Claim/Compound/Withdraw |
+| `LiquidityRiskNotice.tsx` | Honest impermanent-loss/market-risk disclosure |
+
+#### `web/src/components/trust/`
+| File | Purpose |
+|------|---------|
+| `TrustPage.tsx` | `/trust` — live on-chain stats + a wallet-lookup tool to verify any address's real staking history |
+
+#### `web/src/components/launch/`
+| File | Purpose |
+|------|---------|
+| `LaunchCelebration.tsx` | `/launch` — mainnet-launch countdown/celebration page |
 
 #### `web/src/components/admin/`
 | File | Purpose |
 |------|---------|
-| `AdminPanel.tsx` | Full admin control: fund pool, set rates, manage users, Team Tiers, Renounce Ownership, ad-placement status (read-only) |
+| `AdminPanel.tsx` | Admin control panel — reads as a read-only "Fee Recipient Panel" now that ownership is renounced (all actions permanently disabled); see Section 8 |
 
 #### `web/src/components/history/`
 | File | Purpose |
@@ -353,6 +361,7 @@ Built with **Next.js 16** (App Router, Turbopack) + **TypeScript** + **Tailwind 
 | File | Purpose |
 |------|---------|
 | `TokenPriceWidget.tsx` | Live FBiT price and market data |
+| `SwapPanel.tsx` | SOL ↔ FBiT swap UI built on Jupiter's Quote/Swap API, with a live GeckoTerminal price chart |
 
 #### `web/src/components/chat/`
 | File | Purpose |
@@ -362,7 +371,7 @@ Built with **Next.js 16** (App Router, Turbopack) + **TypeScript** + **Tailwind 
 #### `web/src/components/ads/`
 | File | Purpose |
 |------|---------|
-| `AdsManager.tsx` | Loads Coinzilla/Adcash placements based on `NEXT_PUBLIC_ADS_*` env vars |
+| `AdsManager.tsx` | Loads Coinzilla/Adcash placements based on `NEXT_PUBLIC_ADS_*` env vars (no Admin Panel toggle — removed in v1.7, see Changelog) |
 
 #### `web/src/components/ui/`
 | File | Purpose |
@@ -374,8 +383,9 @@ Built with **Next.js 16** (App Router, Turbopack) + **TypeScript** + **Tailwind 
 |------|---------|
 | `useContract.ts` | Unified contract interface, backed by Solana |
 | `useSolanaStaking.ts` | All Solana on-chain reads/writes via `@solana/web3.js` + Anchor IDL |
-| `useTokenPrice.ts` | Fetches live FBiT price from market APIs |
+| `useTokenPrice.ts` | Fetches live FBiT price, first from on-chain pool reserves, falling back to GeckoTerminal |
 | `useTokenLogo.ts` | Resolves token logo URL |
+| `useBotGuard.ts` | Client-side hook wrapping `/api/bot-assess` risk checks |
 
 ### State Management
 Zustand store (`web/src/lib/store.ts`) with localStorage persistence:
@@ -399,11 +409,12 @@ contract.compoundRewards(stakeId, stakedAt) // Compound rewards
 contract.unstake(stakeId, stakedAt)         // Unstake after lock
 contract.syncUserData()                     // Refresh user's on-chain data
 contract.syncPlatformStats()                // Refresh platform stats
-contract.fundRewardPool(amount)             // Admin: fund pool
-contract.setRewardRate(rate)                // Admin: set reward rate
-contract.blockUser(address)                 // Admin: block user
-contract.renounceOwnership()                // Admin: renounce ownership
-// ... and more
+contract.fundRewardPool(amount)             // Admin: fund pool (permanently disabled — renounced)
+contract.blockUser(address)                 // Admin: block user (permanently disabled — renounced)
+contract.renounceOwnership()                // Admin: renounce ownership (already used — one-way)
+// ... and more. `setRewardRate` also exists on this hook but is dead code — the matching
+// `set_reward_rate` contract instruction was removed in v2.1 (see Changelog); calling it
+// would fail on-chain even independent of the renouncement.
 ```
 
 ---
@@ -441,8 +452,8 @@ sanitizeText(value)          // strips HTML/script tags (XSS prevention)
 ### Smart Contract Security
 - **PDA-based account validation**: strict owner/seed/signer checks on every instruction (Anchor)
 - **Checked arithmetic**: overflow/underflow protection throughout reward, emission, and burn calculations
-- **Access Control**: authority checks on all admin instructions
-- **Emergency Pause**: instantly halts all user-facing operations
+- **Access Control**: authority checks on all admin instructions — now permanently unsatisfiable, since ownership has been renounced (see Section 7)
+- **Emergency Pause**: existed to instantly halt all user-facing operations if needed; permanently unusable now for the same reason
 - **Lock Period Enforcement**: unstake reverts if called before `unlockAt`
 
 ---
@@ -470,19 +481,28 @@ FBiT-Staking/
     │   │   ├── layout.tsx              # Root layout with providers
     │   │   ├── page.tsx                # Marketing landing page
     │   │   ├── app/page.tsx            # Staking dashboard
-    │   │   └── guide/page.tsx          # Staking tutorial
+    │   │   ├── guide/page.tsx          # Staking tutorial
+    │   │   ├── trust/page.tsx          # Live on-chain verification page
+    │   │   └── launch/page.tsx         # Mainnet-launch celebration page
     │   ├── components/
     │   │   ├── landing/                # Landing page sections (Hero, Stats, Tokenomics, ...)
     │   │   ├── layout/                 # Header, navigation
     │   │   ├── staking/
     │   │   │   ├── Dashboard.tsx       # Active stakes, burn panel, history
     │   │   │   └── StakePanel.tsx      # Stake form
+    │   │   ├── liquidity/
+    │   │   │   ├── LiquidityPanel.tsx  # Single-sided SOL liquidity tab
+    │   │   │   ├── DepositPanel.tsx    # Deposit form + lock-tier picker
+    │   │   │   └── MyPositions.tsx     # Claim/Compound/Withdraw per position
     │   │   ├── admin/
-    │   │   │   └── AdminPanel.tsx      # Full admin control panel
+    │   │   │   └── AdminPanel.tsx      # Admin control panel (read-only now — ownership renounced)
     │   │   ├── referral/
     │   │   │   └── ReferralPanel.tsx   # Referral link & stats
     │   │   ├── market/
-    │   │   │   └── TokenPriceWidget.tsx # FBiT price widget
+    │   │   │   ├── TokenPriceWidget.tsx # FBiT price widget
+    │   │   │   └── SwapPanel.tsx       # SOL/FBiT swap via Jupiter
+    │   │   ├── trust/
+    │   │   │   └── TrustPage.tsx       # Live stats + wallet-lookup verification tool
     │   │   └── ui/
     │   │       └── ContractSetupNotice.tsx # Setup guidance banner
     │   ├── context/
@@ -497,7 +517,8 @@ FBiT-Staking/
     │   │   ├── utils.ts                # Formatting helpers
     │   │   ├── reown.ts                # WalletConnect/Reown setup
     │   │   └── contracts/
-    │   │       └── solana.ts           # Solana contract helpers
+    │   │       ├── solana.ts           # Staking contract helpers
+    │   │       └── liquidity.ts        # Meteora DAMM v2 / Jupiter liquidity helpers
     │   ├── providers/
     │   │   └── AppKitProvider.tsx      # Reown AppKit wallet provider
     │   ├── idl/
@@ -526,19 +547,31 @@ All frontend configuration lives in `web/.env.local`:
 #   node -e "console.log(require('crypto').createHash('sha256').update('YOUR_ADDRESS').digest('hex'))"
 NEXT_PUBLIC_ADMIN_ADDRESS_HASHES=<sha256_hex_digest>
 
+# ===== SITE URL =====
+# Bare domain (no scheme/subdomain), used by isAllowedOrigin() to allowlist requests to
+# /api/support-chat and /api/bot-assess. Must be the current production domain — a stale
+# value here silently breaks AI chat and bot detection for real visitors (see v2.5 Changelog).
+NEXT_PUBLIC_SITE_URL=futurebit.in
+
 # ===== REOWN (WalletConnect) =====
 NEXT_PUBLIC_REOWN_PROJECT_ID=<your_project_id>
 
 # ===== SOLANA MAINNET =====
 NEXT_PUBLIC_SOLANA_RPC_URL=https://solana-rpc.publicnode.com
+NEXT_PUBLIC_HELIUS_API_KEY=<optional_helius_key>   # Better rate limits than the public RPC
 NEXT_PUBLIC_SOLANA_PROGRAM_ID=<deployed_anchor_program_id>     # ⚠ Required
 NEXT_PUBLIC_SOLANA_STAKE_TOKEN_MINT=5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME
 NEXT_PUBLIC_SOLANA_REWARD_TOKEN_MINT=5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME
 NEXT_PUBLIC_SOLANA_STAKE_VAULT=   # Optional — auto-derived from Program ID
 NEXT_PUBLIC_SOLANA_REWARD_VAULT=  # Optional — auto-derived from Program ID
+NEXT_PUBLIC_SOLANA_RESERVE_VAULT= # Optional — auto-derived from Program ID
+
+# ===== ADS (optional) =====
+# NEXT_PUBLIC_ADS_COINZILLA_BANNER_ZONE / _NATIVE_ZONE / _STICKY_ZONE
+# NEXT_PUBLIC_ADS_ADCASH_BANNER_ZONE / _PUSH_ZONE
 ```
 
-> **Note:** The app shows a `ContractSetupNotice` warning until `PROGRAM_ID` is filled in. All staking buttons are disabled until the contract is configured.
+> **Note:** The app shows a `ContractSetupNotice` warning until `PROGRAM_ID` is filled in. All staking buttons are disabled until the contract is configured. `NEXT_PUBLIC_SITE_URL` and the ad-zone vars are separate from the contract config and are easy to forget after a domain change — env vars aren't part of a git deploy, they have to be updated directly in the hosting platform (see the v2.5 and v1.7 Changelog entries for two real incidents caused by exactly this).
 
 ---
 

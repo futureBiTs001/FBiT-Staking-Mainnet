@@ -2,12 +2,7 @@
 
 ## Supported Versions
 
-| Version | Supported |
-|---------|-----------|
-| v1.7.x (latest) | ✅ |
-| v1.6.x | ✅ |
-| v1.5.x | ✅ |
-| < v1.5 | ❌ |
+Only the current mainnet deployment is supported — there is one live contract instance, not multiple parallel version branches. See [README.md's Changelog](README.md#17-changelog) for the current version (v2.6 as of this writing) and full history.
 
 ## Reporting a Vulnerability
 
@@ -56,12 +51,11 @@ The Solana program implements the following protections:
 
 - **PDA-based account validation** — strict owner/seed/signer checks on every instruction
 - **Access Control** — authority checks on all admin instructions
-- **Emergency Pause** — instantly halts all operations if needed
 - **Checked Arithmetic** — overflow/underflow protection throughout
 - **Lock Period Enforcement** — prevents early unstaking
 - **Input Validation** — amount bounds checked on-chain
 
-> **Note:** The admin panel is a UI gate only. Real enforcement is done by the smart contract's on-chain access control modifiers.
+> **Note:** Ownership has been renounced on the live deployment — `Platform.authority` is permanently zeroed, so every admin instruction (including Emergency Pause and user blocking) is now permanently unusable by anyone, not just UI-gated. See README.md's [Section 7](README.md#7-ownership-renouncement).
 
 ## Known Limitations
 
