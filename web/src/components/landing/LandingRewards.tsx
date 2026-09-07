@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Reveal from './Reveal';
-import { REFERRAL_LEVELS, TEAM_TARGET_TIERS, type TeamTargetTier } from '@/types';
+import { REFERRAL_LEVELS, CLAIM_REFERRAL_LEVELS, TEAM_TARGET_TIERS, type TeamTargetTier } from '@/types';
 import { formatNumber } from '@/lib/utils';
 
 type TierColor = TeamTargetTier['color'];
@@ -33,6 +33,7 @@ const tierBgMap: Record<TierColor, string> = {
 };
 
 const TOTAL_REFERRAL_PCT = REFERRAL_LEVELS.reduce((s, l) => s + l.percentage, 0);
+const TOTAL_CLAIM_REFERRAL_PCT = CLAIM_REFERRAL_LEVELS.reduce((s, l) => s + l.percentage, 0);
 
 export default function LandingRewards() {
   return (
@@ -41,12 +42,12 @@ export default function LandingRewards() {
         <div className="text-center mb-10">
           <h2 className="text-gradient font-display font-extrabold text-3xl sm:text-4xl mb-2">Referrals & Team Bonus</h2>
           <p className="text-text-muted text-sm sm:text-base max-w-xl mx-auto">
-            Two extra reward layers on top of base staking APY — both calculated and paid automatically on-chain, no manual claiming.
+            Three extra reward layers on top of base staking APY — all calculated and paid automatically on-chain, no manual claiming.
           </p>
         </div>
       </Reveal>
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-3 gap-6">
         {/* ── 10-Level Referral Program ── */}
         <Reveal delay={80}>
           <div className="glass-card h-full">
@@ -81,8 +82,42 @@ export default function LandingRewards() {
           </div>
         </Reveal>
 
+        {/* ── Claim Referral (recurring, levels 1-5) ── */}
+        <Reveal delay={110}>
+          <div className="glass-card h-full">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-display font-semibold text-lg">Claim Referral</h3>
+              <span className="px-2.5 py-1 rounded-full text-xs font-display font-bold bg-brand-500/15 text-brand-400 border border-brand-500/30">
+                up to {TOTAL_CLAIM_REFERRAL_PCT.toFixed(1)}%
+              </span>
+            </div>
+            <p className="text-text-muted text-xs mb-5 leading-relaxed">
+              A second, recurring layer — every claim and compound also pays your direct referral chain up to
+              5 levels deep, carved out of that reward itself, not the pool. Levels 6-10 aren&apos;t part of
+              this layer.
+            </p>
+
+            <div className="space-y-1.5">
+              {CLAIM_REFERRAL_LEVELS.map((l) => (
+                <div key={l.level} className="flex items-center gap-3">
+                  <span className="w-16 shrink-0 text-xs font-mono text-text-muted">Level {l.level}</span>
+                  <div className="flex-1 h-2 rounded-full bg-surface-800 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-brand-400 transition-all duration-700"
+                      style={{ width: `${Math.max((l.percentage / CLAIM_REFERRAL_LEVELS[0].percentage) * 100, 4)}%` }}
+                    />
+                  </div>
+                  <span className="w-14 shrink-0 text-right text-xs font-mono font-semibold text-text-primary">
+                    {l.percentage.toFixed(2)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Reveal>
+
         {/* ── Team Target Bonus ── */}
-        <Reveal delay={140}>
+        <Reveal delay={170}>
           <div className="glass-card h-full">
             <div className="flex items-center justify-between mb-1">
               <h3 className="font-display font-semibold text-lg">Team Target Bonus</h3>

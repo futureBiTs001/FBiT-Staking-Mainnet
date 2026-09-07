@@ -46,6 +46,20 @@ export const REFERRAL_LEVELS = [
   { level: 10, percentage: 3.00 },
 ] as const;
 
+// A second, separate referral layer (v2.7) — recurring on every claim/compound,
+// not just once on stake. Levels 1-5 only, reverse-weighted (direct referrer
+// earns the most), carved out of the claiming user's own after-fee reward —
+// never drawn from the pool. Hardcoded in the contract (CLAIM_REFERRAL_BPS in
+// lib.rs), not admin-adjustable, so there's no live on-chain fetch to fall
+// back from here.
+export const CLAIM_REFERRAL_LEVELS = [
+  { level: 1, percentage: 3.00 },
+  { level: 2, percentage: 2.50 },
+  { level: 3, percentage: 2.00 },
+  { level: 4, percentage: 1.50 },
+  { level: 5, percentage: 1.00 },
+] as const;
+
 // ===== TEAM TARGET BONUS TIERS =====
 // 10-level bonus applied on top of staking rewards based on total team staked.
 // Fallback values only — live on-chain values (Platform.teamTierMinStaked/teamTierBonusBps)
