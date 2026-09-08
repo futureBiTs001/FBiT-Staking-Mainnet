@@ -22,7 +22,7 @@ const PHASES = [
     phase: '02',
     icon: '🛡️',
     title: 'Consolidation & Security',
-    status: 'Current',
+    status: 'Complete',
     items: [
       'FBiT token v2 — fixed supply, renounced mint authority',
       '100% liquidity locked/burned',
@@ -34,7 +34,7 @@ const PHASES = [
     phase: '03',
     icon: '📈',
     title: 'Market Expansion',
-    status: 'Planned',
+    status: 'Current',
     items: [
       'Additional DEX liquidity depth',
       'Community & marketing growth campaigns',

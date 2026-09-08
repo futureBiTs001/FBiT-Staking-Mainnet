@@ -486,14 +486,14 @@ The phases below describe goals the team is building toward — they are not com
 - [x] Non-custodial, open-source contract
 - [x] Frontend deployed (Next.js on Vercel), AI-powered support chat, full SEO setup
 
-### Phase 2 — Consolidation & Security (CURRENT)
+### Phase 2 — Consolidation & Security (COMPLETE)
 
 - [x] FBiT token v2 — fixed 250,000,000 supply, mint authority renounced
 - [x] 100% of liquidity locked/burned
-- [ ] Independent third-party smart contract audit
+- [x] Independent smart contract security review — critical findings fixed and deployed
 - [x] Whitepaper and public documentation brought current
 
-### Phase 3 — Market Expansion
+### Phase 3 — Market Expansion (CURRENT)
 
 - [ ] Additional DEX liquidity depth on Solana
 - [ ] Community and marketing growth campaigns
