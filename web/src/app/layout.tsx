@@ -132,6 +132,14 @@ const structuredData = {
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
 
+  // Site-wide default canonical — critical because referral links append
+  // `?ref=<wallet>` to the homepage URL (see generateReferralLink in utils.ts).
+  // Without this, Google sees every shared referral link as a distinct URL for
+  // the same content, which is a common cause of "Discovered/Crawled - currently
+  // not indexed" in Search Console. Each page below overrides this with its own
+  // clean canonical; this is just the fallback for anything that doesn't.
+  alternates: { canonical: '/' },
+
   title: {
     default: 'FutureBit Staking (FBiT) — Earn Dynamic APY on Solana',
     template: '%s | FutureBit Staking',

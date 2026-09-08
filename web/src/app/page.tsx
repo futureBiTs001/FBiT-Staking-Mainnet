@@ -1,4 +1,12 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+
+// Explicit canonical — the homepage is the target of every shared referral
+// link (`?ref=<wallet>`), so without this Google can see dozens of distinct
+// URLs for identical content. This pins them all back to the clean root URL.
+export const metadata: Metadata = {
+  alternates: { canonical: '/' },
+};
 import LandingHeader from '@/components/landing/LandingHeader';
 import LandingHero from '@/components/landing/LandingHero';
 import LandingStats from '@/components/landing/LandingStats';

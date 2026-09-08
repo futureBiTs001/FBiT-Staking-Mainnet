@@ -4,6 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Privacy Policy',
   description: 'Privacy Policy for FutureBit Staking platform. Learn how we handle data on our non-custodial DeFi staking platform.',
+  alternates: { canonical: '/privacy/' },
 };
 
 const EFFECTIVE_DATE = 'June 29, 2026';
