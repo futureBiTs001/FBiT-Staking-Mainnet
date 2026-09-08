@@ -25,6 +25,10 @@ const structuredData = {
       name: 'FutureBit Staking',
       alternateName: ['FBiT Staking', 'FBiT'],
       url: BASE_URL,
+      description: 'FutureBit Staking (FBiT) is an independent Solana DeFi staking protocol at futurebit.in.',
+      disambiguatingDescription:
+        'Not affiliated with FutureBit LLC, the maker of Apollo Bitcoin mining hardware. FutureBit Staking is a separate, unrelated Solana blockchain staking project that shares a similar name by coincidence only.',
+      knowsAbout: ['Solana', 'DeFi staking', 'Cryptocurrency', 'Blockchain'],
       logo: {
         '@type': 'ImageObject',
         url: `${BASE_URL}/favicon.svg`,
@@ -144,9 +148,9 @@ export const metadata: Metadata = {
     'solana defi', 'FutureBit staking',
   ],
 
-  authors: [{ name: 'FutureBit', url: BASE_URL }],
-  creator: 'FutureBit',
-  publisher: 'FutureBit',
+  authors: [{ name: 'FutureBit Staking', url: BASE_URL }],
+  creator: 'FutureBit Staking',
+  publisher: 'FutureBit Staking',
 
   openGraph: {
     type: 'website',

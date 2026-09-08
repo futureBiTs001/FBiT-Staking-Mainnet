@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'About Us',
-  description: 'Learn about FutureBit and the FBiT staking platform built on Solana.',
+  title: 'About FutureBit Staking (FBiT)',
+  description: 'FutureBit Staking (FBiT) is an independent Solana DeFi staking protocol at futurebit.in — not affiliated with FutureBit LLC, the maker of Apollo Bitcoin mining hardware.',
 };
 
 export default function AboutPage() {
@@ -30,14 +30,19 @@ export default function AboutPage() {
       {/* Content */}
       <main style={{ maxWidth: 860, margin: '0 auto', padding: '60px 24px' }}>
         <h1 style={{ fontSize: 42, fontWeight: 800, marginBottom: 12, background: 'linear-gradient(135deg,#fff,#94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-          About FutureBit
+          About FutureBit Staking
         </h1>
-        <p style={{ color: '#00E676', fontSize: 15, marginBottom: 48, fontWeight: 500 }}>
+        <p style={{ color: '#00E676', fontSize: 15, marginBottom: 24, fontWeight: 500 }}>
           Solana DeFi Staking Platform
+        </p>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.7, marginBottom: 48, padding: '14px 18px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)' }}>
+          <b style={{ color: '#f1f5f9' }}>Not affiliated with FutureBit LLC.</b> FutureBit Staking (ticker FBiT) at futurebit.in is an independent
+          Solana DeFi protocol. It is a separate, unrelated project from FutureBit LLC, the maker of Apollo Bitcoin
+          mining hardware — the two share a similar name by coincidence only.
         </p>
 
         <Section title="Who We Are">
-          FutureBit is a decentralized finance project built to bring transparent, high-yield staking to everyday crypto users.
+          FutureBit Staking is a decentralized finance project built to bring transparent, high-yield staking to everyday crypto users.
           We launched the FBiT token on Solana — a fast, low-fee blockchain.
           Our mission is to make passive crypto income accessible without KYC, without custodians, and without complexity.
         </Section>
@@ -68,7 +73,7 @@ export default function AboutPage() {
         </Section>
 
         <Section title="Our Vision">
-          We believe decentralized finance should be simple, fair, and open. FutureBit is building a community-powered ecosystem where
+          We believe decentralized finance should be simple, fair, and open. FutureBit Staking is building a community-powered ecosystem where
           everyone — from first-time investors to experienced DeFi users — can earn real rewards by participating in the network.
           The 10-level referral system means that as you grow your network, you earn more — creating a sustainable, viral growth model.
         </Section>
