@@ -29,6 +29,7 @@ import {
   getLiquidityDeltaFromAmountB,
   getAmountAFromLiquidityDelta,
   getAmountBFromLiquidityDelta,
+  getUnClaimLpFee,
 } from '@meteora-ag/cp-amm-sdk';
 import {
   TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,
@@ -334,6 +335,17 @@ export async function solanaLiquidityGetUserPositions(owner: PublicKey): Promise
   const cpAmm = getCpAmmClient(connection);
   const rows = await cpAmm.getPositionsByUserAndTokenMint(owner, FBIT_MINT);
 
+  // positionState.feeAPending/feeBPending is only a checkpoint written at the
+  // position's last on-chain interaction (last claim/add/remove) — it does NOT
+  // reflect fees the pool has earned from trading since then, which is why it
+  // reads 0 for a position nobody has touched since it was opened even while
+  // real trading fees have accrued. getUnClaimLpFee(poolState, positionState)
+  // does the live computation (current pool fee-growth accumulator × the
+  // position's liquidity) the same way Meteora's own UI does — fetch the pool
+  // state once and reuse it for every position below, since they're all the
+  // same FBIT_POOL (already filtered).
+  const poolState = await cpAmm.fetchPoolState(FBIT_POOL);
+
   return Promise.all(rows.filter(r => r.pool.equals(FBIT_POOL)).map(async (r) => {
     const s = r.positionState as any;
     const isPermanent = cpAmm.isPermanentLockedPosition(s);
@@ -348,6 +360,7 @@ export async function solanaLiquidityGetUserPositions(owner: PublicKey): Promise
       const cliff = vestings[0]?.account as any;
       unlockTimestampMs = cliff ? Number(cliff.innerVesting.cliffPoint) * 1000 : null;
     }
+    const { feeTokenA, feeTokenB } = getUnClaimLpFee(poolState, s);
     return {
       positionAddress: r.position.toBase58(),
       positionNftAccount: r.positionNftAccount.toBase58(),
@@ -355,8 +368,8 @@ export async function solanaLiquidityGetUserPositions(owner: PublicKey): Promise
       unlockedLiquidity: s.unlockedLiquidity.toString(),
       vestedLiquidity: s.vestedLiquidity.toString(),
       permanentLockedLiquidity: s.permanentLockedLiquidity.toString(),
-      feeOwedFbit: fromLamports(s.feeAPending),
-      feeOwedSol: fromLamports(s.feeBPending),
+      feeOwedFbit: fromLamports(feeTokenA),
+      feeOwedSol: fromLamports(feeTokenB),
       unlockTimestampMs,
     };
   }));
