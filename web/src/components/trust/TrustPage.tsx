@@ -176,6 +176,47 @@ export default function TrustPage() {
         </div>
       </Reveal>
 
+      {/* Bytecode verification */}
+      <Reveal delay={170}>
+        <div className="glass-card mb-8">
+          <p className="text-text-muted text-[11px] font-display uppercase tracking-wider mb-1.5">Prove It Yourself</p>
+          <h2 className="font-display font-bold text-xl sm:text-2xl mb-2">Program Bytecode, Independently Verified</h2>
+          <p className="text-text-muted text-sm mb-4 leading-relaxed">
+            The deployed program was compared byte-for-byte against a fresh build of{' '}
+            <a href={`${GITHUB_URL}/tree/54af6e8`} target="_blank" rel="noopener noreferrer" className="text-brand-400 hover:text-brand-300 underline">
+              this exact commit
+            </a>{' '}
+            of the open-source code — not just similar, not just &quot;looks right,&quot; but an identical match confirmed via SHA-256 hash of the actual bytecode pulled live from Solana Mainnet.
+          </p>
+          <div className="rounded-xl bg-surface-900/80 border border-white/5 p-4 font-mono text-xs space-y-2 mb-4">
+            <div>
+              <span className="text-text-muted">SHA-256 (on-chain, first 473,128 bytes):</span>
+              <p className="text-brand-400 break-all mt-0.5">82a657037dcd4c64a7911893449cdd9fa8945c39fc88eadc13394dc06275999a</p>
+            </div>
+            <div>
+              <span className="text-text-muted">SHA-256 (built from source):</span>
+              <p className="text-brand-400 break-all mt-0.5">82a657037dcd4c64a7911893449cdd9fa8945c39fc88eadc13394dc06275999a</p>
+            </div>
+          </div>
+          <p className="text-text-muted text-xs leading-relaxed mb-3">
+            You don&apos;t have to take our word for it — anyone can reproduce this: run{' '}
+            <code className="text-text-secondary">solana program dump {PROGRAM_ID} chain.so --url mainnet-beta</code>,
+            build the program from the GitHub source above, and compare <code className="text-text-secondary">sha256sum</code> output.
+            (An automated &quot;Verified Build&quot; badge on Solscan/Solana Explorer isn&apos;t showing yet — their
+            registry hasn&apos;t published a build image for the newer Solana CLI version this program was compiled
+            with. This manual, reproducible check is the same underlying proof that badge would represent.)
+          </p>
+          <a
+            href={`https://solscan.io/account/${PROGRAM_ID}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-brand-400 hover:text-brand-300 text-xs font-display font-semibold inline-flex items-center gap-1 transition-colors"
+          >
+            View program on Solscan ↗
+          </a>
+        </div>
+      </Reveal>
+
       {/* Wallet lookup tool */}
       <Reveal delay={200}>
         <div className="glass-card mb-8">
