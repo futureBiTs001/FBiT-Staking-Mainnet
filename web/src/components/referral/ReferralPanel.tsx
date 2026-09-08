@@ -18,6 +18,38 @@ import UsdValue from '@/components/ui/UsdValue';
 import { useTokenPrice } from '@/hooks/useTokenPrice';
 import type { ReferralEntry, TxRecord } from '@/types';
 
+const SHARE_TEXT = 'Join FutureBit Staking and earn dynamic Solana staking rewards with me — use my referral link:';
+
+// Web share-intent URLs — no SDK needed, just plain links each platform exposes.
+// Instagram has no equivalent web intent (it's a closed, app-only share surface),
+// so it's handled separately via the OS-level Web Share API where available.
+function buildShareUrls(link: string) {
+  const encodedLink = encodeURIComponent(link);
+  const encodedText = encodeURIComponent(SHARE_TEXT);
+  return {
+    x:        `https://twitter.com/intent/tweet?url=${encodedLink}&text=${encodedText}`,
+    telegram: `https://t.me/share/url?url=${encodedLink}&text=${encodedText}`,
+    whatsapp: `https://wa.me/?text=${encodeURIComponent(`${SHARE_TEXT} ${link}`)}`,
+    facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedLink}`,
+  };
+}
+
+function ShareButton({ href, label, title, children }: { href: string; label: string; title: string; children: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={title}
+      aria-label={title}
+      className="w-9 h-9 rounded-lg flex items-center justify-center bg-surface-900/60 border border-white/10 text-text-secondary hover:text-text-primary hover:border-white/20 hover:bg-surface-900 transition-all shrink-0"
+    >
+      {children}
+      <span className="sr-only">{label}</span>
+    </a>
+  );
+}
+
 // ProgressBar sets width imperatively to avoid JSX inline-style linter warnings
 function ProgressBar({ pct, className }: { pct: number; className: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -210,6 +242,24 @@ export default function ReferralPanel() {
     }
   };
 
+  // Instagram has no web share-intent URL (posting/DM is app-only) — use the OS
+  // share sheet where available (mobile browsers list Instagram as a target
+  // automatically when the app is installed), otherwise fall back to copying
+  // the link with instructions, since that's the only thing that works everywhere.
+  const handleInstagramShare = async () => {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title: 'FutureBit Staking', text: SHARE_TEXT, url: referralLink });
+        return;
+      } catch {
+        // user cancelled the share sheet — fall through to nothing further
+        return;
+      }
+    }
+    const ok = await copyToClipboard(referralLink);
+    if (ok) toast.success('Link copied! Paste it into your Instagram bio or story.');
+  };
+
   const handleRefresh = async () => {
     const ok = await syncReferralData();
     if (ok) toast.success('Referral data refreshed!');
@@ -268,6 +318,47 @@ export default function ReferralPanel() {
           >
             {copied ? '✓ Copied!' : 'Copy Link'}
           </button>
+        </div>
+        <div className="flex items-center gap-2 mt-4">
+          <span className="text-text-muted text-[11px] font-display uppercase tracking-wider mr-1">Share</span>
+          {(() => {
+            const shareUrls = buildShareUrls(referralLink);
+            return (
+              <>
+                <ShareButton href={shareUrls.x} title="Share on X (Twitter)" label="Share on X">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                  </svg>
+                </ShareButton>
+                <ShareButton href={shareUrls.telegram} title="Share on Telegram" label="Share on Telegram">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M22.05 3.42 2.9 10.83c-1.3.52-1.29 1.24-.24 1.56l4.9 1.53 1.9 5.83c.23.63.4.88.82.88.43 0 .62-.2.84-.42l2.02-1.94 4.2 3.1c.77.43 1.33.2 1.53-.72l2.77-13.05c.3-1.14-.42-1.65-1.6-1.18ZM8.6 14.4l9.1-5.74c.44-.27.85-.13.51.17l-7.6 6.86-.29 3.1z" />
+                  </svg>
+                </ShareButton>
+                <ShareButton href={shareUrls.whatsapp} title="Share on WhatsApp" label="Share on WhatsApp">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M12.02 2C6.5 2 2 6.48 2 12c0 1.85.5 3.58 1.36 5.07L2 22l5.1-1.33A9.96 9.96 0 0 0 12.02 22C17.5 22 22 17.52 22 12S17.5 2 12.02 2Zm5.85 14.24c-.25.7-1.45 1.34-2 1.42-.53.08-1.19.11-1.92-.12-.44-.14-1.01-.32-1.74-.63-3.06-1.32-5.06-4.4-5.21-4.6-.15-.2-1.25-1.66-1.25-3.17 0-1.5.79-2.24 1.07-2.55.28-.3.6-.38.8-.38.2 0 .4 0 .58.01.19.01.44-.07.68.53.25.6.85 2.1.92 2.25.08.15.13.33.02.53-.1.2-.15.32-.3.5-.15.18-.31.4-.44.53-.15.15-.3.32-.13.62.17.3.75 1.25 1.62 2.02 1.12 1 2.06 1.32 2.36 1.47.3.15.48.13.65-.08.18-.2.75-.87.95-1.17.2-.3.4-.25.67-.15.28.1 1.77.83 2.07.99.3.15.5.22.57.35.08.13.08.75-.17 1.45Z" />
+                  </svg>
+                </ShareButton>
+                <ShareButton href={shareUrls.facebook} title="Share on Facebook" label="Share on Facebook">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06c0 5.02 3.66 9.18 8.44 9.94v-7.03H7.9v-2.91h2.54V9.85c0-2.51 1.49-3.9 3.77-3.9 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.87h2.77l-.44 2.91h-2.33V22c4.78-.76 8.44-4.92 8.44-9.94Z" />
+                  </svg>
+                </ShareButton>
+                <button
+                  type="button"
+                  onClick={handleInstagramShare}
+                  title="Share on Instagram"
+                  aria-label="Share on Instagram"
+                  className="w-9 h-9 rounded-lg flex items-center justify-center bg-surface-900/60 border border-white/10 text-text-secondary hover:text-text-primary hover:border-white/20 hover:bg-surface-900 transition-all shrink-0"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M12 2c-2.72 0-3.06.01-4.12.06-1.06.05-1.79.22-2.43.47a4.9 4.9 0 0 0-1.77 1.15A4.9 4.9 0 0 0 2.53 5.45c-.25.64-.42 1.37-.47 2.43C2 8.94 2 9.28 2 12s.01 3.06.06 4.12c.05 1.06.22 1.79.47 2.43a4.9 4.9 0 0 0 1.15 1.77c.5.51 1.1.9 1.77 1.15.64.25 1.37.42 2.43.47C8.94 22 9.28 22 12 22s3.06-.01 4.12-.06c1.06-.05 1.79-.22 2.43-.47a4.9 4.9 0 0 0 1.77-1.15 4.9 4.9 0 0 0 1.15-1.77c.25-.64.42-1.37.47-2.43.05-1.06.06-1.4.06-4.12s-.01-3.06-.06-4.12c-.05-1.06-.22-1.79-.47-2.43a4.9 4.9 0 0 0-1.15-1.77A4.9 4.9 0 0 0 18.55.53c-.64-.25-1.37-.42-2.43-.47C15.06 2.01 14.72 2 12 2Zm0 1.8c2.67 0 2.99.01 4.04.06.98.04 1.5.2 1.86.34.47.18.8.4 1.15.75.35.35.57.68.75 1.15.14.36.3.88.34 1.86.05 1.05.06 1.37.06 4.04s-.01 2.99-.06 4.04c-.04.98-.2 1.5-.34 1.86-.18.47-.4.8-.75 1.15-.35.35-.68.57-1.15.75-.36.14-.88.3-1.86.34-1.05.05-1.37.06-4.04.06s-2.99-.01-4.04-.06c-.98-.04-1.5-.2-1.86-.34a3.1 3.1 0 0 1-1.15-.75 3.1 3.1 0 0 1-.75-1.15c-.14-.36-.3-.88-.34-1.86-.05-1.05-.06-1.37-.06-4.04s.01-2.99.06-4.04c.04-.98.2-1.5.34-1.86.18-.47.4-.8.75-1.15.35-.35.68-.57 1.15-.75.36-.14.88-.3 1.86-.34C9.01 3.81 9.33 3.8 12 3.8Zm0 3.06a5.14 5.14 0 1 0 0 10.28 5.14 5.14 0 0 0 0-10.28Zm0 8.48a3.34 3.34 0 1 1 0-6.68 3.34 3.34 0 0 1 0 6.68Zm5.34-8.68a1.2 1.2 0 1 1-2.4 0 1.2 1.2 0 0 1 2.4 0Z" />
+                  </svg>
+                </button>
+              </>
+            );
+          })()}
         </div>
         <p className="text-text-muted text-xs mt-3">
           Share this link to earn commissions when your referrals stake tokens — up to 10 levels deep!
