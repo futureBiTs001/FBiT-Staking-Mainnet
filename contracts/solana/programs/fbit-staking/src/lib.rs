@@ -931,7 +931,7 @@ pub mod fbit_staking {
         Ok(())
     }
 
-    pub fn unstake(ctx: Context<Unstake>) -> Result<()> {
+    pub fn unstake<'info>(ctx: Context<'_, '_, '_, 'info, Unstake<'info>>) -> Result<()> {
         require!(!ctx.accounts.platform.is_paused, StakingError::PlatformPaused);
         require!(ctx.accounts.stake_entry.is_active, StakingError::StakeNotActive);
         let now = Clock::get()?.unix_timestamp;
@@ -967,11 +967,60 @@ pub mod fbit_staking {
         ctx.accounts.stake_entry.is_active = false;
         ctx.accounts.user_account.total_staked =
             ctx.accounts.user_account.total_staked.checked_sub(amount).unwrap();
-        // Reduce own team_total_staked (ancestors updated via update_user_team_stats crank)
+        // Reduce own team_total_staked
         ctx.accounts.user_account.team_total_staked =
             ctx.accounts.user_account.team_total_staked.saturating_sub(amount);
         ctx.accounts.platform.total_staked =
             ctx.accounts.platform.total_staked.checked_sub(amount).unwrap();
+
+        // ── Decrement ancestors' team_total_staked to mirror stake()'s unconditional
+        // credit (see the referral loop in stake()) — otherwise a downline's
+        // team_total_staked contribution would stay credited to every upline forever,
+        // even after the downline fully unstakes. remaining_accounts layout: one
+        // UserAccount PDA per level (no reward ATA needed — nothing is transferred
+        // here, only a counter is corrected). Identity is verified against the live
+        // on-chain `.referrer` chain exactly like stake()'s walk, so a caller cannot
+        // target an arbitrary account — only their own true upline chain is touched.
+        // Optional: an empty remaining_accounts list simply skips this correction
+        // (unstake() still succeeds), so older clients remain compatible.
+        if !ctx.remaining_accounts.is_empty() {
+            let remaining        = ctx.remaining_accounts;
+            let mut cur_referrer = ctx.accounts.user_account.referrer;
+            let staker_key       = ctx.accounts.owner.key();
+
+            for level in 0..MAX_REFERRAL_LEVELS {
+                if level >= remaining.len() { break; }
+                let Some(expected_key) = cur_referrer else { break; };
+                if expected_key == staker_key { break; }
+
+                let ref_user_ai = &remaining[level];
+                if ref_user_ai.owner != ctx.program_id { break; }
+
+                let (user_owner, next_ref): (Pubkey, Option<Pubkey>) = {
+                    let data = ref_user_ai.try_borrow_data()
+                        .map_err(|_| error!(StakingError::Unauthorized))?;
+                    let mut slice: &[u8] = &data[8..];
+                    match UserAccount::deserialize(&mut slice) {
+                        Ok(u) => (u.owner, u.referrer),
+                        Err(_) => break,
+                    }
+                };
+
+                if user_owner != expected_key { break; }
+                cur_referrer = next_ref;
+
+                let mut data = ref_user_ai.try_borrow_mut_data()
+                    .map_err(|_| error!(StakingError::Unauthorized))?;
+                let mut updated = {
+                    let mut slice: &[u8] = &data[8..];
+                    UserAccount::deserialize(&mut slice)
+                        .map_err(|_| error!(StakingError::Unauthorized))?
+                };
+                updated.team_total_staked = updated.team_total_staked.saturating_sub(amount);
+                updated.serialize(&mut &mut data[8..])
+                    .map_err(|_| error!(StakingError::Unauthorized))?;
+            }
+        }
 
         emit!(TokensUnstaked { user: ctx.accounts.owner.key(), amount: user_amount, fee, timestamp: now });
         Ok(())
@@ -1373,8 +1422,8 @@ pub struct FundRewardPool<'info> {
         constraint = funder_token_account.mint == platform.reward_token_mint @ StakingError::InvalidMint)]
     pub funder_token_account: Account<'info, TokenAccount>,
     #[account(mut,
-        constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
-        constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
+        associated_token::mint      = platform.reward_token_mint,
+        associated_token::authority = platform)]
     pub reward_vault:         Account<'info, TokenAccount>,
     pub token_program:        Program<'info, Token>,
 }
@@ -1389,8 +1438,8 @@ pub struct RefundRewardPool<'info> {
         constraint = authority_token_account.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
     pub authority_token_account:   Account<'info, TokenAccount>,
     #[account(mut,
-        constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
-        constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
+        associated_token::mint      = platform.reward_token_mint,
+        associated_token::authority = platform)]
     pub reward_vault:              Account<'info, TokenAccount>,
     pub token_program:             Program<'info, Token>,
 }
@@ -1405,8 +1454,8 @@ pub struct DepositReserve<'info> {
         constraint = funder_token_account.mint == platform.reward_token_mint @ StakingError::InvalidMint)]
     pub funder_token_account: Account<'info, TokenAccount>,
     #[account(mut,
-        constraint = reserve_vault.owner == platform.key() @ StakingError::InvalidVault,
-        constraint = reserve_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
+        associated_token::mint      = platform.reward_token_mint,
+        associated_token::authority = platform)]
     pub reserve_vault:        Account<'info, TokenAccount>,
     pub token_program:        Program<'info, Token>,
 }
@@ -1416,12 +1465,12 @@ pub struct ReleaseEmission<'info> {
     #[account(mut, seeds = [b"platform"], bump = platform.bump)]
     pub platform:     Account<'info, Platform>,
     #[account(mut,
-        constraint = reserve_vault.owner == platform.key() @ StakingError::InvalidVault,
-        constraint = reserve_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
+        associated_token::mint      = platform.reward_token_mint,
+        associated_token::authority = platform)]
     pub reserve_vault: Account<'info, TokenAccount>,
     #[account(mut,
-        constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
-        constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
+        associated_token::mint      = platform.reward_token_mint,
+        associated_token::authority = platform)]
     pub reward_vault:  Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
@@ -1458,8 +1507,8 @@ pub struct Stake<'info> {
         constraint = user_token_account.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
     pub user_token_account: Box<Account<'info, TokenAccount>>,
     #[account(mut,
-        constraint = stake_vault.owner == platform.key() @ StakingError::InvalidVault,
-        constraint = stake_vault.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
+        associated_token::mint      = platform.stake_token_mint,
+        associated_token::authority = platform)]
     pub stake_vault:        Box<Account<'info, TokenAccount>>,
     /// Receives the 0.25% platform fee — the authority's ATA normally, or the
     /// fee_recipient's ATA after renouncement (fee still applies post-renounce).
@@ -1472,8 +1521,8 @@ pub struct Stake<'info> {
     pub admin_stake_account: Box<Account<'info, TokenAccount>>,
     /// Reward vault — pays multi-level referral rewards on stake (via remaining_accounts).
     #[account(mut,
-        constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
-        constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
+        associated_token::mint      = platform.reward_token_mint,
+        associated_token::authority = platform)]
     pub reward_vault: Box<Account<'info, TokenAccount>>,
     #[account(mut)]
     pub owner:              Signer<'info>,
@@ -1499,8 +1548,8 @@ pub struct ClaimRewards<'info> {
         constraint = user_token_account.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
     pub user_token_account:  Box<Account<'info, TokenAccount>>,
     #[account(mut,
-        constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
-        constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
+        associated_token::mint      = platform.reward_token_mint,
+        associated_token::authority = platform)]
     pub reward_vault:        Box<Account<'info, TokenAccount>>,
     /// Receives the 0.25% platform fee — the authority's ATA normally, or the
     /// fee_recipient's ATA after renouncement (fee still applies post-renounce).
@@ -1530,8 +1579,8 @@ pub struct CompoundRewards<'info> {
         has_one = owner @ StakingError::InvalidUserAccount)]
     pub stake_entry:          Box<Account<'info, StakeEntry>>,
     #[account(mut,
-        constraint = reward_vault.owner == platform.key() @ StakingError::InvalidVault,
-        constraint = reward_vault.mint  == platform.reward_token_mint @ StakingError::InvalidMint)]
+        associated_token::mint      = platform.reward_token_mint,
+        associated_token::authority = platform)]
     pub reward_vault:         Box<Account<'info, TokenAccount>>,
     /// Receives the 0.25% platform fee — the authority's ATA normally, or the
     /// fee_recipient's ATA after renouncement (fee still applies post-renounce).
@@ -1565,8 +1614,8 @@ pub struct Unstake<'info> {
         constraint = user_token_account.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
     pub user_token_account:  Box<Account<'info, TokenAccount>>,
     #[account(mut,
-        constraint = stake_vault.owner == platform.key() @ StakingError::InvalidVault,
-        constraint = stake_vault.mint  == platform.stake_token_mint @ StakingError::InvalidMint)]
+        associated_token::mint      = platform.stake_token_mint,
+        associated_token::authority = platform)]
     pub stake_vault:         Box<Account<'info, TokenAccount>>,
     /// Receives the 0.25% platform fee — the authority's ATA normally, or the
     /// fee_recipient's ATA after renouncement (fee still applies post-renounce).

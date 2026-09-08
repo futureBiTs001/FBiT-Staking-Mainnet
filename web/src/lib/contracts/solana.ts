@@ -877,6 +877,45 @@ async function buildClaimReferralRemainingAccounts(
   return remainingAccounts;
 }
 
+// Ancestor chain for unstake()'s team_total_staked correction — one UserAccount
+// PDA per level (no reward ATA needed, nothing is transferred; the contract only
+// decrements a counter). Mirrors solanaStake's chain walk, up to all 10 levels
+// since stake() credits team_total_staked to every one of them unconditionally.
+async function buildUnstakeAncestorRemainingAccounts(
+  program: any,
+  userAccPda: PublicKey,
+  ownerKey: PublicKey,
+): Promise<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[]> {
+  const remainingAccounts: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = [];
+  try {
+    const userAccData: any = await program.account.userAccount.fetch(userAccPda);
+    let currentReferrerKey: PublicKey | null = userAccData.referrer
+      ? new PublicKey(userAccData.referrer.toString())
+      : null;
+    const seenKeys = new Set<string>([ownerKey.toBase58()]);
+
+    for (let lvl = 0; lvl < 10 && currentReferrerKey !== null; lvl++) {
+      const keyStr = currentReferrerKey.toBase58();
+      if (seenKeys.has(keyStr)) break;
+      seenKeys.add(keyStr);
+
+      const [referrerUserPda] = userPda(currentReferrerKey);
+      remainingAccounts.push({ pubkey: referrerUserPda, isSigner: false, isWritable: true });
+
+      try {
+        const refData: any = await program.account.userAccount.fetch(referrerUserPda);
+        currentReferrerKey = refData.referrer ? new PublicKey(refData.referrer.toString()) : null;
+      } catch {
+        break;
+      }
+    }
+  } catch {
+    // Chain fetch failed — proceed without the correction (safe degradation,
+    // same as solanaStake's equivalent chain walk); unstake() itself still succeeds.
+  }
+  return remainingAccounts;
+}
+
 export async function solanaClaimRewards(
   stakeId: number | string,
   _stakedAt: number
@@ -1095,6 +1134,10 @@ export async function solanaUnstake(stakeId: number): Promise<{ txHash: string }
     throw new Error(`Failed to fetch platform authority — please retry. (${(e as Error).message})`);
   }
 
+  // Ancestor chain — lets the contract correct every upline's team_total_staked
+  // for the amount this unstake removes (see buildUnstakeAncestorRemainingAccounts).
+  const remainingAccounts = await buildUnstakeAncestorRemainingAccounts(program, userAccPda, owner);
+
   const tx = await (program.methods as any)
     .unstake()
     .accounts({
@@ -1107,6 +1150,7 @@ export async function solanaUnstake(stakeId: number): Promise<{ txHash: string }
       owner,
       tokenProgram:     TOKEN_PROGRAM_ID,
     })
+    .remainingAccounts(remainingAccounts)
     .rpc();
 
   return { txHash: tx };
