@@ -12,7 +12,7 @@ import {
   getTeamTargetTier,
   getNextTeamTargetTier,
 } from '@/lib/utils';
-import { REFERRAL_LEVELS, TEAM_TARGET_TIERS } from '@/types';
+import { REFERRAL_LEVELS, CLAIM_REFERRAL_LEVELS, TEAM_TARGET_TIERS } from '@/types';
 import { getExplorerTxUrl } from '@/lib/config';
 import UsdValue from '@/components/ui/UsdValue';
 import { useTokenPrice } from '@/hooks/useTokenPrice';
@@ -472,54 +472,103 @@ export default function ReferralPanel() {
 
       {/* ── Levels ── */}
       {activeView === 'levels' && (
-        <div className="glass-card">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <h3 className="font-display font-semibold">Referral Commission Levels</h3>
-            {isRefreshing && <span className="text-[10px] text-brand-400 animate-pulse">Syncing…</span>}
+        <div className="space-y-4">
+          <div className="glass-card">
+            <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+              <h3 className="font-display font-semibold">One-Time Stake Referral</h3>
+              {isRefreshing && <span className="text-[10px] text-brand-400 animate-pulse">Syncing…</span>}
+            </div>
+            <p className="text-[11px] text-text-muted mb-4">Paid once, the instant a referral first stakes — up to 10 levels deep.</p>
+            <div className="space-y-2">
+              {(() => {
+                const maxPct   = Math.max(...activeLevels.map(l => l.percentage));
+                const totalPct = activeLevels.reduce((s, l) => s + l.percentage, 0);
+                return (
+                  <>
+                    {activeLevels.map((level) => {
+                      const countAtLevel  = displayedTree.filter(r => r.level === level.level).length;
+                      const activeAtLevel = displayedTree.filter(r => r.level === level.level && r.stakedAmount > 0).length;
+                      return (
+                        <div key={level.level} className="flex items-center justify-between p-3 rounded-xl bg-surface-800/30 hover:bg-surface-800/50 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                              level.level <= 3  ? 'bg-brand-500/20 text-brand-400' :
+                              level.level <= 6  ? 'bg-accent-purple/20 text-accent-purple' :
+                              level.level <= 8  ? 'bg-accent-cyan/20 text-accent-cyan' :
+                              'bg-accent-amber/20 text-accent-amber'
+                            }`}>L{level.level}</div>
+                            <div>
+                              <span className="font-display text-sm block">Level {level.level}</span>
+                              <span className="text-[11px] text-text-muted">
+                                {countAtLevel === 0
+                                  ? 'No referrals'
+                                  : `${countAtLevel} referral${countAtLevel !== 1 ? 's' : ''}${activeAtLevel > 0 ? ` · ${activeAtLevel} staking` : ''}`}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="w-28 h-2 rounded-full bg-surface-900 overflow-hidden">
+                              <ProgressBar pct={(level.percentage / maxPct) * 100} className="bg-linear-to-r from-brand-500 to-accent-cyan" />
+                            </div>
+                            <span className="font-mono text-sm text-brand-400 w-14 text-right">{level.percentage}%</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="mt-4 pt-4 border-t border-white/5 flex justify-between text-sm">
+                      <span className="text-text-muted">Total (one-time, all 10 levels)</span>
+                      <span className="font-mono text-brand-400 font-bold">{totalPct}%</span>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
           </div>
-          <div className="space-y-2">
-            {(() => {
-              const maxPct   = Math.max(...activeLevels.map(l => l.percentage));
-              const totalPct = activeLevels.reduce((s, l) => s + l.percentage, 0);
-              return (
-                <>
-                  {activeLevels.map((level) => {
-                    const countAtLevel  = displayedTree.filter(r => r.level === level.level).length;
-                    const activeAtLevel = displayedTree.filter(r => r.level === level.level && r.stakedAmount > 0).length;
-                    return (
-                      <div key={level.level} className="flex items-center justify-between p-3 rounded-xl bg-surface-800/30 hover:bg-surface-800/50 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
-                            level.level <= 3  ? 'bg-brand-500/20 text-brand-400' :
-                            level.level <= 6  ? 'bg-accent-purple/20 text-accent-purple' :
-                            level.level <= 8  ? 'bg-accent-cyan/20 text-accent-cyan' :
-                            'bg-accent-amber/20 text-accent-amber'
-                          }`}>L{level.level}</div>
-                          <div>
-                            <span className="font-display text-sm block">Level {level.level}</span>
-                            <span className="text-[11px] text-text-muted">
-                              {countAtLevel === 0
-                                ? 'No referrals'
-                                : `${countAtLevel} referral${countAtLevel !== 1 ? 's' : ''}${activeAtLevel > 0 ? ` · ${activeAtLevel} staking` : ''}`}
-                            </span>
+
+          <div className="glass-card">
+            <h3 className="font-display font-semibold mb-1">Recurring Claim Referral</h3>
+            <p className="text-[11px] text-text-muted mb-4">Paid every time a referral claims or compounds — levels 1-5 only, carved out of their own reward, on top of the one-time layer above.</p>
+            <div className="space-y-2">
+              {(() => {
+                const maxPct   = Math.max(...CLAIM_REFERRAL_LEVELS.map(l => l.percentage));
+                const totalPct = CLAIM_REFERRAL_LEVELS.reduce((s, l) => s + l.percentage, 0);
+                return (
+                  <>
+                    {CLAIM_REFERRAL_LEVELS.map((level) => {
+                      const countAtLevel  = displayedTree.filter(r => r.level === level.level).length;
+                      const activeAtLevel = displayedTree.filter(r => r.level === level.level && r.stakedAmount > 0).length;
+                      return (
+                        <div key={level.level} className="flex items-center justify-between p-3 rounded-xl bg-surface-800/30 hover:bg-surface-800/50 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold bg-brand-500/20 text-brand-400">
+                              L{level.level}
+                            </div>
+                            <div>
+                              <span className="font-display text-sm block">Level {level.level}</span>
+                              <span className="text-[11px] text-text-muted">
+                                {countAtLevel === 0
+                                  ? 'No referrals'
+                                  : `${countAtLevel} referral${countAtLevel !== 1 ? 's' : ''}${activeAtLevel > 0 ? ` · ${activeAtLevel} staking` : ''}`}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="w-28 h-2 rounded-full bg-surface-900 overflow-hidden">
+                              <ProgressBar pct={(level.percentage / maxPct) * 100} className="bg-linear-to-r from-brand-500 to-accent-cyan" />
+                            </div>
+                            <span className="font-mono text-sm text-brand-400 w-14 text-right">{level.percentage}%</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-4">
-                          <div className="w-28 h-2 rounded-full bg-surface-900 overflow-hidden">
-                            <ProgressBar pct={(level.percentage / maxPct) * 100} className="bg-linear-to-r from-brand-500 to-accent-cyan" />
-                          </div>
-                          <span className="font-mono text-sm text-brand-400 w-14 text-right">{level.percentage}%</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <div className="mt-4 pt-4 border-t border-white/5 flex justify-between text-sm">
-                    <span className="text-text-muted">Total Commission (all levels)</span>
-                    <span className="font-mono text-brand-400 font-bold">{totalPct}%</span>
-                  </div>
-                </>
-              );
-            })()}
+                      );
+                    })}
+                    <div className="mt-4 pt-4 border-t border-white/5 flex justify-between text-sm">
+                      <span className="text-text-muted">Total (recurring, levels 1-5)</span>
+                      <span className="font-mono text-brand-400 font-bold">{totalPct}%</span>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
           </div>
         </div>
       )}
