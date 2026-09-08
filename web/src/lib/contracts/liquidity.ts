@@ -117,7 +117,7 @@ function getCpAmmClient(connection: Connection): CpAmm {
  *  in ./solana.ts). Normally `authority` (offset 8-40), but once ownership is renounced
  *  `authority` is zeroed out (Pubkey::default()) and fee routing must switch to the
  *  dedicated `fee_recipient` field (offset 338-370, gated by `is_renounced` at offset 337)
- *  — the same renounce-aware pattern already used for the 1% staking-platform fee. Without
+ *  — the same renounce-aware pattern already used for the 0.25% staking-platform fee. Without
  *  this check, a post-renouncement deposit/withdraw would send its fee to the
  *  unspendable zero address instead of the fee recipient. */
 async function getFeeRecipient(): Promise<PublicKey> {

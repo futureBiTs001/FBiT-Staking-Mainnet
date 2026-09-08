@@ -139,7 +139,7 @@ export interface PlatformStats {
   totalBurned: number;
   /** Annual token emission driving PoS APY (token units, not raw) */
   annualEmission: number;
-  /** Burn percentage on claim/compound in basis points (1000 = 10%) */
+  /** Burn percentage on claim/compound in basis points (500 = 5% base; can rise to 1000 = 10% when the claim-referral chain is unpaid) */
   burnBps: number;
   /** Current effective APY in basis points (e.g. 25000 = 250%). Fetched live from chain. */
   effectiveAPY: number;

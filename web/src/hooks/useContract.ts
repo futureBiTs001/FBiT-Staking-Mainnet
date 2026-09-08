@@ -103,12 +103,12 @@ export interface ContractHook {
    * effectiveAPY = clamp(annualEmission × 10000 / totalStaked, 1000, 30000) bps → 10%–300%
    */
   setAnnualEmission(annualEmission: number): Promise<{ txHash: string }>;
-  /** Update burn percentage on claim/compound. burnBps: 0–5000 (0%–50%). Default 1000 = 10%. */
+  /** Update burn percentage on claim/compound. burnBps: 0–5000 (0%–50%). Default 500 = 5% base (permanently disabled post-renouncement — see solana.ts). */
   setBurnBps(burnBps: number): Promise<{ txHash: string }>;
   /** Update a Team Target Bonus tier (index 0–9, minTeamStaked in token units, bonusBps max 1000) */
   setTeamTargetTier(index: number, minTeamStaked: number, bonusBps: number): Promise<{ txHash: string }>;
   /**
-   * Permanently renounce ownership — admin loses all control, but the standard 1%
+   * Permanently renounce ownership — admin loses all control, but the standard 0.25%
    * platform fee (stake/unstake/claim/compound) keeps flowing to their wallet
    * instead of the next authority's. Irreversible.
    */
