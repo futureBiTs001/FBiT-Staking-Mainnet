@@ -81,6 +81,10 @@ export default function HomePage() {
               <span>·</span>
               <Link href="/about" className="hover:text-brand-400 transition-colors">About</Link>
               <span>·</span>
+              <Link href="/trust" className="hover:text-brand-400 transition-colors">Trust</Link>
+              <span>·</span>
+              <Link href="/guide" className="hover:text-brand-400 transition-colors">Guide</Link>
+              <span>·</span>
               <Link href="/terms" className="hover:text-brand-400 transition-colors">Terms</Link>
               <span>·</span>
               <Link href="/privacy" className="hover:text-brand-400 transition-colors">Privacy</Link>

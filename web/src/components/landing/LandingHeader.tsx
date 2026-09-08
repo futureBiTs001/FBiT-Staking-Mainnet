@@ -55,9 +55,18 @@ function ResourcesDropdown() {
         <span className={`text-[10px] transition-transform duration-200 ${open ? 'rotate-180' : ''}`}>▾</span>
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-full mt-2 w-52 glass-card p-1.5 animate-fade-in">
-          {RESOURCE_LINKS.map((item) => (
+      {/* Always rendered (not conditionally mounted) so these links exist in the
+          server-rendered HTML for crawlers even before any click — only visibility
+          is toggled by `open`. A conditionally-*mounted* menu (`{open && <div>}`)
+          means the <a> tags never appear in the DOM at all until a user interacts,
+          which search crawlers don't simulate — they'd never discover /trust or
+          /guide through this menu, only via whatever's already in the sitemap. */}
+      <div
+        className={`absolute right-0 top-full mt-2 w-52 glass-card p-1.5 transition-all duration-150 ${
+          open ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'
+        }`}
+      >
+        {RESOURCE_LINKS.map((item) => (
             <a
               key={item.label}
               href={item.href}
@@ -75,7 +84,6 @@ function ResourcesDropdown() {
             </a>
           ))}
         </div>
-      )}
     </div>
   );
 }
