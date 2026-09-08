@@ -114,7 +114,8 @@ export default function TrustPage() {
             Only Verification.
           </h1>
           <p className="text-text-muted text-base sm:text-lg max-w-xl mx-auto">
-            Every number on this page is read live from the Solana blockchain — not a database we control, not a claim we're making. Check it yourself.
+            Is FBiT staking safe? Judge for yourself — every number on this page is read live from
+            the Solana blockchain, not a database we control or a claim we're making.
           </p>
         </div>
       </Reveal>

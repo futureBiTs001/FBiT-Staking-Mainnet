@@ -67,11 +67,11 @@ export default function GuidePage() {
         <Reveal>
           <div className="text-center mb-10">
             <h1 className="font-display font-extrabold text-3xl sm:text-5xl leading-tight mb-4">
-              How to Stake <span className="gradient-text">FBiT</span>
+              How to Stake <span className="gradient-text">FBiT on Solana</span>
             </h1>
             <p className="text-text-secondary text-base sm:text-lg max-w-2xl mx-auto">
-              A step-by-step walkthrough of connecting your wallet and staking FBiT — with real
-              screenshots of the actual interface.
+              A step-by-step guide to staking FBiT on Solana — connecting your wallet, staking, and
+              claiming rewards, with real screenshots of the actual interface.
             </p>
           </div>
         </Reveal>

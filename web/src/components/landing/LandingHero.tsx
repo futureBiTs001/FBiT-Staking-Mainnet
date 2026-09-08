@@ -39,7 +39,7 @@ export default function LandingHero() {
         </div>
 
         <h1 className="font-display font-extrabold text-4xl sm:text-6xl leading-[1.1] mb-5 animate-slide-up">
-          Stake FBiT.
+          Stake FBiT on Solana.
           <br />
           <span className="gradient-text">Earn Dynamic APY, Automatically.</span>
         </h1>
