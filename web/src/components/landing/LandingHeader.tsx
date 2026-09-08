@@ -15,20 +15,22 @@ const NAV_LINKS = [
   { href: '#faq',        label: 'FAQ' },
 ];
 
-const WHITEPAPER_URL = 'https://github.com/futurebitsmaxx/FBiT-Staking-Mainnet/blob/main/WHITEPAPER.md';
-const BROCHURE_URL   = '/brochure.pdf';
-const FBIT_MINT      = '5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME';
-const VERIFY_URL     = `https://solscan.io/token/${FBIT_MINT}`;
+const WHITEPAPER_URL   = 'https://github.com/futurebitsmaxx/FBiT-Staking-Mainnet/blob/main/WHITEPAPER.md';
+const BROCHURE_URL     = '/brochure.pdf';
+const INCOME_GUIDE_URL = '/referral-income-guide.pdf';
+const FBIT_MINT        = '5uJ8rkiqEs5uzERCqVw9a1eC6BkP54MZAF3D229dyoME';
+const VERIFY_URL       = `https://solscan.io/token/${FBIT_MINT}`;
 
 // Secondary/utility links — consolidated into a single "Resources" dropdown
 // instead of sitting inline in the header, which got cluttered as more of
 // these were added over time.
 const RESOURCE_LINKS = [
-  { href: '/trust',       label: 'Trust',        icon: '✅', external: false, accent: false },
-  { href: VERIFY_URL,     label: 'Verify Token', icon: '🛡', external: true,  accent: true },
-  { href: '/guide',       label: 'Guide',        icon: '📖', external: false, accent: false },
-  { href: WHITEPAPER_URL, label: 'Whitepaper',   icon: '📄', external: true,  accent: false },
-  { href: BROCHURE_URL,   label: 'Brochure',     icon: '📑', external: true,  accent: false, download: true },
+  { href: '/trust',         label: 'Trust',           icon: '✅', external: false, accent: false },
+  { href: VERIFY_URL,       label: 'Verify Token',    icon: '🛡', external: true,  accent: true },
+  { href: '/guide',         label: 'Guide',           icon: '📖', external: false, accent: false },
+  { href: INCOME_GUIDE_URL, label: 'Income Guide',    icon: '💰', external: true,  accent: false, download: true },
+  { href: WHITEPAPER_URL,   label: 'Whitepaper',      icon: '📄', external: true,  accent: false },
+  { href: BROCHURE_URL,     label: 'Brochure',        icon: '📑', external: true,  accent: false, download: true },
 ];
 
 function ResourcesDropdown() {
