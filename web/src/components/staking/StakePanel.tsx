@@ -152,7 +152,7 @@ export default function StakePanel() {
               referralLink:         refData.referralInfo?.referralLink ?? '',
               referrals: [
                 ...(refData.referralInfo?.referrals ?? []),
-                { address: address!, level: 1, stakedAmount: stakeAmount, rewardEarned: 0, registeredAt: Math.floor(Date.now() / 1000) },
+                { address: address!, level: 1, stakedAmount: stakeAmount, rewardEarned: 0, registeredAt: Math.floor(Date.now() / 1000), directReferrals: 0 },
               ],
               chain: refData.referralInfo?.chain ?? [],
             },

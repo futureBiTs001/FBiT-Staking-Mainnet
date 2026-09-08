@@ -126,6 +126,9 @@ export interface ReferralEntry {
   stakedAmount: number;
   rewardEarned: number;
   registeredAt: number;
+  /** How many people this entry has directly referred (ground-truth BFS count,
+   *  not the on-chain referral_count field, which can silently under-count). */
+  directReferrals: number;
 }
 
 // ===== PLATFORM TYPES =====

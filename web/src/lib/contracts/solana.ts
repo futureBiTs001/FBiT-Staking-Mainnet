@@ -1885,6 +1885,7 @@ async function bfsReferralTree(ownerAddress: string, liveBps?: number[]): Promis
           stakedAmount: child.staked,
           rewardEarned: child.staked * bpsArray[level - 1] / 10_000,
           registeredAt: child.registeredAt,
+          directReferrals: (referrerMap.get(child.address) ?? []).length,
         });
       }
     }
@@ -1956,6 +1957,7 @@ export async function solanaGetReferralInfo(ownerAddress: string): Promise<Refer
               stakedAmount: child.staked,
               rewardEarned: child.staked * (liveBps ? liveBps[level - 1] : REFERRAL_BPS[level - 1]) / 10_000,
               registeredAt: child.registeredAt,
+              directReferrals: (referrerMap.get(child.address) ?? []).length,
             });
           }
         }
@@ -1975,7 +1977,7 @@ export async function solanaGetReferralInfo(ownerAddress: string): Promise<Refer
           const childKey     = new PublicKey(Uint8Array.from(slice.subarray(0, 32))).toBase58();
           const staked       = Number(slice.readBigUInt64LE(32)) / SCALE;
           const registeredAt = Number(slice.readBigInt64LE(98));
-          return [{ address: childKey, level: 1, stakedAmount: staked, rewardEarned: 0, registeredAt }];
+          return [{ address: childKey, level: 1, stakedAmount: staked, rewardEarned: 0, registeredAt, directReferrals: 0 }];
         } catch { return []; }
       });
     }

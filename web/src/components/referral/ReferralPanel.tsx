@@ -470,6 +470,7 @@ export default function ReferralPanel() {
                       <th className="text-center pb-3">Lv</th>
                       <th className="text-center pb-3">Status</th>
                       <th className="text-right pb-3">Staked</th>
+                      <th className="text-right pb-3" title="How many people this member has directly referred">Referred</th>
                       <th className="text-right pb-3" title="Estimated one-time stake commission only, from this referral's current stake — not a record of what was actually paid, and doesn't include the separate recurring claim/compound referral (see Total Earned above)">Est. Earned</th>
                       <th className="text-right pb-3 pr-3 hidden sm:table-cell">Joined</th>
                     </tr>
@@ -497,6 +498,12 @@ export default function ReferralPanel() {
                                 {formatNumber(entry.stakedAmount)} FBiT{' '}
                                 <UsdValue amount={entry.stakedAmount} priceUsd={fbitPriceUsd} className="text-[10px]" />
                               </span>
+                            : <span className="text-text-muted">—</span>
+                          }
+                        </td>
+                        <td className="py-3 text-right font-mono text-xs">
+                          {entry.directReferrals > 0
+                            ? <span className="text-text-secondary">{entry.directReferrals}</span>
                             : <span className="text-text-muted">—</span>
                           }
                         </td>
