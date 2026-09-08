@@ -147,13 +147,23 @@ export const metadata: Metadata = {
   description:
     'Stake FBiT tokens on Solana. Earn dynamic Proof-of-Stake APY up to 300%, build a 10-level referral network, and get Team Target Bonuses. Non-custodial, open-source, no KYC.',
 
+  // Note: Google itself ignores this tag entirely for ranking (has since ~2009)
+  // — real ranking signal comes from title tags, on-page content/headings, and
+  // backlinks, not this list. Kept clean and relevant anyway since a few smaller
+  // engines still weight it lightly, and duplicate/near-duplicate entries only
+  // waste that little signal there is.
   keywords: [
-    'FBiT staking', 'FutureBit token', 'Solana staking',
-    'DeFi staking', 'crypto staking', 'high APY staking',
-    '10 level referral crypto', 'passive crypto income', 'FBiT token',
-    'non-custodial staking', 'stake and earn',
-    'crypto passive income India', 'best staking platform 2026',
-    'solana defi', 'FutureBit staking',
+    // Brand
+    'FutureBit Staking', 'FBiT staking', 'FBiT token', 'stake FBiT',
+    // Category / high-intent
+    'Solana staking platform', 'Solana DeFi staking', 'crypto staking platform',
+    'non-custodial staking', 'stake and earn crypto', 'passive crypto income',
+    'best Solana staking platform', 'high APY staking',
+    // Feature-specific long-tail
+    'dynamic APY staking Solana', '10 level referral crypto', 'crypto referral program',
+    'deflationary token burn staking', 'no KYC crypto staking',
+    // Geo
+    'crypto passive income India', 'Solana staking India',
   ],
 
   authors: [{ name: 'FutureBit Staking', url: BASE_URL }],

@@ -4,6 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'About FutureBit Staking (FBiT)',
   description: 'FutureBit Staking (FBiT) is an independent Solana DeFi staking protocol at futurebit.in — not affiliated with FutureBit LLC, the maker of Apollo Bitcoin mining hardware.',
+  keywords: ['what is FutureBit Staking', 'FutureBit Staking FBiT', 'FBiT token about', 'FutureBit Staking vs FutureBit LLC'],
   alternates: { canonical: '/about/' },
 };
 

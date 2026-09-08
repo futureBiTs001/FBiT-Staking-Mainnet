@@ -5,6 +5,7 @@ import TrustPage from '@/components/trust/TrustPage';
 export const metadata: Metadata = {
   title: 'Trust & Verification',
   description: 'Verify FutureBit Staking yourself — live on-chain stats, a renounced mint authority, open-source contracts, and a tool to check any wallet\'s real staking history.',
+  keywords: ['is FBiT staking safe', 'FBiT staking verified', 'FutureBit Staking audit', 'renounced ownership token', 'open source Solana contract'],
   alternates: { canonical: '/trust/' },
 };
 

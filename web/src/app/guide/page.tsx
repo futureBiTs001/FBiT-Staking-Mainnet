@@ -6,6 +6,7 @@ import Reveal from '@/components/landing/Reveal';
 export const metadata: Metadata = {
   title: 'How to Stake FBiT — Step-by-Step Guide',
   description: 'A complete, illustrated guide to staking FBiT on Solana — connecting your wallet, staking, and claiming rewards.',
+  keywords: ['how to stake FBiT', 'how to stake on Solana', 'FBiT staking guide', 'stake FBiT Phantom wallet', 'Solana wallet staking tutorial'],
   alternates: { canonical: '/guide/' },
 };
 
