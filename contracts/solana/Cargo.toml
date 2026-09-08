@@ -4,13 +4,6 @@ members = [
 ]
 resolver = "2"
 
-# Pins the exact solana-cli version used for the real mainnet build/deploy
-# (solana-cli 3.1.15, platform-tools v1.52) so solana-verify's remote builder
-# selects a matching Docker image instead of guessing from anchor-lang's
-# version, which previously produced a different (non-matching) bytecode hash.
-[workspace.metadata.cli]
-solana = "3.1.15"
-
 [profile.release]
 opt-level = "z"
 lto = true
