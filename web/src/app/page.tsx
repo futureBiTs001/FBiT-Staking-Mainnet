@@ -90,6 +90,9 @@ export default function HomePage() {
               <Link href="/privacy" className="hover:text-brand-400 transition-colors">Privacy</Link>
             </div>
           </div>
+          <p className="text-center text-[11px] text-text-muted/70 mt-5">
+            Copyright (c) 2026 powered by: FutureBits (FBiT)
+          </p>
         </div>
       </footer>
 
