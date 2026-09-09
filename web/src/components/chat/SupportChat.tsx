@@ -60,9 +60,13 @@ export default function SupportChat() {
       {open && (
         <div className="glass-card w-[min(360px,calc(100vw-2.5rem))] h-120 mb-3 flex flex-col p-0 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
-            <div>
-              <p className="font-display font-semibold text-sm">FBiT Support</p>
-              <p className="text-text-muted text-[11px]">AI assistant &middot; usually instant</p>
+            <div className="flex items-center gap-2.5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="FBiT logo" className="w-8 h-8 rounded-full object-cover shrink-0" />
+              <div>
+                <p className="font-display font-semibold text-sm">FBiT Support</p>
+                <p className="text-text-muted text-[11px]">AI assistant &middot; usually instant</p>
+              </div>
             </div>
             <button
               type="button"
@@ -124,20 +128,13 @@ export default function SupportChat() {
         type="button"
         onClick={() => setOpen(v => !v)}
         aria-label={open ? 'Close support chat' : 'Open support chat'}
-        className="w-14 h-14 rounded-full flex items-center justify-center btn-primary shadow-lg animate-glow"
+        className="w-14 h-14 rounded-full flex items-center justify-center btn-primary shadow-lg animate-glow overflow-hidden"
       >
         {open ? (
           <span className="text-xl leading-none">&times;</span>
         ) : (
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path
-              d="M4 4h16v11H7l-3 3V4z"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-          </svg>
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src="/logo.png" alt="Open FBiT support chat" className="w-full h-full object-cover" />
         )}
       </button>
     </div>
